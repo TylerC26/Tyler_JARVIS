@@ -1,7 +1,22 @@
+import { addDays, startOfDay } from "date-fns";
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { Event } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
+
+function normalizeAllDayBoundaries(start: Date, end: Date): { start: Date; end: Date } {
+  const newStart = startOfDay(start);
+  // If end is exactly midnight already, treat as exclusive end and keep.
+  // Otherwise round up: end-of-the-day-of-end → next midnight.
+  const endStartOfDay = startOfDay(end);
+  const isExactMidnight = end.getTime() === endStartOfDay.getTime();
+  const newEnd = isExactMidnight ? endStartOfDay : addDays(endStartOfDay, 1);
+  // Guarantee at least 1 day span
+  if (newEnd.getTime() <= newStart.getTime()) {
+    return { start: newStart, end: addDays(newStart, 1) };
+  }
+  return { start: newStart, end: newEnd };
+}
 
 export type CreateEventInput = {
   title: string;
@@ -35,14 +50,20 @@ export async function createEventCore(
   if (!title) return { ok: false, error: "Title is required." };
 
   // Default ends_at to starts_at + 1 hour if not provided
-  const startsAt = new Date(input.starts_at);
+  let startsAt = new Date(input.starts_at);
   if (Number.isNaN(startsAt.getTime()))
     return { ok: false, error: `Invalid starts_at: ${input.starts_at}` };
-  const endsAt = input.ends_at
+  let endsAt = input.ends_at
     ? new Date(input.ends_at)
     : new Date(startsAt.getTime() + 60 * 60 * 1000);
   if (Number.isNaN(endsAt.getTime()))
     return { ok: false, error: `Invalid ends_at: ${input.ends_at}` };
+
+  if (input.all_day) {
+    const norm = normalizeAllDayBoundaries(startsAt, endsAt);
+    startsAt = norm.start;
+    endsAt = norm.end;
+  }
 
   const { data, error } = await supabase
     .from("events")
@@ -90,6 +111,18 @@ export async function updateEventCore(
   if (input.location !== undefined) patch.location = input.location;
   if (input.color !== undefined) patch.color = input.color;
   if (input.category !== undefined) patch.category = input.category;
+
+  // If toggling all_day on (or already on and times changed), normalize boundaries
+  if (input.all_day === true || patch.all_day === true) {
+    if (patch.starts_at && patch.ends_at) {
+      const norm = normalizeAllDayBoundaries(
+        new Date(patch.starts_at as string),
+        new Date(patch.ends_at as string),
+      );
+      patch.starts_at = norm.start.toISOString();
+      patch.ends_at = norm.end.toISOString();
+    }
+  }
 
   const { data, error } = await supabase
     .from("events")

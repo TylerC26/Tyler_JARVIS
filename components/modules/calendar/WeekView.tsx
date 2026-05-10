@@ -8,10 +8,13 @@ import {
   PX_PER_HOUR,
   combineDateAndTime,
   hourSlots,
+  spansMultipleDays,
   timeForY,
   weekDays,
 } from "@/lib/calendar/grid";
+import { layoutDayEvents, type LaidOutEvent } from "@/lib/calendar/layout";
 import type { Event } from "@/lib/db/types";
+import { AllDayStrip } from "./AllDayStrip";
 import { EventBlock } from "./EventBlock";
 import { useDragReschedule } from "./hooks/useDragReschedule";
 
@@ -34,6 +37,15 @@ export function WeekView({
   const drag = useDragReschedule(days, onMove);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Partition: all-day OR multi-day events go to the top strip; everything
+  // else lives in the timed grid.
+  const allDayEvents = events.filter(
+    (e) => e.all_day || spansMultipleDays(e),
+  );
+  const timedEvents = events.filter(
+    (e) => !e.all_day && !spansMultipleDays(e),
+  );
+
   function handleSlotClick(day: Date, e: React.MouseEvent<HTMLDivElement>) {
     const colRect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - colRect.top;
@@ -41,8 +53,11 @@ export function WeekView({
     onCreateAt(time);
   }
 
-  function eventsOnDay(day: Date): Event[] {
-    return events.filter((e) => isSameDay(new Date(e.starts_at), day));
+  function eventsOnDay(day: Date): LaidOutEvent[] {
+    const dayEvents = timedEvents.filter((e) =>
+      isSameDay(new Date(e.starts_at), day),
+    );
+    return layoutDayEvents(dayEvents);
   }
 
   return (
@@ -74,6 +89,13 @@ export function WeekView({
           </div>
         ))}
       </div>
+
+      {/* All-day / multi-day strip */}
+      <AllDayStrip
+        days={days}
+        events={allDayEvents}
+        onSelectEvent={onSelectEvent}
+      />
 
       {/* Body grid */}
       <div className="relative overflow-y-auto" style={{ maxHeight: "70vh" }}>
@@ -136,6 +158,8 @@ export function WeekView({
                   <EventBlock
                     key={event.id}
                     event={event}
+                    lane={event.lane}
+                    trackCount={event.trackCount}
                     draftStartsAt={draftForThis?.starts_at}
                     draftEndsAt={draftForThis?.ends_at}
                     isDragging={drag.draggingId === event.id}

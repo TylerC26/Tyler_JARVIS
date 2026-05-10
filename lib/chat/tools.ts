@@ -247,7 +247,8 @@ export const addFixedExpenseTool = tool({
 // ---------- calendar tools ----------
 
 export const addCalendarEventTool = tool({
-  description: "Add a calendar event with a specific start time.",
+  description:
+    "Add a calendar event. Use all_day=true for trips, conferences, vacations, or anything spanning whole days — set ends_at to the last day of the trip and the system will snap to clean day boundaries automatically.",
   inputSchema: z.object({
     title: z.string(),
     starts_at: z

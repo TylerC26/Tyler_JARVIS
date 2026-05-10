@@ -136,6 +136,33 @@ export function isSameLocalDay(a: Date | string, b: Date | string): boolean {
   );
 }
 
+export function eventCoversDay(
+  event: { starts_at: string; ends_at: string },
+  day: Date,
+): boolean {
+  const dayStartMs = startOfDay(day).getTime();
+  const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000;
+  const startMs = new Date(event.starts_at).getTime();
+  const endMs = new Date(event.ends_at).getTime();
+  // Half-open: [start, end). Event covers the day if it overlaps that interval.
+  return startMs < dayEndMs && endMs > dayStartMs;
+}
+
+export function spansMultipleDays(event: {
+  starts_at: string;
+  ends_at: string;
+}): boolean {
+  const start = new Date(event.starts_at);
+  const end = new Date(event.ends_at);
+  // Treat half-open ends_at exactly at midnight as not adding another day
+  const sameDay = isSameLocalDay(start, end);
+  if (sameDay) return false;
+  // Also consider ends_at = start_of_next_day_00:00 as single-day (exclusive end)
+  const startMidnight = startOfDay(start);
+  const oneDayLater = new Date(startMidnight.getTime() + 24 * 60 * 60 * 1000);
+  return end.getTime() > oneDayLater.getTime();
+}
+
 export function combineDateAndTime(day: Date, isoTime: string): Date {
   const time = new Date(isoTime);
   const out = new Date(day);

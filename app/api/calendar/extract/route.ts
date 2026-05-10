@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -8,9 +8,7 @@ export const maxDuration = 60;
 
 const EventSchema = z.object({
   title: z.string(),
-  starts_at: z
-    .string()
-    .describe("ISO 8601 timestamp in the user's local timezone"),
+  starts_at: z.string(),
   ends_at: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
@@ -24,23 +22,59 @@ const ResponseSchema = z.object({
   events: z.array(EventSchema),
 });
 
-const SYSTEM_PROMPT = `You extract calendar events from a screenshot of a calendar app (typically Outlook, Google Calendar, or Apple Calendar).
+const SYSTEM_PROMPT = `You extract calendar events from a screenshot of a calendar app (Outlook, Google Calendar, Apple Calendar, etc).
 
-Output a structured list of events visible in the screenshot. For each event:
-- title: the event name as shown
-- starts_at: ISO 8601 timestamp. The image shows day-of-week and time; combine that with the supplied current date to resolve the actual date. If a date is shown explicitly, use it. Always output ISO 8601 in the user's local timezone.
-- ends_at: ISO 8601 if visible, otherwise null
-- location: if visible (room, address, "Teams", "Zoom"), otherwise null
-- description: short subtitle/agenda if shown, otherwise null
-- category: best guess from {work, personal, health, social, travel, other}. Office meetings, project syncs, reviews → work. Doctor/dentist/gym → health. Friends/family → social/personal. Flights/trips → travel.
+Output ONLY a single JSON object inside <result>...</result> XML tags. No prose before or after. No markdown fences.
+
+Shape:
+<result>
+{
+  "events": [
+    {
+      "title": "...",
+      "starts_at": "ISO 8601 in user's local timezone",
+      "ends_at": "ISO 8601 or null",
+      "location": "string or null",
+      "description": "string or null",
+      "category": "work|personal|health|social|travel|other or null"
+    }
+  ]
+}
+</result>
 
 Rules:
-- Don't invent events not visible.
-- Don't repeat events that are duplicates of the same item.
-- If the screenshot shows a recurring event multiple times in the visible week, include each occurrence as a separate event with the actual date.
-- Skip "all day" full-week banners unless they look like a real single-day event.
+- Combine the day-of-week + time visible with the supplied current date to produce real ISO timestamps. Output local time (no Z suffix).
+- Don't invent events. If the screenshot is unclear or empty, output {"events": []}.
+- Don't repeat the same event multiple times if it appears as a single block.
+- For recurring events visible in a week view, include each occurrence separately with its actual date.
+- Skip "all-day" full-week banners unless they look like real single-day events.
+- Pick category from {work, personal, health, social, travel, other}. Office meetings → work. Doctor/dentist/gym → health. Friends/family → social or personal. Flights/trips → travel.`;
 
-Output strictly the JSON shape requested.`;
+function extractJSON(text: string): unknown | null {
+  // Try <result>...</result> first
+  const xmlMatch = text.match(/<result[^>]*>([\s\S]*?)<\/result>/i);
+  const candidate = xmlMatch?.[1]?.trim() ?? text.trim();
+
+  // Strip markdown code fences if present
+  const fenced = candidate.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "");
+
+  // Try direct parse
+  try {
+    return JSON.parse(fenced);
+  } catch {
+    // Fallback: scan for first balanced object
+    const start = fenced.indexOf("{");
+    const end = fenced.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(fenced.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -50,55 +84,83 @@ export async function POST(req: Request) {
     );
   }
 
+  let form: FormData;
   try {
-    let form: FormData;
-    try {
-      form = await req.formData();
-    } catch {
-      return NextResponse.json(
-        { error: "Expected multipart/form-data with an image field." },
-        { status: 400 },
-      );
-    }
-    const image = form.get("image");
-    if (!(image instanceof File)) {
-      return NextResponse.json(
-        { error: "No image provided." },
-        { status: 400 },
-      );
-    }
+    form = await req.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Expected multipart/form-data with an image field." },
+      { status: 400 },
+    );
+  }
 
+  const image = form.get("image");
+  if (!(image instanceof File)) {
+    return NextResponse.json({ error: "No image provided." }, { status: 400 });
+  }
+
+  try {
     const buf = Buffer.from(await image.arrayBuffer());
     const mediaType = image.type || "image/png";
 
     const now = new Date();
-    const contextLine = `Current local time: ${now.toString()}. Today: ${now.toISOString().slice(0, 10)} (${now.toLocaleDateString("en-US", { weekday: "long" })}). User timezone offset: ${now.getTimezoneOffset()} minutes from UTC.`;
+    const contextLine = `Current local time: ${now.toString()}. Today's date: ${now.toISOString().slice(0, 10)} (${now.toLocaleDateString("en-US", { weekday: "long" })}). Timezone offset: ${now.getTimezoneOffset()} minutes from UTC.`;
 
-    const { object } = await generateObject({
+    const { text, finishReason, usage } = await generateText({
       model: anthropic("claude-opus-4-7"),
-      schema: ResponseSchema,
       system: SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
           content: [
             { type: "text", text: contextLine },
-            {
-              type: "file",
-              data: buf,
-              mediaType,
-            },
+            { type: "file", data: buf, mediaType },
             {
               type: "text",
-              text: "Extract all events visible in this screenshot.",
+              text: "Extract all events visible in this screenshot. Output the JSON inside <result>...</result>.",
             },
           ],
         },
       ],
-      maxOutputTokens: 2000,
+      maxOutputTokens: 4000,
     });
 
-    return NextResponse.json({ events: object.events });
+    const parsed = extractJSON(text);
+    if (parsed === null) {
+      console.error(
+        "[calendar/extract] could not parse JSON from response. raw text:\n",
+        text,
+        "\nfinishReason:",
+        finishReason,
+        "\nusage:",
+        usage,
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Couldn't parse events from the screenshot. The model didn't return clean JSON — try a clearer image, or one with fewer overlapping events.",
+        },
+        { status: 502 },
+      );
+    }
+
+    const validated = ResponseSchema.safeParse(parsed);
+    if (!validated.success) {
+      console.error(
+        "[calendar/extract] schema validation failed. parsed:\n",
+        JSON.stringify(parsed, null, 2),
+        "\nissues:",
+        validated.error.issues,
+      );
+      return NextResponse.json(
+        {
+          error: `Schema mismatch: ${validated.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+        },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({ events: validated.data.events });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[calendar/extract] failed:", message);

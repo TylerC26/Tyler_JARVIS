@@ -11,6 +11,8 @@ import type { Event } from "@/lib/db/types";
 
 type Props = {
   event: Event;
+  lane?: number;
+  trackCount?: number;
   onClick?: () => void;
   onDragStart?: (e: React.PointerEvent) => void;
   onResizeStart?: (e: React.PointerEvent) => void;
@@ -19,8 +21,12 @@ type Props = {
   draftEndsAt?: string;
 };
 
+const GUTTER_PX = 2;
+
 export function EventBlock({
   event,
+  lane = 0,
+  trackCount = 1,
   onClick,
   onDragStart,
   onResizeStart,
@@ -34,6 +40,14 @@ export function EventBlock({
   const top = eventTopPx(startsAt);
   const height = eventHeightPx(startsAt, endsAt);
   const minimal = height < 36;
+
+  // Lane positioning: each event takes 1/trackCount of the column width,
+  // offset by lane * width. Subtract gutter so blocks don't touch edges.
+  // While dragging, expand to full width above other blocks for clarity.
+  const widthPct = isDragging ? 100 : 100 / trackCount;
+  const leftPct = isDragging ? 0 : (lane / trackCount) * 100;
+  const insetLeft = lane === 0 ? 4 : GUTTER_PX;
+  const insetRight = lane === trackCount - 1 ? 4 : GUTTER_PX;
 
   return (
     <div
@@ -56,8 +70,8 @@ export function EventBlock({
         }
       }}
       className={[
-        "absolute left-1 right-1 z-10 select-none rounded-sm border px-1.5 py-1 cursor-grab",
-        "active:cursor-grabbing transition-shadow",
+        "absolute z-10 select-none rounded-sm border px-1.5 py-1 cursor-grab",
+        "active:cursor-grabbing transition-shadow overflow-hidden",
         isDragging
           ? "shadow-2xl shadow-accent/30 ring-1 ring-accent/50 z-20"
           : "hover:shadow-md hover:brightness-110",
@@ -67,6 +81,8 @@ export function EventBlock({
       style={{
         top: `${top}px`,
         height: `${height}px`,
+        left: `calc(${leftPct}% + ${insetLeft}px)`,
+        width: `calc(${widthPct}% - ${insetLeft + insetRight}px)`,
         touchAction: "none",
       }}
       title={event.title}
