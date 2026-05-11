@@ -47,12 +47,86 @@ Style:
 
 Today's date and time will be in the conversation context as the most recent user-context system message. When dates are ambiguous, prefer the user's local interpretation.
 
+The user-context system message ALSO pre-loads on every turn:
+- the user's open tasks (titles, priority, due dates, overdue flag) — capped at 15 for prompt-length reasons
+- all active habits (cadence, current streak, whether logged today)
+- the wife's next 21 days of shifts
+
+You do NOT need to call query_state for any of this. Read it directly from the context prefix when reasoning, planning, or answering. Call query_state ONLY when you need money/finance state, a specific event range outside what the prefix carries, or when the prefix indicated "…and N more" and the user is asking about the truncated tail.
+
 The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.
 
 Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.`;
 
+import { listHabitsWithToday } from "@/lib/db/queries/habits";
+import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
+import type { HabitWithToday, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
+
+const MAX_TASKS_IN_PREFIX = 15;
+const MAX_HABITS_IN_PREFIX = 20;
+
+// Pretty-print a Task line. Examples:
+//   • [P3] Email landlord (due Mon May 12)
+//   • [P1!] File taxes (OVERDUE: May 5)
+//   • [doing] Refactor calendar grid
+function formatTaskLine(t: Task, now: Date): string {
+  const prio = `P${t.priority ?? 0}`;
+  const statusTag = t.status === "doing" || t.status === "blocked" ? `[${t.status}]` : `[${prio}]`;
+  let dueTag = "";
+  if (t.due_at) {
+    const due = new Date(t.due_at);
+    const overdue = due.getTime() < now.getTime();
+    const dueStr = due.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    dueTag = overdue ? ` (OVERDUE ${dueStr})` : ` (due ${dueStr})`;
+  }
+  return `${statusTag} ${t.title}${dueTag}`;
+}
+
+function renderTasksBlock(tasks: Task[], now: Date): string {
+  // Open tasks only (status != "done"); prioritize overdue, then by due_at,
+  // then by descending priority. Capped to keep the prefix bounded.
+  const open = tasks.filter((t) => t.status !== "done");
+  if (open.length === 0) return `\n\nOpen tasks: none.`;
+
+  const sorted = [...open].sort((a, b) => {
+    const ad = a.due_at ? new Date(a.due_at).getTime() : Number.POSITIVE_INFINITY;
+    const bd = b.due_at ? new Date(b.due_at).getTime() : Number.POSITIVE_INFINITY;
+    if (ad !== bd) return ad - bd;
+    return (b.priority ?? 0) - (a.priority ?? 0);
+  });
+
+  const shown = sorted.slice(0, MAX_TASKS_IN_PREFIX);
+  const more = sorted.length - shown.length;
+  const lines = shown.map((t) => `  • ${formatTaskLine(t, now)}`).join("\n");
+  const tail = more > 0 ? `\n  …and ${more} more open task${more === 1 ? "" : "s"}.` : "";
+  return `\n\nOpen tasks (${open.length} total, prioritized by due date):\n${lines}${tail}`;
+}
+
+function renderHabitsBlock(habits: HabitWithToday[]): string {
+  // Active habits only. Surface each habit's name, cadence, current streak,
+  // and whether logged today — enough for Jarvis to reason about adherence
+  // without a tool call.
+  const active = habits.filter((h) => !h.archived_at);
+  if (active.length === 0) return `\n\nHabits: none tracked.`;
+
+  const shown = active.slice(0, MAX_HABITS_IN_PREFIX);
+  const more = active.length - shown.length;
+  const lines = shown
+    .map((h) => {
+      const status = h.logged_today ? "✓ today" : "not logged today";
+      const streak = h.current_streak > 0 ? ` · streak ${h.current_streak}` : "";
+      return `  • ${h.name} (${h.cadence}, target ${h.target_per_period}/period) — ${status}${streak}`;
+    })
+    .join("\n");
+  const tail = more > 0 ? `\n  …and ${more} more habits.` : "";
+  return `\n\nHabits (${active.length} active):\n${lines}${tail}`;
+}
 
 // Format the user's IANA offset as "+HH:MM" / "-HH:MM" at the given instant.
 // Required because the server runs in UTC on Vercel and JS Date has no API to
@@ -122,9 +196,25 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
 - When emitting starts_at / ends_at, ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
 - Build the date portion from the local ISO timestamp above, not from the UTC timestamp.`;
 
+  // Fetch shifts, tasks, and habits in parallel — all three feed the prefix
+  // and we don't want each chat turn to wait on serial DB roundtrips.
+  const [shifts, tasks, habits] = await Promise.all([
+    listUpcomingWifeShifts(21).catch((e) => {
+      console.warn("[chat] could not load wife shifts:", e);
+      return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
+    }),
+    listTasks().catch((e) => {
+      console.warn("[chat] could not load tasks:", e);
+      return [] as Awaited<ReturnType<typeof listTasks>>;
+    }),
+    listHabitsWithToday().catch((e) => {
+      console.warn("[chat] could not load habits:", e);
+      return [] as Awaited<ReturnType<typeof listHabitsWithToday>>;
+    }),
+  ]);
+
   let shiftsPart = "";
   try {
-    const shifts = await listUpcomingWifeShifts(21);
     if (shifts.length > 0) {
       const compact = shifts
         .map((s) => {
@@ -140,7 +230,21 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
       shiftsPart = `\n\nWife's shifts (next 21d): none on file. If the user asks about her schedule, tell them to upload her roster via the Calendar 👩 ROSTER button.`;
     }
   } catch (e) {
-    console.warn("[chat] could not load wife shifts for context prefix:", e);
+    console.warn("[chat] could not render wife shifts for context prefix:", e);
+  }
+
+  let tasksPart = "";
+  try {
+    tasksPart = renderTasksBlock(tasks, now);
+  } catch (e) {
+    console.warn("[chat] could not render tasks for context prefix:", e);
+  }
+
+  let habitsPart = "";
+  try {
+    habitsPart = renderHabitsBlock(habits);
+  } catch (e) {
+    console.warn("[chat] could not render habits for context prefix:", e);
   }
 
   let skillsPart = "";
@@ -153,5 +257,5 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not resolve skills for context prefix:", e);
   }
 
-  return datePart + shiftsPart + skillsPart;
+  return datePart + tasksPart + habitsPart + shiftsPart + skillsPart;
 }

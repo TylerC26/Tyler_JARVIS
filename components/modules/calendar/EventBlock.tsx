@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { getCategory } from "@/lib/calendar/categories";
 import {
   eventHeightPx,
@@ -8,6 +9,14 @@ import {
   PX_PER_HOUR,
 } from "@/lib/calendar/grid";
 import type { Event } from "@/lib/db/types";
+
+// A click event always fires after pointerup, but the `isDragging` state-prop
+// guard is unreliable: setDrag(null) inside the drag hook's pointerup handler
+// queues a state update, and React may not flush it before the synthetic click
+// runs — so the click handler closes over a stale isDragging=true and the
+// edit drawer never opens. We track raw pointer movement with refs (synchronous)
+// and use that to decide click-vs-drag, which works regardless of render timing.
+const CLICK_MOVE_THRESHOLD_PX = 4;
 
 type Props = {
   event: Event;
@@ -49,6 +58,9 @@ export function EventBlock({
   const insetLeft = lane === 0 ? 4 : GUTTER_PX;
   const insetRight = lane === trackCount - 1 ? 4 : GUTTER_PX;
 
+  const pointerOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const movedRef = useRef(false);
+
   return (
     <div
       role="button"
@@ -56,11 +68,35 @@ export function EventBlock({
       onPointerDown={(e) => {
         // Don't start drag if user clicked the resize handle
         const target = e.target as HTMLElement;
-        if (target.dataset.resizeHandle) return;
+        if (target.dataset.resizeHandle) {
+          // Resize is also a drag — suppress the trailing click.
+          movedRef.current = true;
+          pointerOriginRef.current = null;
+          return;
+        }
+        pointerOriginRef.current = { x: e.clientX, y: e.clientY };
+        movedRef.current = false;
         onDragStart?.(e);
+      }}
+      onPointerMove={(e) => {
+        const origin = pointerOriginRef.current;
+        if (!origin) return;
+        const dx = e.clientX - origin.x;
+        const dy = e.clientY - origin.y;
+        if (
+          Math.abs(dx) > CLICK_MOVE_THRESHOLD_PX ||
+          Math.abs(dy) > CLICK_MOVE_THRESHOLD_PX
+        ) {
+          movedRef.current = true;
+        }
       }}
       onClick={(e) => {
         e.stopPropagation();
+        pointerOriginRef.current = null;
+        if (movedRef.current) {
+          movedRef.current = false;
+          return;
+        }
         if (!isDragging) onClick?.();
       }}
       onKeyDown={(e) => {
