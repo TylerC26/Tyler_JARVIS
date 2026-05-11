@@ -84,19 +84,21 @@ export function WeekView({
             <div
               key={i}
               className={[
-                "px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider border-l border-edge",
+                "px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider border-l border-edge min-w-0",
                 isToday(day) ? "text-accent bg-accent/5" : "text-fg-muted",
               ].join(" ")}
             >
               <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
-              <div className={isToday(day) ? "text-accent text-base" : "text-fg text-base"}>
-                {day.getDate()}
+              <div className="flex items-center justify-center gap-1.5">
+                <span
+                  className={
+                    isToday(day) ? "text-accent text-base" : "text-fg text-base"
+                  }
+                >
+                  {day.getDate()}
+                </span>
+                {shift && <WifeShiftBadge code={shift} />}
               </div>
-              {shift && (
-                <div className="mt-1 flex justify-center">
-                  <WifeShiftBadge code={shift} />
-                </div>
-              )}
             </div>
           );
         })}
