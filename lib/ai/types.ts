@@ -10,6 +10,7 @@ import type {
   HabitWithToday,
   Task,
   TransactionWithMeta,
+  WifeShift,
 } from "@/lib/db/types";
 
 // Re-export for engine consumers so they don't reach into db/types directly.
@@ -37,6 +38,9 @@ export type AIContext = {
     accounts: Account[];
     recentTransactions: TransactionWithMeta[];
     fixedExpensesUpcoming: FixedExpenseUpcoming[];
+  };
+  wifeShifts: {
+    next21: WifeShift[]; // upcoming 21 days inclusive of today
   };
   // Slots designed for, populated when those modules ship.
   calendar?: never[];

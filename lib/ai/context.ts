@@ -8,6 +8,7 @@ import {
   monthToDateSpend,
 } from "@/lib/db/queries/money";
 import { listTasks } from "@/lib/db/queries/tasks";
+import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 import type { Task } from "@/lib/db/types";
 import type { AIContext } from "./types";
 
@@ -37,15 +38,23 @@ function partitionTasks(all: Task[], forDate: string) {
 export async function gatherContext(forDate?: string): Promise<AIContext> {
   const date = forDate ?? todayISO();
 
-  const [habits, allTasks, accounts, recentTransactions, fixedExpensesUpcoming, mtdSpend] =
-    await Promise.all([
-      listHabitsWithToday(),
-      listTasks(),
-      listAccounts(),
-      listTransactions({ limit: 200 }),
-      listFixedExpenses(),
-      monthToDateSpend(),
-    ]);
+  const [
+    habits,
+    allTasks,
+    accounts,
+    recentTransactions,
+    fixedExpensesUpcoming,
+    mtdSpend,
+    wifeShiftsNext21,
+  ] = await Promise.all([
+    listHabitsWithToday(),
+    listTasks(),
+    listAccounts(),
+    listTransactions({ limit: 200 }),
+    listFixedExpenses(),
+    monthToDateSpend(),
+    listUpcomingWifeShifts(21),
+  ]);
 
   return {
     forDate: date,
@@ -57,6 +66,9 @@ export async function gatherContext(forDate?: string): Promise<AIContext> {
       accounts,
       recentTransactions,
       fixedExpensesUpcoming,
+    },
+    wifeShifts: {
+      next21: wifeShiftsNext21,
     },
   };
 }

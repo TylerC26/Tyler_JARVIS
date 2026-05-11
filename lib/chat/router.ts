@@ -58,10 +58,10 @@ export async function decideRoute(
   }
 }
 
-export function streamDeepseekResponse(messages: ModelMessage[]) {
+export async function streamDeepseekResponse(messages: ModelMessage[]) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: buildContextPrefix(),
+    content: await buildContextPrefix(),
   };
   return streamText({
     model: deepseek("deepseek-chat"),
@@ -70,10 +70,10 @@ export function streamDeepseekResponse(messages: ModelMessage[]) {
   });
 }
 
-export function streamClaudeResponse(messages: ModelMessage[]) {
+export async function streamClaudeResponse(messages: ModelMessage[]) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: buildContextPrefix(),
+    content: await buildContextPrefix(),
   };
   return streamText({
     model: anthropic("claude-opus-4-7"),

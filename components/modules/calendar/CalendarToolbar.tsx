@@ -12,6 +12,7 @@ type Props = {
   onCursorChange: (next: Date) => void;
   onAddEvent: () => void;
   onUploadScreenshot: () => void;
+  onUploadRoster: () => void;
 };
 
 export function CalendarToolbar({
@@ -21,6 +22,7 @@ export function CalendarToolbar({
   onCursorChange,
   onAddEvent,
   onUploadScreenshot,
+  onUploadRoster,
 }: Props) {
   return (
     <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -75,6 +77,9 @@ export function CalendarToolbar({
         </div>
         <Button variant="outline" onClick={onUploadScreenshot}>
           📎 SCREENSHOT
+        </Button>
+        <Button variant="outline" onClick={onUploadRoster}>
+          👩 ROSTER
         </Button>
         <Button variant="primary" onClick={onAddEvent}>
           + NEW EVENT

@@ -1,6 +1,6 @@
 "use client";
 
-import { isSameDay, isToday } from "date-fns";
+import { format, isSameDay, isToday } from "date-fns";
 import { useRef } from "react";
 import {
   HOUR_START,
@@ -15,12 +15,15 @@ import {
 import { layoutDayEvents, type LaidOutEvent } from "@/lib/calendar/layout";
 import type { Event } from "@/lib/db/types";
 import { AllDayStrip } from "./AllDayStrip";
+import type { WifeShiftMap } from "./CalendarView";
 import { EventBlock } from "./EventBlock";
 import { useDragReschedule } from "./hooks/useDragReschedule";
+import { WifeShiftBadge } from "./WifeShiftBadge";
 
 type Props = {
   cursor: Date;
   events: Event[];
+  wifeShifts: WifeShiftMap;
   onSelectEvent: (event: Event) => void;
   onCreateAt: (starts_at: Date) => void;
   onMove: (id: string, starts: string, ends: string) => Promise<void>;
@@ -29,6 +32,7 @@ type Props = {
 export function WeekView({
   cursor,
   events,
+  wifeShifts,
   onSelectEvent,
   onCreateAt,
   onMove,
@@ -74,20 +78,28 @@ export function WeekView({
         style={{ gridTemplateColumns: "60px repeat(7, minmax(0, 1fr))" }}
       >
         <div />
-        {days.map((day, i) => (
-          <div
-            key={i}
-            className={[
-              "px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider border-l border-edge",
-              isToday(day) ? "text-accent bg-accent/5" : "text-fg-muted",
-            ].join(" ")}
-          >
-            <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
-            <div className={isToday(day) ? "text-accent text-base" : "text-fg text-base"}>
-              {day.getDate()}
+        {days.map((day, i) => {
+          const shift = wifeShifts[format(day, "yyyy-MM-dd")];
+          return (
+            <div
+              key={i}
+              className={[
+                "px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider border-l border-edge",
+                isToday(day) ? "text-accent bg-accent/5" : "text-fg-muted",
+              ].join(" ")}
+            >
+              <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
+              <div className={isToday(day) ? "text-accent text-base" : "text-fg text-base"}>
+                {day.getDate()}
+              </div>
+              {shift && (
+                <div className="mt-1 flex justify-center">
+                  <WifeShiftBadge code={shift} />
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* All-day / multi-day strip */}

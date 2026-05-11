@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,32 +50,6 @@ Rules:
 - For recurring events visible in a week view, include each occurrence separately with its actual date.
 - Skip "all-day" full-week banners unless they look like real single-day events.
 - Pick category from {work, personal, health, social, travel, other}. Office meetings → work. Doctor/dentist/gym → health. Friends/family → social or personal. Flights/trips → travel.`;
-
-function extractJSON(text: string): unknown | null {
-  // Try <result>...</result> first
-  const xmlMatch = text.match(/<result[^>]*>([\s\S]*?)<\/result>/i);
-  const candidate = xmlMatch?.[1]?.trim() ?? text.trim();
-
-  // Strip markdown code fences if present
-  const fenced = candidate.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "");
-
-  // Try direct parse
-  try {
-    return JSON.parse(fenced);
-  } catch {
-    // Fallback: scan for first balanced object
-    const start = fenced.indexOf("{");
-    const end = fenced.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      try {
-        return JSON.parse(fenced.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {

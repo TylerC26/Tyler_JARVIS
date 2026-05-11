@@ -66,8 +66,31 @@ Each suggestion: { kind, title (terse imperative), body (one-line rationale with
 
 Stay grounded in the snapshot. Never invent. Skip the kind entirely if you have nothing to say there.`;
 
+function formatWifeShiftsLine(ctx: AIContext): string {
+  const shifts = ctx.wifeShifts?.next21 ?? [];
+  if (shifts.length === 0) {
+    return "Wife's shifts (next 21d): none on file — roster not uploaded.";
+  }
+  const compact = shifts
+    .map((s) => {
+      const dow = new Date(`${s.shift_date}T12:00:00`).toLocaleDateString(
+        "en-US",
+        { weekday: "short" },
+      );
+      return `${s.shift_date} ${dow}=${s.code}`;
+    })
+    .join(" · ");
+  return [
+    `Wife's shifts (next 21d): ${compact}`,
+    "Shift codes: A=AM 07:00–15:00 · P=PM 15:00–23:00 · N=Night 23:00–07:00 (next day) · DO=Day Off.",
+    "Factor her availability into any planning, dinner timing, social suggestions, or quiet-hours reasoning. On N (Night) days she works overnight and typically sleeps during the day.",
+  ].join("\n");
+}
+
 function ctxToPrompt(ctx: AIContext): string {
   return `User snapshot for ${ctx.forDate} (${ctx.generatedAt}):
+
+${formatWifeShiftsLine(ctx)}
 
 ${JSON.stringify(ctx, null, 2)}`;
 }

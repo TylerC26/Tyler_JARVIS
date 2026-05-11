@@ -65,8 +65,8 @@ export async function POST(req: Request) {
 
   const result =
     route === "claude"
-      ? streamClaudeResponse(modelMessages)
-      : streamDeepseekResponse(modelMessages);
+      ? await streamClaudeResponse(modelMessages)
+      : await streamDeepseekResponse(modelMessages);
 
   return result.toUIMessageStreamResponse({
     onFinish: async ({ messages: finishedMessages }) => {

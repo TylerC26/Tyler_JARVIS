@@ -45,10 +45,43 @@ Style:
 - If a tool errors, surface the error verbatim and ask for the missing info.
 - Never make up data. If query_state returns empty, say so.
 
-Today's date and time will be in the conversation context as the most recent user-context system message. When dates are ambiguous, prefer the user's local interpretation.`;
+Today's date and time will be in the conversation context as the most recent user-context system message. When dates are ambiguous, prefer the user's local interpretation.
 
-export function buildContextPrefix() {
-  // Injected as an extra system message so models know "today" without state pollution.
+The user's wife is a nurse working rotating shifts (A=AM 07:00–15:00, P=PM 15:00–23:00, N=Night 23:00–07:00 (next day), DO=Day Off). Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On N (Night) shifts she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.`;
+
+import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
+
+export async function buildContextPrefix() {
+  // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
+  // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
+  // shifts on every message — no tool-call required. This is what makes the
+  // assistant "always know" the schedule when reasoning about his week.
   const now = new Date();
-  return `Current timestamp: ${now.toISOString()}. Local date: ${now.toDateString()}. Day of week: ${now.toLocaleDateString("en-US", { weekday: "long" })}.`;
+  const datePart = `Current timestamp: ${now.toISOString()}. Local date: ${now.toDateString()}. Day of week: ${now.toLocaleDateString(
+    "en-US",
+    { weekday: "long" },
+  )}.`;
+
+  let shiftsPart = "";
+  try {
+    const shifts = await listUpcomingWifeShifts(21);
+    if (shifts.length > 0) {
+      const compact = shifts
+        .map((s) => {
+          const dow = new Date(`${s.shift_date}T12:00:00`).toLocaleDateString(
+            "en-US",
+            { weekday: "short" },
+          );
+          return `${s.shift_date} ${dow}=${s.code}`;
+        })
+        .join(" · ");
+      shiftsPart = `\n\nWife's shifts (next 21d): ${compact}\nShift codes: A=AM 07:00–15:00 · P=PM 15:00–23:00 · N=Night 23:00–07:00 (next day) · DO=Day Off. On N days she works overnight and typically sleeps during the day. Factor her availability into planning, dinner timing, social suggestions, quiet hours.`;
+    } else {
+      shiftsPart = `\n\nWife's shifts (next 21d): none on file. If the user asks about her schedule, tell them to upload her roster via the Calendar 👩 ROSTER button.`;
+    }
+  } catch (e) {
+    console.warn("[chat] could not load wife shifts for context prefix:", e);
+  }
+
+  return datePart + shiftsPart;
 }

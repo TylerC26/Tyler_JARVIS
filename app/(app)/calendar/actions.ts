@@ -9,6 +9,11 @@ import {
   type CreateEventInput,
   type UpdateEventInput,
 } from "@/lib/db/core/events";
+import {
+  deleteWifeShiftCore,
+  upsertWifeShiftsCore,
+  type WifeShiftInput,
+} from "@/lib/db/core/wife-shifts";
 
 function bump() {
   revalidatePath("/calendar");
@@ -59,6 +64,29 @@ export async function moveEventAction(
 
 export async function deleteEventAction(id: string) {
   const result = await deleteEventCore(id);
+  bump();
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function bulkUpsertWifeShiftsAction(shifts: WifeShiftInput[]) {
+  try {
+    const result = await upsertWifeShiftsCore(shifts);
+    bump();
+    return result.ok
+      ? { ok: true as const, shifts: result.data }
+      : { ok: false as const, error: result.error };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export async function deleteWifeShiftAction(shiftDate: string) {
+  const result = await deleteWifeShiftCore(shiftDate);
   bump();
   return result.ok
     ? { ok: true as const }

@@ -10,10 +10,13 @@ import {
   spansMultipleDays,
 } from "@/lib/calendar/grid";
 import type { Event } from "@/lib/db/types";
+import type { WifeShiftMap } from "./CalendarView";
+import { WifeShiftBadge } from "./WifeShiftBadge";
 
 type Props = {
   cursor: Date;
   events: Event[];
+  wifeShifts: WifeShiftMap;
   onSelectEvent: (event: Event) => void;
   onCreateAt: (starts_at: Date) => void;
 };
@@ -23,7 +26,13 @@ const SPAN_ROW_PX = 18;
 const SPAN_GAP_PX = 2;
 const SPAN_BAND_TOP_PX = 22;
 
-export function MonthView({ cursor, events, onSelectEvent, onCreateAt }: Props) {
+export function MonthView({
+  cursor,
+  events,
+  wifeShifts,
+  onSelectEvent,
+  onCreateAt,
+}: Props) {
   const cells = monthCells(cursor);
   const weeks: Date[][] = [];
   for (let i = 0; i < cells.length; i += 7) {
@@ -106,6 +115,9 @@ export function MonthView({ cursor, events, onSelectEvent, onCreateAt }: Props) 
                         >
                           {format(day, "d")}
                         </span>
+                        <WifeShiftBadge
+                          code={wifeShifts[format(day, "yyyy-MM-dd")]}
+                        />
                       </div>
                     </button>
                   );

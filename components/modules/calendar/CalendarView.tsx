@@ -4,6 +4,7 @@ import { addHours } from "date-fns";
 import { useState } from "react";
 import {
   bulkCreateEventsAction,
+  bulkUpsertWifeShiftsAction,
   createEventAction,
   deleteEventAction,
   moveEventAction,
@@ -11,13 +12,16 @@ import {
 } from "@/app/(app)/calendar/actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CategoryKey } from "@/lib/calendar/categories";
-import type { Event } from "@/lib/db/types";
+import type { Event, WifeShift, WifeShiftCode } from "@/lib/db/types";
 import { CalendarToolbar, type ViewMode } from "./CalendarToolbar";
 import { EventDrawer } from "./EventDrawer";
 import type { EventFormValues } from "./EventForm";
 import { MonthView } from "./MonthView";
 import { ScreenshotUploader } from "./ScreenshotUploader";
 import { WeekView } from "./WeekView";
+import { WifeRosterUploader } from "./WifeRosterUploader";
+
+export type WifeShiftMap = Record<string, WifeShiftCode>;
 
 type DrawerState =
   | { kind: "closed" }
@@ -26,22 +30,34 @@ type DrawerState =
 
 type Props = {
   initialEvents: Event[];
+  initialWifeShifts: WifeShift[];
   initialCursor: string;
   visionEnabled: boolean;
 };
 
+function toShiftMap(shifts: WifeShift[]): WifeShiftMap {
+  const out: WifeShiftMap = {};
+  for (const s of shifts) out[s.shift_date] = s.code;
+  return out;
+}
+
 export function CalendarView({
   initialEvents,
+  initialWifeShifts,
   initialCursor,
   visionEnabled,
 }: Props) {
   const [events, setEvents] = useState<Event[]>(initialEvents);
+  const [wifeShifts, setWifeShifts] = useState<WifeShiftMap>(() =>
+    toShiftMap(initialWifeShifts),
+  );
   const [cursor, setCursor] = useState<Date>(() => new Date(initialCursor));
   const [view, setView] = useState<ViewMode>("week");
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "closed" });
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [drawerPending, setDrawerPending] = useState(false);
   const [uploaderOpen, setUploaderOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   function openCreateAt(starts: Date) {
     const ends = addHours(starts, 1);
@@ -179,12 +195,14 @@ export function CalendarView({
           openCreateAt(at);
         }}
         onUploadScreenshot={() => setUploaderOpen(true)}
+        onUploadRoster={() => setRosterOpen(true)}
       />
 
       {view === "week" ? (
         <WeekView
           cursor={cursor}
           events={events}
+          wifeShifts={wifeShifts}
           onSelectEvent={openEdit}
           onCreateAt={openCreateAt}
           onMove={handleMove}
@@ -193,6 +211,7 @@ export function CalendarView({
         <MonthView
           cursor={cursor}
           events={events}
+          wifeShifts={wifeShifts}
           onSelectEvent={openEdit}
           onCreateAt={openCreateAt}
         />
@@ -227,6 +246,24 @@ export function CalendarView({
           // Re-fetch events isn't easy without server roundtrip; do a soft update
           // by relying on the next nav / revalidate. For now just close uploader.
           return results;
+        }}
+      />
+
+      <WifeRosterUploader
+        open={rosterOpen}
+        visionEnabled={visionEnabled}
+        onClose={() => setRosterOpen(false)}
+        onCommit={async (shifts) => {
+          const result = await bulkUpsertWifeShiftsAction(shifts);
+          if (!result.ok) {
+            return { ok: false, error: result.error, count: 0 };
+          }
+          setWifeShifts((prev) => {
+            const next = { ...prev };
+            for (const s of result.shifts) next[s.shift_date] = s.code;
+            return next;
+          });
+          return { ok: true, count: result.shifts.length };
         }}
       />
     </>

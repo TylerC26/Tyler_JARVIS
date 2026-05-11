@@ -25,6 +25,7 @@ import {
   deleteTaskCore,
   setTaskStatusCore,
 } from "@/lib/db/core/tasks";
+import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import {
   listAccounts,
@@ -33,6 +34,7 @@ import {
   monthToDateSpend,
 } from "@/lib/db/queries/money";
 import { listTasks } from "@/lib/db/queries/tasks";
+import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 
 // ---------- task tools ----------
 
@@ -365,6 +367,28 @@ export const listEventsInRangeTool = tool({
   },
 });
 
+// ---------- wife shifts ----------
+
+export const listWifeShiftsTool = tool({
+  description:
+    "List the user's wife's nurse shifts between two dates (inclusive). Codes: A=AM 07:00–15:00, P=PM 15:00–23:00, N=Night 23:00–07:00 (next day), DO=Day Off. The next 21 days of shifts are already in your context prefix — use this tool ONLY for dates beyond that window or when the user asks for a specific date range you don't have.",
+  inputSchema: z.object({
+    from: z.string().describe("Inclusive start date in YYYY-MM-DD."),
+    to: z.string().describe("Inclusive end date in YYYY-MM-DD."),
+  }),
+  execute: async ({ from, to }) => {
+    const shifts = await listWifeShiftsInRangeCore(from, to);
+    return {
+      ok: true,
+      count: shifts.length,
+      shifts: shifts.map((s) => ({
+        shift_date: s.shift_date,
+        code: s.code,
+      })),
+    };
+  },
+});
+
 // ---------- query + brief tools ----------
 
 export const queryStateTool = tool({
@@ -372,7 +396,7 @@ export const queryStateTool = tool({
     "Read-only snapshot of the user's current state. Call this before answering any question that requires real numbers.",
   inputSchema: z.object({
     domain: z
-      .enum(["tasks", "habits", "money", "events", "all"])
+      .enum(["tasks", "habits", "money", "events", "wife_shifts", "all"])
       .describe("Which domain(s) to fetch. 'all' returns a summary across everything."),
   }),
   execute: async ({ domain }) => {
@@ -459,6 +483,16 @@ export const queryStateTool = tool({
       };
     }
 
+    if (domain === "wife_shifts" || domain === "all") {
+      const shifts = await listUpcomingWifeShifts(21);
+      out.wife_shifts = {
+        next_21_days: shifts.map((s) => ({
+          shift_date: s.shift_date,
+          code: s.code,
+        })),
+      };
+    }
+
     return { ok: true, snapshot: out };
   },
 });
@@ -499,6 +533,7 @@ export const ALL_TOOLS = {
   move_event: moveEventTool,
   delete_event: deleteEventTool,
   list_events_in_range: listEventsInRangeTool,
+  list_wife_shifts: listWifeShiftsTool,
   query_state: queryStateTool,
   generate_brief: generateBriefTool,
 } as const;

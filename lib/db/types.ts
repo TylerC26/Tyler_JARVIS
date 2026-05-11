@@ -132,6 +132,19 @@ export type Event = {
   updated_at: string | null;
 };
 
+export type WifeShiftCode = "A" | "P" | "N" | "DO";
+
+export type WifeShift = {
+  owner_id: string;
+  shift_date: string; // YYYY-MM-DD
+  code: WifeShiftCode;
+  raw_label: string | null;
+  note: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type ChatRole = "user" | "assistant" | "tool" | "system";
 
 export type ChatToolCall = {
@@ -346,6 +359,21 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Event>;
+        Relationships: [];
+      };
+      wife_shifts: {
+        Row: WifeShift;
+        Insert: {
+          owner_id: string;
+          shift_date: string;
+          code: WifeShiftCode;
+          raw_label?: string | null;
+          note?: string | null;
+          source?: string;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<WifeShift>;
         Relationships: [];
       };
       chat_messages: {
