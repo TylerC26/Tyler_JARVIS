@@ -371,7 +371,7 @@ export const listEventsInRangeTool = tool({
 
 export const listWifeShiftsTool = tool({
   description:
-    "List the user's wife's nurse shifts between two dates (inclusive). Codes: A=AM 07:00–15:00, P=PM 15:00–23:00, N=Night 23:00–07:00 (next day), DO=Day Off. The next 21 days of shifts are already in your context prefix — use this tool ONLY for dates beyond that window or when the user asks for a specific date range you don't have.",
+    "List the user's wife's nurse shifts between two dates (inclusive). Codes: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (07:00–14:00 then 22:00 overnight), NO=Night 22:00 prev day–07:00 (10pm–7am), DO=Day Off. The next 21 days of shifts are already in your context prefix — use this tool ONLY for dates beyond that window or when the user asks for a specific date range you don't have.",
   inputSchema: z.object({
     from: z.string().describe("Inclusive start date in YYYY-MM-DD."),
     to: z.string().describe("Inclusive end date in YYYY-MM-DD."),

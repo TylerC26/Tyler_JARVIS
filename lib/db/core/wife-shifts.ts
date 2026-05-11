@@ -4,7 +4,7 @@ import type { WifeShift, WifeShiftCode } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const VALID_CODES: WifeShiftCode[] = ["A", "P", "N", "DO"];
+const VALID_CODES: WifeShiftCode[] = ["A", "P", "P1", "Anight", "NO", "DO"];
 
 export type WifeShiftInput = {
   shift_date: string; // YYYY-MM-DD

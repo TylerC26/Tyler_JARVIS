@@ -1,10 +1,23 @@
 import type { WifeShiftCode } from "@/lib/db/types";
 
 const SHIFT_LABEL: Record<WifeShiftCode, string> = {
-  A: "AM Shift 07:00–15:00",
-  P: "PM Shift 15:00–23:00",
-  N: "Night Shift 23:00–07:00 (next day)",
+  A: "AM Shift 07:00–15:00 (7am–3pm)",
+  P: "PM Shift 14:30–22:30 (2:30pm–10:30pm)",
+  P1: "PM-1 Shift 14:00–22:00 (2pm–10pm)",
+  Anight: "AM+Night split: 07:00–14:00 then 22:00– overnight",
+  NO: "Night Shift 22:00–07:00 (10pm prev → 7am)",
   DO: "Day Off",
+};
+
+// Short display string for the badge surface — `Anight` is too wide for tight
+// day cells. The tooltip (title attribute) still shows the full canonical name.
+const SHIFT_DISPLAY: Record<WifeShiftCode, string> = {
+  A: "A",
+  P: "P",
+  P1: "P1",
+  Anight: "A/N",
+  NO: "NO",
+  DO: "DO",
 };
 
 const SHIFT_STYLES: Record<
@@ -21,7 +34,17 @@ const SHIFT_STYLES: Record<
     border: "border-[#fb923c]/50",
     text: "text-[#fb923c]",
   },
-  N: {
+  P1: {
+    bg: "bg-[#ea580c]/20",
+    border: "border-[#ea580c]/50",
+    text: "text-[#ea580c]",
+  },
+  Anight: {
+    bg: "bg-[#ec4899]/20",
+    border: "border-[#ec4899]/50",
+    text: "text-[#ec4899]",
+  },
+  NO: {
     bg: "bg-[#a78bfa]/20",
     border: "border-[#a78bfa]/50",
     text: "text-[#a78bfa]",
@@ -56,7 +79,7 @@ export function WifeShiftBadge({ code, className }: Props) {
       ].join(" ")}
     >
       <span aria-hidden>👩</span>
-      <span>{code}</span>
+      <span>{SHIFT_DISPLAY[code]}</span>
     </span>
   );
 }

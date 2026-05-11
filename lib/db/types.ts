@@ -132,7 +132,7 @@ export type Event = {
   updated_at: string | null;
 };
 
-export type WifeShiftCode = "A" | "P" | "N" | "DO";
+export type WifeShiftCode = "A" | "P" | "P1" | "Anight" | "NO" | "DO";
 
 export type WifeShift = {
   owner_id: string;

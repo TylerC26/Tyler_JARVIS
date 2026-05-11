@@ -26,7 +26,7 @@ type Props = {
 
 type Phase = "idle" | "extracting" | "preview" | "committing" | "done";
 
-const SHIFT_CODES: WifeShiftCode[] = ["A", "P", "N", "DO"];
+const SHIFT_CODES: WifeShiftCode[] = ["A", "P", "P1", "Anight", "NO", "DO"];
 
 export function WifeRosterUploader({
   open,
@@ -137,7 +137,7 @@ export function WifeRosterUploader({
       open={open}
       onClose={onClose}
       title="Roster → Wife's Shifts"
-      subtitle="ai ocr · A/P/N/DO"
+      subtitle="ai ocr · A/P/P1/Anight/NO/DO"
       footer={
         phase === "preview" ? (
           <>
@@ -188,8 +188,11 @@ export function WifeRosterUploader({
             previewSrc={previewSrc}
           />
           <p className="mt-3 font-mono text-[10px] text-fg-dim leading-relaxed">
-            // shift legend — A: AM 07:00–15:00 · P: PM 15:00–23:00 · N: Night
-            23:00–07:00 · DO: Day Off
+            // shift legend —
+            <br />
+            A: 7am–3pm · P: 2:30pm–10:30pm · P1: 2pm–10pm
+            <br />
+            Anight: 7am–2pm + 10pm night · NO: 10pm prev → 7am · DO: Day Off
           </p>
         </>
       )}

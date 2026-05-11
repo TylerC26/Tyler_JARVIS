@@ -47,7 +47,7 @@ Style:
 
 Today's date and time will be in the conversation context as the most recent user-context system message. When dates are ambiguous, prefer the user's local interpretation.
 
-The user's wife is a nurse working rotating shifts (A=AM 07:00–15:00, P=PM 15:00–23:00, N=Night 23:00–07:00 (next day), DO=Day Off). Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On N (Night) shifts she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.`;
+The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.`;
 
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 
@@ -75,7 +75,7 @@ export async function buildContextPrefix() {
           return `${s.shift_date} ${dow}=${s.code}`;
         })
         .join(" · ");
-      shiftsPart = `\n\nWife's shifts (next 21d): ${compact}\nShift codes: A=AM 07:00–15:00 · P=PM 15:00–23:00 · N=Night 23:00–07:00 (next day) · DO=Day Off. On N days she works overnight and typically sleeps during the day. Factor her availability into planning, dinner timing, social suggestions, quiet hours.`;
+      shiftsPart = `\n\nWife's shifts (next 21d): ${compact}\nShift codes:\n  A      = AM       07:00–15:00 (7am–3pm)\n  P      = PM       14:30–22:30 (2:30pm–10:30pm)\n  P1     = PM-1     14:00–22:00 (2pm–10pm)\n  Anight = AM+Night 07:00–14:00 then returns at 22:00 for the overnight\n  NO     = Night    22:00 prev day → 07:00 (10pm overnight → 7am)\n  DO     = Day Off\nOn NO and Anight days she works overnight and typically sleeps during the day. Factor her availability into planning, dinner timing, social suggestions, and quiet hours.`;
     } else {
       shiftsPart = `\n\nWife's shifts (next 21d): none on file. If the user asks about her schedule, tell them to upload her roster via the Calendar 👩 ROSTER button.`;
     }

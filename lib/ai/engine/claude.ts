@@ -82,8 +82,14 @@ function formatWifeShiftsLine(ctx: AIContext): string {
     .join(" · ");
   return [
     `Wife's shifts (next 21d): ${compact}`,
-    "Shift codes: A=AM 07:00–15:00 · P=PM 15:00–23:00 · N=Night 23:00–07:00 (next day) · DO=Day Off.",
-    "Factor her availability into any planning, dinner timing, social suggestions, or quiet-hours reasoning. On N (Night) days she works overnight and typically sleeps during the day.",
+    "Shift codes:",
+    "  A      = AM,      07:00–15:00 (7am–3pm)",
+    "  P      = PM,      14:30–22:30 (2:30pm–10:30pm)",
+    "  P1     = PM-1,    14:00–22:00 (2pm–10pm)",
+    "  Anight = AM+Night split: works 07:00–14:00 then returns at 22:00 for the overnight",
+    "  NO     = Night,   22:00 previous day → 07:00 (10pm overnight → 7am)",
+    "  DO     = Day Off",
+    "Factor her availability into any planning, dinner timing, social suggestions, or quiet-hours reasoning. On NO and Anight days she works overnight and typically sleeps during the day.",
   ].join("\n");
 }
 
