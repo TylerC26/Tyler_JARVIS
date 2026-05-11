@@ -47,9 +47,12 @@ Style:
 
 Today's date and time will be in the conversation context as the most recent user-context system message. When dates are ambiguous, prefer the user's local interpretation.
 
-The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.`;
+The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.
+
+Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.`;
 
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
+import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
 // Format the user's IANA offset as "+HH:MM" / "-HH:MM" at the given instant.
 // Required because the server runs in UTC on Vercel and JS Date has no API to
@@ -90,7 +93,7 @@ function formatLocalISO(tz: string, at: Date): string {
   return `${map.year}-${map.month}-${map.day}T${hour}:${map.minute}:${map.second}${formatOffset(tz, at)}`;
 }
 
-export async function buildContextPrefix(tz?: string) {
+export async function buildContextPrefix(tz?: string, userText?: string) {
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
   // shifts on every message — no tool-call required. This is what makes the
@@ -140,5 +143,15 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not load wife shifts for context prefix:", e);
   }
 
-  return datePart + shiftsPart;
+  let skillsPart = "";
+  try {
+    const { matched, allActive } = await resolveActiveSkillsForTurn(
+      userText ?? "",
+    );
+    skillsPart = renderSkillsBlock(matched, allActive);
+  } catch (e) {
+    console.warn("[chat] could not resolve skills for context prefix:", e);
+  }
+
+  return datePart + shiftsPart + skillsPart;
 }

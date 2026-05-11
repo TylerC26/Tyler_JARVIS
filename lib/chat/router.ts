@@ -60,13 +60,38 @@ export async function decideRoute(
 
 type StreamOpts = { tz?: string };
 
+// Pull the most recent user-authored text out of the ModelMessage list so the
+// skills resolver can keyword-match against it. Walks the messages from the
+// end and collects all text parts in that final user turn (multi-part content
+// is concatenated).
+function extractLatestUserText(messages: ModelMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    if (Array.isArray(m.content)) {
+      return m.content
+        .map((p) => {
+          if (typeof p === "string") return p;
+          if (p && typeof p === "object" && "text" in p && typeof p.text === "string")
+            return p.text;
+          return "";
+        })
+        .join(" ")
+        .trim();
+    }
+    return "";
+  }
+  return "";
+}
+
 export async function streamDeepseekResponse(
   messages: ModelMessage[],
   opts: StreamOpts = {},
 ) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: await buildContextPrefix(opts.tz),
+    content: await buildContextPrefix(opts.tz, extractLatestUserText(messages)),
   };
   return streamText({
     model: deepseek("deepseek-chat"),
@@ -81,7 +106,7 @@ export async function streamClaudeResponse(
 ) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: await buildContextPrefix(opts.tz),
+    content: await buildContextPrefix(opts.tz, extractLatestUserText(messages)),
   };
   return streamText({
     model: anthropic("claude-opus-4-7"),

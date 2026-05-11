@@ -1,7 +1,7 @@
 "use client";
 
 import { addHours } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   bulkCreateEventsAction,
   bulkUpsertWifeShiftsAction,
@@ -52,6 +52,17 @@ export function CalendarView({
     toShiftMap(initialWifeShifts),
   );
   const [cursor, setCursor] = useState<Date>(() => new Date(initialCursor));
+
+  // When the parent server component re-renders (e.g. after Jarvis runs a tool
+  // and the chat panel calls router.refresh()), it passes fresh initial props.
+  // Mirror them into local state so the grid actually reflects the new truth
+  // — useState only honors the seed on first mount.
+  useEffect(() => {
+    setEvents(initialEvents);
+  }, [initialEvents]);
+  useEffect(() => {
+    setWifeShifts(toShiftMap(initialWifeShifts));
+  }, [initialWifeShifts]);
   const [view, setView] = useState<ViewMode>("week");
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "closed" });
   const [drawerError, setDrawerError] = useState<string | null>(null);

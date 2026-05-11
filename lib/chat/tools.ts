@@ -25,8 +25,10 @@ import {
   deleteTaskCore,
   setTaskStatusCore,
 } from "@/lib/db/core/tasks";
+import { createSkillCore } from "@/lib/db/core/skills";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
+import { listActiveSkills } from "@/lib/db/queries/skills";
 import {
   listAccounts,
   listFixedExpenses,
@@ -406,6 +408,49 @@ export const listWifeShiftsTool = tool({
   },
 });
 
+// ---------- skill tools ----------
+
+export const createSkillTool = tool({
+  description:
+    "Author a new Jarvis Skill — a reusable behavior bundle the user can trigger by keyword. Use this when the user says 'make me a skill that…', 'teach Jarvis to…', or describes a recurring workflow they want bundled. Pick a short imperative name, 1-line description, and 2-5 trigger keywords/phrases. Write the instructions in second person addressed to Jarvis. Confirm the saved skill back to the user in one sentence.",
+  inputSchema: z.object({
+    name: z
+      .string()
+      .describe(
+        "Short imperative title (2-4 words). Used as the unique skill name.",
+      ),
+    description: z
+      .string()
+      .describe("One-sentence summary of what this skill does."),
+    instructions: z
+      .string()
+      .describe(
+        "Markdown body of the skill, addressed to Jarvis in second person. Be concrete about behavior. 100-300 words is the sweet spot.",
+      ),
+    trigger_keywords: z
+      .array(z.string())
+      .min(1)
+      .describe(
+        "Lowercase keywords/phrases that activate this skill when present in a user message. Substring match.",
+      ),
+  }),
+  execute: async (input) => {
+    const result = await createSkillCore({
+      name: input.name,
+      description: input.description,
+      instructions: input.instructions,
+      trigger_keywords: input.trigger_keywords,
+      source: "jarvis",
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Skill saved: ${result.data.name} · triggers: ${result.data.trigger_keywords.join(", ")}`,
+      skill: result.data,
+    };
+  },
+});
+
 // ---------- query + brief tools ----------
 
 export const queryStateTool = tool({
@@ -413,7 +458,7 @@ export const queryStateTool = tool({
     "Read-only snapshot of the user's current state. Call this before answering any question that requires real numbers.",
   inputSchema: z.object({
     domain: z
-      .enum(["tasks", "habits", "money", "events", "wife_shifts", "all"])
+      .enum(["tasks", "habits", "money", "events", "wife_shifts", "skills", "all"])
       .describe("Which domain(s) to fetch. 'all' returns a summary across everything."),
   }),
   execute: async ({ domain }) => {
@@ -510,6 +555,19 @@ export const queryStateTool = tool({
       };
     }
 
+    if (domain === "skills" || domain === "all") {
+      const skills = await listActiveSkills();
+      out.skills = {
+        count: skills.length,
+        items: skills.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          trigger_keywords: s.trigger_keywords,
+        })),
+      };
+    }
+
     return { ok: true, snapshot: out };
   },
 });
@@ -551,6 +609,7 @@ export const ALL_TOOLS = {
   delete_event: deleteEventTool,
   list_events_in_range: listEventsInRangeTool,
   list_wife_shifts: listWifeShiftsTool,
+  create_skill: createSkillTool,
   query_state: queryStateTool,
   generate_brief: generateBriefTool,
 } as const;

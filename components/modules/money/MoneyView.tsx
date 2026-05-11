@@ -12,6 +12,9 @@ import {
   createAccount,
   createFixedExpense,
   createTransaction,
+  deleteAccount,
+  deleteFixedExpense,
+  deleteTransaction,
 } from "@/lib/db/actions/money";
 import type {
   Account,
@@ -42,7 +45,33 @@ export function MoneyView({
   const [modal, setModal] = useState<ModalKind>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  async function onDeleteTransaction(tx: TransactionWithMeta) {
+    const label = `${tx.merchant ?? "transaction"} · ${fmtCurrency(Number(tx.amount))}`;
+    if (!confirm(`Delete ${label}?`)) return;
+    setDeletingId(tx.id);
+    const result = await deleteTransaction(tx.id);
+    setDeletingId(null);
+    if (!result.ok) alert(`Delete failed: ${result.error}`);
+  }
+
+  async function onDeleteAccount(a: Account) {
+    if (!confirm(`Delete account "${a.name}"?`)) return;
+    setDeletingId(a.id);
+    const result = await deleteAccount(a.id);
+    setDeletingId(null);
+    if (!result.ok) alert(`Delete failed: ${result.error}`);
+  }
+
+  async function onDeleteFixedExpense(f: FixedExpenseUpcoming) {
+    if (!confirm(`Delete fixed expense "${f.name}"?`)) return;
+    setDeletingId(f.id);
+    const result = await deleteFixedExpense(f.id);
+    setDeletingId(null);
+    if (!result.ok) alert(`Delete failed: ${result.error}`);
+  }
 
   const monthSpend = useMemo(() => {
     const now = new Date();
@@ -153,6 +182,27 @@ export function MoneyView({
         </span>
       ),
     },
+    {
+      key: "actions",
+      header: "",
+      width: "40px",
+      align: "right",
+      render: (r) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onDeleteTransaction(r);
+          }}
+          disabled={deletingId === r.id}
+          aria-label="Delete transaction"
+          title="Delete transaction"
+          className="rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-danger hover:text-danger disabled:opacity-50"
+        >
+          {deletingId === r.id ? "…" : "×"}
+        </button>
+      ),
+    },
   ];
 
   const acctColumns: Column<Account>[] = [
@@ -182,6 +232,27 @@ export function MoneyView({
         <span className="tabular text-fg">
           {fmtCurrency(Number(r.current_balance), r.currency)}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "40px",
+      align: "right",
+      render: (r) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onDeleteAccount(r);
+          }}
+          disabled={deletingId === r.id}
+          aria-label="Delete account"
+          title="Delete account"
+          className="rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-danger hover:text-danger disabled:opacity-50"
+        >
+          {deletingId === r.id ? "…" : "×"}
+        </button>
       ),
     },
   ];
@@ -222,6 +293,27 @@ export function MoneyView({
         <span className="tabular text-fg">
           {fmtCurrency(Number(r.amount))}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "40px",
+      align: "right",
+      render: (r) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onDeleteFixedExpense(r);
+          }}
+          disabled={deletingId === r.id}
+          aria-label="Delete fixed expense"
+          title="Delete fixed expense"
+          className="rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-danger hover:text-danger disabled:opacity-50"
+        >
+          {deletingId === r.id ? "…" : "×"}
+        </button>
       ),
     },
   ];

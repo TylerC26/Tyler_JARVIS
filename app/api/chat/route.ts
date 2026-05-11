@@ -127,6 +127,7 @@ export async function POST(req: Request) {
       revalidatePath("/habits");
       revalidatePath("/money");
       revalidatePath("/calendar");
+      revalidatePath("/skills");
       revalidatePath("/assistant");
       revalidatePath("/chat");
     },

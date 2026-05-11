@@ -5,6 +5,9 @@ import {
   createAccountCore,
   createFixedExpenseCore,
   createTransactionCore,
+  deleteAccountCore,
+  deleteFixedExpenseCore,
+  deleteTransactionCore,
 } from "@/lib/db/core/money";
 import type { AccountType, ExpenseCadence, TxDirection } from "@/lib/db/types";
 
@@ -54,6 +57,30 @@ export async function createTransaction(formData: FormData) {
     // ^ form sends category_id today; if it's a UUID createTransactionCore won't match by name
     //   — but the form lookup is by id, not name. Keeping behavior compatible: pass through.
   });
+  bump();
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function deleteTransaction(id: string) {
+  const result = await deleteTransactionCore(id);
+  bump();
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function deleteAccount(id: string) {
+  const result = await deleteAccountCore(id);
+  bump();
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function deleteFixedExpense(id: string) {
+  const result = await deleteFixedExpenseCore(id);
   bump();
   return result.ok
     ? { ok: true as const }

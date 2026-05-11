@@ -116,6 +116,41 @@ export async function createAccountCore(
   return { ok: true, data: data as Account };
 }
 
+// Apply a signed delta to an account's current_balance. Positive delta = credit
+// (incoming money or reverting an expense), negative = debit. Read-then-write
+// instead of an RPC because we don't have a SQL increment function and the
+// numeric is stored as text-precise — JS Number is fine for the magnitudes
+// this app tracks.
+async function adjustAccountBalanceCore(
+  accountId: string,
+  delta: number,
+): Promise<CoreResult<{ current_balance: number }>> {
+  if (!Number.isFinite(delta) || delta === 0)
+    return { ok: true, data: { current_balance: 0 } };
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+
+  const { data: existing, error: readErr } = await supabase
+    .from("accounts")
+    .select("current_balance")
+    .eq("id", accountId)
+    .eq("owner_id", getOwnerId())
+    .single();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  const next = Number(
+    (Number((existing as { current_balance: string }).current_balance) +
+      delta).toFixed(2),
+  );
+  const { error: writeErr } = await supabase
+    .from("accounts")
+    .update({ current_balance: next.toFixed(2), updated_at: new Date().toISOString() })
+    .eq("id", accountId)
+    .eq("owner_id", getOwnerId());
+  if (writeErr) return { ok: false, error: writeErr.message };
+  return { ok: true, data: { current_balance: next } };
+}
+
 export async function createTransactionCore(
   input: CreateTransactionInput,
 ): Promise<
@@ -165,6 +200,12 @@ export async function createTransactionCore(
     .single();
 
   if (error) return { ok: false, error: error.message };
+
+  // Mirror the transaction into the account's running balance so the Finance
+  // tile and Net Worth stay in sync with the ledger.
+  const delta = input.direction === "in" ? input.amount : -input.amount;
+  await adjustAccountBalanceCore(account.id, delta);
+
   return {
     ok: true,
     data: { transaction: data as Transaction, account, category },
@@ -203,4 +244,86 @@ export async function createFixedExpenseCore(
 
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as FixedExpense };
+}
+
+export async function deleteTransactionCore(
+  id: string,
+): Promise<CoreResult<{ id: string }>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Transaction id is required." };
+
+  // Read the row first so we can reverse its effect on the account balance
+  // after the delete succeeds. If the row is gone already, that's fine.
+  const { data: existing } = await supabase
+    .from("transactions")
+    .select("account_id, amount, direction")
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("owner_id", getOwnerId())
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+
+  if (existing) {
+    const tx = existing as { account_id: string; amount: string; direction: TxDirection };
+    const amt = Number(tx.amount);
+    // Reverse the original signing: an 'out' debited, so refund it; an 'in'
+    // credited, so claw it back.
+    const delta = tx.direction === "in" ? -amt : amt;
+    await adjustAccountBalanceCore(tx.account_id, delta);
+  }
+
+  return { ok: true, data: { id } };
+}
+
+export async function deleteAccountCore(
+  id: string,
+): Promise<CoreResult<{ id: string }>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Account id is required." };
+
+  // FK on transactions.account_id is ON DELETE CASCADE — refuse rather than
+  // silently wipe the ledger. The user can clear or reassign txns first.
+  const { count, error: countErr } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", getOwnerId())
+    .eq("account_id", id);
+  if (countErr) return { ok: false, error: countErr.message };
+  if ((count ?? 0) > 0)
+    return {
+      ok: false,
+      error: `Cannot delete account — ${count} transaction${count === 1 ? "" : "s"} still reference it. Delete or move those first.`,
+    };
+
+  const { error } = await supabase
+    .from("accounts")
+    .delete()
+    .eq("owner_id", getOwnerId())
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { id } };
+}
+
+export async function deleteFixedExpenseCore(
+  id: string,
+): Promise<CoreResult<{ id: string }>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Fixed expense id is required." };
+
+  const { error } = await supabase
+    .from("fixed_expenses")
+    .delete()
+    .eq("owner_id", getOwnerId())
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { id } };
 }

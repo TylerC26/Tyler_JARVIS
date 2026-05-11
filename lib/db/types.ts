@@ -145,6 +145,21 @@ export type WifeShift = {
   updated_at: string | null;
 };
 
+export type SkillSource = "manual" | "seeded" | "jarvis";
+
+export type Skill = {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  trigger_keywords: string[];
+  active: boolean;
+  source: SkillSource;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type ChatRole = "user" | "assistant" | "tool" | "system";
 
 export type ChatToolCall = {
@@ -374,6 +389,23 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<WifeShift>;
+        Relationships: [];
+      };
+      skills: {
+        Row: Skill;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          description: string;
+          instructions: string;
+          trigger_keywords?: string[];
+          active?: boolean;
+          source?: SkillSource;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Skill>;
         Relationships: [];
       };
       chat_messages: {

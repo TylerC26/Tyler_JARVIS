@@ -18,6 +18,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/money", label: "Finance", code: "FIN", glyph: "⌗", status: "live" },
   { href: "/tasks", label: "Tasks", code: "TSK", glyph: "▤", status: "live" },
   { href: "/health", label: "Health", code: "HLT", glyph: "✚", status: "offline" },
+  { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
   { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
   { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
 ];
