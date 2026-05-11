@@ -160,6 +160,15 @@ export type Skill = {
   updated_at: string | null;
 };
 
+export type PromptSettings = {
+  owner_id: string;
+  orchestrator_prompt: string | null;
+  responder_prompt: string | null;
+  prefix_addendum: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type ChatRole = "user" | "assistant" | "tool" | "system";
 
 export type ChatToolCall = {
@@ -406,6 +415,19 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Skill>;
+        Relationships: [];
+      };
+      prompt_settings: {
+        Row: PromptSettings;
+        Insert: {
+          owner_id: string;
+          orchestrator_prompt?: string | null;
+          responder_prompt?: string | null;
+          prefix_addendum?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<PromptSettings>;
         Relationships: [];
       };
       chat_messages: {

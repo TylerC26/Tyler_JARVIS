@@ -62,11 +62,37 @@ The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 
 Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.`;
 
 import { listEventsInRangeCore } from "@/lib/db/core/events";
+import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 import type { Event, HabitWithToday, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
+
+// Resolve the active orchestrator prompt: if the user has saved a non-empty
+// override on /settings, use it; otherwise fall back to the hard-coded default.
+// Wrapped in try/catch so a DB hiccup never bricks the chat path.
+export async function getActiveOrchestratorPrompt(): Promise<string> {
+  try {
+    const settings = await getPromptSettingsCore();
+    const override = settings.orchestrator_prompt?.trim();
+    if (override && override.length > 0) return override;
+  } catch (e) {
+    console.warn("[chat] could not load orchestrator prompt override:", e);
+  }
+  return CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT;
+}
+
+export async function getActiveResponderPrompt(): Promise<string> {
+  try {
+    const settings = await getPromptSettingsCore();
+    const override = settings.responder_prompt?.trim();
+    if (override && override.length > 0) return override;
+  } catch (e) {
+    console.warn("[chat] could not load responder prompt override:", e);
+  }
+  return DEEPSEEK_RESPONDER_SYSTEM_PROMPT;
+}
 
 const MAX_TASKS_IN_PREFIX = 15;
 const MAX_HABITS_IN_PREFIX = 20;
@@ -344,5 +370,24 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not resolve skills for context prefix:", e);
   }
 
-  return datePart + eventsPart + tasksPart + habitsPart + shiftsPart + skillsPart;
+  let addendumPart = "";
+  try {
+    const settings = await getPromptSettingsCore();
+    const addendum = settings.prefix_addendum?.trim();
+    if (addendum && addendum.length > 0) {
+      addendumPart = `\n\nUser's custom rules (set on /settings — follow these as additional standing instructions):\n${addendum}`;
+    }
+  } catch (e) {
+    console.warn("[chat] could not load prefix addendum:", e);
+  }
+
+  return (
+    datePart +
+    eventsPart +
+    tasksPart +
+    habitsPart +
+    shiftsPart +
+    skillsPart +
+    addendumPart
+  );
 }

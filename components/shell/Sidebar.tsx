@@ -21,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
   { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
   { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
+  { href: "/settings", label: "Settings", code: "SET", glyph: "◇", status: "live" },
 ];
 
 export function Sidebar() {

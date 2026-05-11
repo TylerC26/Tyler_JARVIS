@@ -5,8 +5,8 @@ import { z } from "zod";
 import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
-  CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT,
-  DEEPSEEK_RESPONDER_SYSTEM_PROMPT,
+  getActiveOrchestratorPrompt,
+  getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
 
@@ -89,13 +89,14 @@ export async function streamDeepseekResponse(
   messages: ModelMessage[],
   opts: StreamOpts = {},
 ) {
-  const ctxPrefix: ModelMessage = {
-    role: "system",
-    content: await buildContextPrefix(opts.tz, extractLatestUserText(messages)),
-  };
+  const [prefixContent, system] = await Promise.all([
+    buildContextPrefix(opts.tz, extractLatestUserText(messages)),
+    getActiveResponderPrompt(),
+  ]);
+  const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   return streamText({
     model: deepseek("deepseek-chat"),
-    system: DEEPSEEK_RESPONDER_SYSTEM_PROMPT,
+    system,
     messages: [ctxPrefix, ...messages],
   });
 }
@@ -104,13 +105,14 @@ export async function streamClaudeResponse(
   messages: ModelMessage[],
   opts: StreamOpts = {},
 ) {
-  const ctxPrefix: ModelMessage = {
-    role: "system",
-    content: await buildContextPrefix(opts.tz, extractLatestUserText(messages)),
-  };
+  const [prefixContent, system] = await Promise.all([
+    buildContextPrefix(opts.tz, extractLatestUserText(messages)),
+    getActiveOrchestratorPrompt(),
+  ]);
+  const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   return streamText({
     model: anthropic("claude-opus-4-7"),
-    system: CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT,
+    system,
     messages: [ctxPrefix, ...messages],
     tools: ALL_TOOLS,
     stopWhen: stepCountIs(6),
