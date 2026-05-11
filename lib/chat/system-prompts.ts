@@ -51,21 +51,27 @@ The user-context system message ALSO pre-loads on every turn:
 - the user's open tasks (titles, priority, due dates, overdue flag) — capped at 15 for prompt-length reasons
 - all active habits (cadence, current streak, whether logged today)
 - the wife's next 21 days of shifts
+- ALL calendar events in the next 28 days (including ones currently in progress), with start/end times in the user's local timezone — capped at 30
 
-You do NOT need to call query_state for any of this. Read it directly from the context prefix when reasoning, planning, or answering. Call query_state ONLY when you need money/finance state, a specific event range outside what the prefix carries, or when the prefix indicated "…and N more" and the user is asking about the truncated tail.
+SCHEDULING — BEFORE you propose any time, suggest moving an event, or answer "when am I free", you MUST read the Calendar block in the prefix and check for conflicts. Treat every event there as a hard block on that time range. If two events overlap, surface that. If the user asks for a free slot, scan the block for gaps. NEVER invent a time without checking. If the user is asking about a date beyond the 28-day window, THEN call list_events_in_range — otherwise the prefix is authoritative.
+
+You do NOT need to call query_state for tasks, habits, shifts, or events inside the windows above. Read directly from the prefix. Call query_state ONLY when you need money/finance state, or when the prefix indicated "…and N more" and the user is asking about the truncated tail.
 
 The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.
 
 Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.`;
 
+import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
-import type { HabitWithToday, Task } from "@/lib/db/types";
+import type { Event, HabitWithToday, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
 const MAX_TASKS_IN_PREFIX = 15;
 const MAX_HABITS_IN_PREFIX = 20;
+const MAX_EVENTS_IN_PREFIX = 30;
+const EVENTS_WINDOW_DAYS = 28;
 
 // Pretty-print a Task line. Examples:
 //   • [P3] Email landlord (due Mon May 12)
@@ -106,6 +112,70 @@ function renderTasksBlock(tasks: Task[], now: Date): string {
   const lines = shown.map((t) => `  • ${formatTaskLine(t, now)}`).join("\n");
   const tail = more > 0 ? `\n  …and ${more} more open task${more === 1 ? "" : "s"}.` : "";
   return `\n\nOpen tasks (${open.length} total, prioritized by due date):\n${lines}${tail}`;
+}
+
+// Format an event line in the user's timezone. Examples:
+//   • Mon May 12 · 09:00–10:30 · Standup @ Zoom
+//   • Wed May 14 · all-day · Trip to Lisbon
+//   • IN PROGRESS · 18:00–22:00 · Wife pickup
+function formatEventLine(e: Event, now: Date, tz: string): string {
+  const start = new Date(e.starts_at);
+  const end = new Date(e.ends_at);
+
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  let when: string;
+  if (start <= now && end >= now) {
+    when = `IN PROGRESS · ${dateFmt.format(start)}`;
+  } else {
+    when = dateFmt.format(start);
+  }
+
+  let span: string;
+  if (e.all_day) {
+    const sameDay =
+      dateFmt.format(start) === dateFmt.format(end) ||
+      end.getTime() - start.getTime() < 24 * 60 * 60 * 1000;
+    span = sameDay ? "all-day" : `all-day through ${dateFmt.format(end)}`;
+  } else {
+    span = `${timeFmt.format(start)}–${timeFmt.format(end)}`;
+  }
+
+  const where = e.location ? ` @ ${e.location}` : "";
+  const cat = e.category ? ` [${e.category}]` : "";
+  return `${when} · ${span} · ${e.title}${cat}${where}`;
+}
+
+function renderEventsBlock(events: Event[], now: Date, tz: string): string {
+  // Keep only events that haven't fully ended yet — this picks up
+  // currently-in-progress multi-day trips even though their starts_at is in
+  // the past.
+  const live = events
+    .filter((e) => new Date(e.ends_at).getTime() >= now.getTime())
+    .sort(
+      (a, b) =>
+        new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+    );
+
+  if (live.length === 0)
+    return `\n\nCalendar (next ${EVENTS_WINDOW_DAYS}d): no events on the books.`;
+
+  const shown = live.slice(0, MAX_EVENTS_IN_PREFIX);
+  const more = live.length - shown.length;
+  const lines = shown.map((e) => `  • ${formatEventLine(e, now, tz)}`).join("\n");
+  const tail = more > 0 ? `\n  …and ${more} more event${more === 1 ? "" : "s"} in the window.` : "";
+  return `\n\nCalendar (next ${EVENTS_WINDOW_DAYS}d, ${live.length} event${live.length === 1 ? "" : "s"}):\n${lines}${tail}\nUse this to answer any scheduling, conflict-detection, or "when am I free" question — do NOT propose times that overlap these blocks.`;
 }
 
 function renderHabitsBlock(habits: HabitWithToday[]): string {
@@ -196,9 +266,15 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
 - When emitting starts_at / ends_at, ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
 - Build the date portion from the local ISO timestamp above, not from the UTC timestamp.`;
 
-  // Fetch shifts, tasks, and habits in parallel — all three feed the prefix
-  // and we don't want each chat turn to wait on serial DB roundtrips.
-  const [shifts, tasks, habits] = await Promise.all([
+  // Fetch everything that feeds the prefix in parallel — we don't want each
+  // chat turn to wait on serial DB roundtrips. Event window starts ~36h ago
+  // so currently-running multi-day trips are still picked up.
+  const eventsFrom = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
+  const eventsTo = new Date(
+    now.getTime() + EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const [shifts, tasks, habits, events] = await Promise.all([
     listUpcomingWifeShifts(21).catch((e) => {
       console.warn("[chat] could not load wife shifts:", e);
       return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
@@ -210,6 +286,10 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     listHabitsWithToday().catch((e) => {
       console.warn("[chat] could not load habits:", e);
       return [] as Awaited<ReturnType<typeof listHabitsWithToday>>;
+    }),
+    listEventsInRangeCore(eventsFrom, eventsTo).catch((e) => {
+      console.warn("[chat] could not load events:", e);
+      return [] as Awaited<ReturnType<typeof listEventsInRangeCore>>;
     }),
   ]);
 
@@ -231,6 +311,13 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     }
   } catch (e) {
     console.warn("[chat] could not render wife shifts for context prefix:", e);
+  }
+
+  let eventsPart = "";
+  try {
+    eventsPart = renderEventsBlock(events, now, userTz);
+  } catch (e) {
+    console.warn("[chat] could not render events for context prefix:", e);
   }
 
   let tasksPart = "";
@@ -257,5 +344,5 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not resolve skills for context prefix:", e);
   }
 
-  return datePart + tasksPart + habitsPart + shiftsPart + skillsPart;
+  return datePart + eventsPart + tasksPart + habitsPart + shiftsPart + skillsPart;
 }
