@@ -255,11 +255,15 @@ export const addCalendarEventTool = tool({
     title: z.string(),
     starts_at: z
       .string()
-      .describe("ISO 8601 start timestamp. Resolve relative dates against the current context."),
+      .describe(
+        "ISO 8601 start timestamp WITH the user's local offset (e.g. 2026-05-12T19:00:00+08:00). Never use trailing Z. Resolve relative phrases ('tomorrow 7pm') against the Current local time in the context prefix.",
+      ),
     ends_at: z
       .string()
       .optional()
-      .describe("ISO 8601 end. Defaults to 1 hour after starts_at."),
+      .describe(
+        "ISO 8601 end with the same local offset as starts_at. Defaults to 1 hour after starts_at.",
+      ),
     all_day: z.boolean().optional(),
     location: z.string().optional(),
     description: z.string().optional(),
@@ -293,8 +297,14 @@ export const updateEventTool = tool({
   inputSchema: z.object({
     event_id: z.string(),
     title: z.string().optional(),
-    starts_at: z.string().optional(),
-    ends_at: z.string().optional(),
+    starts_at: z
+      .string()
+      .optional()
+      .describe("ISO 8601 with the user's local offset. Never trailing Z."),
+    ends_at: z
+      .string()
+      .optional()
+      .describe("ISO 8601 with the same local offset as starts_at."),
     all_day: z.boolean().optional(),
     location: z.string().optional(),
     description: z.string().optional(),
@@ -318,8 +328,15 @@ export const moveEventTool = tool({
     "Reschedule an event. Preserves duration unless new_ends_at is provided.",
   inputSchema: z.object({
     event_id: z.string(),
-    new_starts_at: z.string().describe("ISO 8601"),
-    new_ends_at: z.string().optional(),
+    new_starts_at: z
+      .string()
+      .describe(
+        "ISO 8601 with the user's local offset (e.g. 2026-05-12T19:00:00+08:00). Never trailing Z.",
+      ),
+    new_ends_at: z
+      .string()
+      .optional()
+      .describe("ISO 8601 with the same local offset as new_starts_at."),
   }),
   execute: async ({ event_id, new_starts_at, new_ends_at }) => {
     const result = await moveEventCore(event_id, new_starts_at, new_ends_at);

@@ -51,16 +51,73 @@ The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 
 
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 
-export async function buildContextPrefix() {
+// Format the user's IANA offset as "+HH:MM" / "-HH:MM" at the given instant.
+// Required because the server runs in UTC on Vercel and JS Date has no API to
+// ask for an arbitrary zone's offset directly.
+function formatOffset(tz: string, at: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "longOffset",
+      hour: "numeric",
+    }).formatToParts(at);
+    const tzName = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    // longOffset emits e.g. "GMT+08:00" or "GMT-05:00" (and "GMT" for UTC).
+    const m = tzName.match(/GMT([+-]\d{2}:\d{2})/);
+    if (m) return m[1];
+    if (tzName === "GMT" || tzName === "UTC") return "+00:00";
+    return "+00:00";
+  } catch {
+    return "+00:00";
+  }
+}
+
+function formatLocalISO(tz: string, at: Date): string {
+  // Build "YYYY-MM-DDTHH:mm:ss" in the user's tz, then append the offset.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(at);
+  const map: Record<string, string> = {};
+  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+  const hour = map.hour === "24" ? "00" : map.hour;
+  return `${map.year}-${map.month}-${map.day}T${hour}:${map.minute}:${map.second}${formatOffset(tz, at)}`;
+}
+
+export async function buildContextPrefix(tz?: string) {
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
   // shifts on every message — no tool-call required. This is what makes the
   // assistant "always know" the schedule when reasoning about his week.
   const now = new Date();
-  const datePart = `Current timestamp: ${now.toISOString()}. Local date: ${now.toDateString()}. Day of week: ${now.toLocaleDateString(
-    "en-US",
-    { weekday: "long" },
-  )}.`;
+  const userTz = tz && tz.length > 0 ? tz : "UTC";
+  const localISO = formatLocalISO(userTz, now);
+  const offset = formatOffset(userTz, now);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTz,
+    weekday: "long",
+  }).format(now);
+  const humanLocal = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTz,
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(now);
+
+  const datePart = `Current local time: ${humanLocal} (${userTz}, UTC${offset}).
+Current local ISO timestamp: ${localISO}.
+Current UTC timestamp: ${now.toISOString()}.
+Day of week: ${weekday}.
+
+TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_event, update_event, move_event, etc.):
+- The user speaks in their LOCAL time. "7pm tomorrow" means 19:00 in ${userTz}, not UTC.
+- When emitting starts_at / ends_at, ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
+- Build the date portion from the local ISO timestamp above, not from the UTC timestamp.`;
 
   let shiftsPart = "";
   try {

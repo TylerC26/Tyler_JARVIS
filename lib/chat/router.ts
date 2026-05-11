@@ -58,10 +58,15 @@ export async function decideRoute(
   }
 }
 
-export async function streamDeepseekResponse(messages: ModelMessage[]) {
+type StreamOpts = { tz?: string };
+
+export async function streamDeepseekResponse(
+  messages: ModelMessage[],
+  opts: StreamOpts = {},
+) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: await buildContextPrefix(),
+    content: await buildContextPrefix(opts.tz),
   };
   return streamText({
     model: deepseek("deepseek-chat"),
@@ -70,10 +75,13 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   });
 }
 
-export async function streamClaudeResponse(messages: ModelMessage[]) {
+export async function streamClaudeResponse(
+  messages: ModelMessage[],
+  opts: StreamOpts = {},
+) {
   const ctxPrefix: ModelMessage = {
     role: "system",
-    content: await buildContextPrefix(),
+    content: await buildContextPrefix(opts.tz),
   };
   return streamText({
     model: anthropic("claude-opus-4-7"),
