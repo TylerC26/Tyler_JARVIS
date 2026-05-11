@@ -2,7 +2,6 @@ import { ChatPanel } from "@/components/modules/chat/ChatPanel";
 import { DateHeroTile } from "@/components/modules/dashboard/DateHeroTile";
 import { HabitsTile } from "@/components/modules/dashboard/HabitsTile";
 import { TasksTile } from "@/components/modules/dashboard/TasksTile";
-import { ExpensesTile } from "@/components/modules/dashboard/ExpensesTile";
 import { TransactionsTile } from "@/components/modules/dashboard/TransactionsTile";
 import { getLatestBrief } from "@/lib/ai/store";
 import { todayISO } from "@/lib/date";
@@ -31,10 +30,6 @@ export default async function DashboardPage() {
       <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <HabitsTile />
         <TasksTile />
-        <ExpensesTile />
-      </div>
-
-      <div className="md:col-span-12">
         <TransactionsTile />
       </div>
     </div>
