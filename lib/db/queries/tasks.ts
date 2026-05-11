@@ -1,8 +1,13 @@
 import { getOwnerId } from "@/lib/auth/currentUser";
+import { listTasksByProjectCore } from "@/lib/db/core/tasks";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { Task, TaskStatus } from "@/lib/db/types";
 
 const STATUS_ORDER: TaskStatus[] = ["todo", "doing", "blocked", "done"];
+
+export async function listProjectTasks(projectId: string): Promise<Task[]> {
+  return listTasksByProjectCore(projectId);
+}
 
 export async function listTasks(): Promise<Task[]> {
   const supabase = await getSupabaseServer();

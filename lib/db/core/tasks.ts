@@ -12,6 +12,7 @@ export type CreateTaskInput = {
   status?: TaskStatus;
   priority?: number;
   due_at?: string | null;
+  project_id?: string | null;
 };
 
 const STATUS_CYCLE: TaskStatus[] = ["todo", "doing", "blocked", "done"];
@@ -37,6 +38,7 @@ export async function createTaskCore(
       status,
       priority,
       due_at: input.due_at ?? null,
+      project_id: input.project_id ?? null,
     })
     .select()
     .single();
@@ -96,4 +98,21 @@ export async function deleteTaskCore(id: string): Promise<CoreResult<true>> {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: true };
+}
+
+// Tasks tagged to a specific project. Same status-then-priority sort as the
+// global listTasks so the project detail page renders the same shape.
+export async function listTasksByProjectCore(projectId: string): Promise<Task[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .eq("project_id", projectId)
+    .order("status")
+    .order("priority")
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  return (data as Task[] | null) ?? [];
 }

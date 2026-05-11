@@ -101,6 +101,42 @@ export type Task = {
   priority: number;
   due_at: string | null;
   completed_at: string | null;
+  project_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type ProjectStatus =
+  | "idea"
+  | "active"
+  | "paused"
+  | "shipped"
+  | "archived";
+
+export type Project = {
+  id: string;
+  owner_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: ProjectStatus;
+  color: string | null;
+  started_at: string | null;
+  target_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type ProjectMilestone = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  target_date: string | null;
+  completed_at: string | null;
+  position: number;
   created_at: string;
   updated_at: string | null;
 };
@@ -357,6 +393,7 @@ export type Database = {
           priority?: number;
           due_at?: string | null;
           completed_at?: string | null;
+          project_id?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };
@@ -428,6 +465,42 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<PromptSettings>;
+        Relationships: [];
+      };
+      projects: {
+        Row: Project;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          status?: ProjectStatus;
+          color?: string | null;
+          started_at?: string | null;
+          target_date?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Project>;
+        Relationships: [];
+      };
+      project_milestones: {
+        Row: ProjectMilestone;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          project_id: string;
+          title: string;
+          description?: string | null;
+          target_date?: string | null;
+          completed_at?: string | null;
+          position?: number;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<ProjectMilestone>;
         Relationships: [];
       };
       chat_messages: {

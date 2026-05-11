@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
 import { cycleTaskStatus, deleteTask } from "@/lib/db/actions/tasks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -13,7 +14,13 @@ const PRIORITY_COLOR: Record<number, string> = {
   4: "bg-fg-dim",
 };
 
-export function TaskRow({ task }: { task: Task }) {
+export function TaskRow({
+  task,
+  project,
+}: {
+  task: Task;
+  project?: { name: string; slug: string } | null;
+}) {
   const [pending, startTransition] = useTransition();
 
   return (
@@ -56,6 +63,18 @@ export function TaskRow({ task }: { task: Task }) {
             <>
               <span className="text-edge-strong">·</span>
               <span>{fmtRelativeDay(task.due_at)}</span>
+            </>
+          )}
+          {project && (
+            <>
+              <span className="text-edge-strong">·</span>
+              <Link
+                href={`/projects/${project.slug}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-sm border border-edge px-1.5 py-0.5 normal-case tracking-normal text-fg-muted hover:border-accent hover:text-accent"
+              >
+                {project.name}
+              </Link>
             </>
           )}
         </span>

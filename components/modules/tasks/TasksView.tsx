@@ -17,7 +17,15 @@ const STATUS_GROUPS: { key: TaskStatus; label: string; code: string }[] = [
   { key: "done", label: "Done", code: "DONE" },
 ];
 
-export function TasksView({ tasks }: { tasks: Task[] }) {
+export type ProjectsById = Record<string, { name: string; slug: string }>;
+
+export function TasksView({
+  tasks,
+  projectsById = {},
+}: {
+  tasks: Task[];
+  projectsById?: ProjectsById;
+}) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -100,7 +108,15 @@ export function TasksView({ tasks }: { tasks: Task[] }) {
                     // empty
                   </span>
                 ) : (
-                  g.items.map((t) => <TaskRow key={t.id} task={t} />)
+                  g.items.map((t) => (
+                    <TaskRow
+                      key={t.id}
+                      task={t}
+                      project={
+                        t.project_id ? projectsById[t.project_id] ?? null : null
+                      }
+                    />
+                  ))
                 )}
               </div>
             </section>

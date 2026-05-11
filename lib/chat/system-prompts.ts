@@ -59,15 +59,23 @@ You do NOT need to call query_state for tasks, habits, shifts, or events inside 
 
 The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.
 
-Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.`;
+Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.
+
+Side-business projects: the prefix has a Projects block listing the user's active and paused side hustles with task% and milestone progress. When he mentions a project by name ("what's left on Lemon Lab", "add a task to Saffron Studio", "mark Beta launch as done"), match it to the prefix and act on it — use \`add_task\` with the \`project\` arg, \`add_project_milestone\`, \`complete_project_milestone\`, or \`update_project_status\` as appropriate. For status questions ("how's it going") read directly from the prefix's task% and milestone% values; do NOT query_state unless the user asks for details beyond what's shown. Use \`add_project\` only when he asks to start a new project.`;
 
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
+import {
+  listProjectSummaries,
+  type ProjectSummary,
+} from "@/lib/db/queries/projects";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 import type { Event, HabitWithToday, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
+
+const MAX_PROJECTS_IN_PREFIX = 10;
 
 // Resolve the active orchestrator prompt: if the user has saved a non-empty
 // override on /settings, use it; otherwise fall back to the hard-coded default.
@@ -263,6 +271,35 @@ function formatLocalISO(tz: string, at: Date): string {
   return `${map.year}-${map.month}-${map.day}T${hour}:${map.minute}:${map.second}${formatOffset(tz, at)}`;
 }
 
+function renderProjectsBlock(summaries: ProjectSummary[]): string {
+  // Active + paused only — shipped/archived/idea don't need to pollute the
+  // prompt on every turn. The model can still reach them via query_state if
+  // the user asks. Sorted active-first, then by most recently touched.
+  const live = summaries
+    .filter((p) => p.status === "active" || p.status === "paused")
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+      const at = a.updated_at ?? a.created_at;
+      const bt = b.updated_at ?? b.created_at;
+      return new Date(bt).getTime() - new Date(at).getTime();
+    });
+
+  if (live.length === 0) return "";
+
+  const shown = live.slice(0, MAX_PROJECTS_IN_PREFIX);
+  const more = live.length - shown.length;
+  const lines = shown
+    .map((p) => {
+      const next = p.next_milestone
+        ? ` — next: ${p.next_milestone.title}${p.next_milestone.target_date ? ` (${p.next_milestone.target_date})` : ""}`
+        : "";
+      return `  • [${p.status}] ${p.name} (${p.task_pct}% tasks · ${p.milestone_done}/${p.milestone_total} milestones)${next}`;
+    })
+    .join("\n");
+  const tail = more > 0 ? `\n  …and ${more} more project${more === 1 ? "" : "s"}.` : "";
+  return `\n\nSide-business projects (active + paused, ${live.length} total):\n${lines}${tail}\nUse this for "how's <project> going" questions without a tool call. Project-tagged tasks also appear in the Tasks block above when relevant.`;
+}
+
 export async function buildContextPrefix(tz?: string, userText?: string) {
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
@@ -300,7 +337,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     now.getTime() + EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [shifts, tasks, habits, events] = await Promise.all([
+  const [shifts, tasks, habits, events, projects] = await Promise.all([
     listUpcomingWifeShifts(21).catch((e) => {
       console.warn("[chat] could not load wife shifts:", e);
       return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
@@ -316,6 +353,10 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     listEventsInRangeCore(eventsFrom, eventsTo).catch((e) => {
       console.warn("[chat] could not load events:", e);
       return [] as Awaited<ReturnType<typeof listEventsInRangeCore>>;
+    }),
+    listProjectSummaries().catch((e) => {
+      console.warn("[chat] could not load projects:", e);
+      return [] as Awaited<ReturnType<typeof listProjectSummaries>>;
     }),
   ]);
 
@@ -360,6 +401,13 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not render habits for context prefix:", e);
   }
 
+  let projectsPart = "";
+  try {
+    projectsPart = renderProjectsBlock(projects);
+  } catch (e) {
+    console.warn("[chat] could not render projects for context prefix:", e);
+  }
+
   let skillsPart = "";
   try {
     const { matched, allActive } = await resolveActiveSkillsForTurn(
@@ -386,6 +434,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     eventsPart +
     tasksPart +
     habitsPart +
+    projectsPart +
     shiftsPart +
     skillsPart +
     addendumPart

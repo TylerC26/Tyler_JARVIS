@@ -20,16 +20,19 @@ function asInt(v: FormDataEntryValue | null, fallback: number): number {
 function bumpRevalidations() {
   revalidatePath("/tasks");
   revalidatePath("/");
+  revalidatePath("/projects");
 }
 
 export async function createTask(formData: FormData) {
   const dueRaw = asString(formData.get("due_at"));
+  const projectId = asString(formData.get("project_id"));
   const result = await createTaskCore({
     title: asString(formData.get("title")),
     description: asString(formData.get("description")) || null,
     status: (asString(formData.get("status")) as TaskStatus) || "todo",
     priority: asInt(formData.get("priority"), 3),
     due_at: dueRaw ? new Date(dueRaw).toISOString() : null,
+    project_id: projectId || null,
   });
   bumpRevalidations();
   return result.ok
@@ -37,8 +40,8 @@ export async function createTask(formData: FormData) {
     : { ok: false as const, error: result.error };
 }
 
-export async function quickAddTask(title: string) {
-  const result = await createTaskCore({ title });
+export async function quickAddTask(title: string, projectId?: string | null) {
+  const result = await createTaskCore({ title, project_id: projectId ?? null });
   bumpRevalidations();
   return result.ok
     ? { ok: true as const }

@@ -25,9 +25,18 @@ import {
   deleteTaskCore,
   setTaskStatusCore,
 } from "@/lib/db/core/tasks";
+import {
+  createMilestoneCore,
+  createProjectCore,
+  findMilestoneCore,
+  findProjectCore,
+  setMilestoneCompletedCore,
+  updateProjectCore,
+} from "@/lib/db/core/projects";
 import { createSkillCore } from "@/lib/db/core/skills";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
+import { listProjectSummaries } from "@/lib/db/queries/projects";
 import { listActiveSkills } from "@/lib/db/queries/skills";
 import {
   listAccounts,
@@ -42,7 +51,7 @@ import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 
 export const addTaskTool = tool({
   description:
-    "Create a new task in the user's todo. Use for any 'add task', 'remind me to', 'todo', 'I need to' style request.",
+    "Create a new task in the user's todo. Use for any 'add task', 'remind me to', 'todo', 'I need to' style request. Pass the project arg when the task belongs to one of the side-business projects listed in the context prefix.",
   inputSchema: z.object({
     title: z.string().describe("Short imperative title of the task."),
     description: z.string().optional(),
@@ -60,19 +69,38 @@ export const addTaskTool = tool({
       .describe(
         "ISO 8601 timestamp. Resolve relative dates ('tomorrow', 'Friday') against the current date in context.",
       ),
+    project: z
+      .string()
+      .optional()
+      .describe(
+        "Optional project name or slug (e.g. 'Lemon Lab'). When provided, the task is tagged to that project. Use this whenever the user mentions one of the side-business projects from the context prefix.",
+      ),
   }),
   execute: async (input) => {
+    let project_id: string | null = null;
+    let projectLabel = "";
+    if (input.project && input.project.trim()) {
+      const project = await findProjectCore(input.project.trim());
+      if (!project)
+        return {
+          ok: false,
+          error: `No project matches "${input.project}". Create the project first via add_project, or omit the project arg.`,
+        };
+      project_id = project.id;
+      projectLabel = ` · ${project.name}`;
+    }
     const result = await createTaskCore({
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? "todo",
       priority: input.priority ?? 3,
       due_at: input.due_at ?? null,
+      project_id,
     });
     if (!result.ok) return { ok: false, error: result.error };
     return {
       ok: true,
-      message: `Task added: "${result.data.title}"`,
+      message: `Task added: "${result.data.title}"${projectLabel}`,
       task: result.data,
     };
   },
@@ -408,6 +436,127 @@ export const listWifeShiftsTool = tool({
   },
 });
 
+// ---------- project tools ----------
+
+export const addProjectTool = tool({
+  description:
+    "Create a new side-business project for the user. Use when they say 'start a project for X', 'spin up Y', 'add a new venture', etc.",
+  inputSchema: z.object({
+    name: z.string().describe("Display name (e.g. 'Lemon Lab')."),
+    description: z.string().optional(),
+    status: z
+      .enum(["idea", "active", "paused", "shipped", "archived"])
+      .optional()
+      .describe("Defaults to 'active'."),
+    target_date: z
+      .string()
+      .optional()
+      .describe("Optional soft deadline in YYYY-MM-DD."),
+    color: z
+      .string()
+      .optional()
+      .describe("Optional accent color (any CSS color string)."),
+  }),
+  execute: async (input) => {
+    const result = await createProjectCore({
+      name: input.name,
+      description: input.description ?? null,
+      status: input.status ?? "active",
+      target_date: input.target_date ?? null,
+      color: input.color ?? null,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Project created: ${result.data.name} (status=${result.data.status}). Slug: ${result.data.slug}.`,
+      project: result.data,
+    };
+  },
+});
+
+export const addProjectMilestoneTool = tool({
+  description:
+    "Add a milestone (big rock) to an existing project — e.g. 'MVP shipped', 'first paying customer', 'beta launch'. Use when the user says 'add a milestone to X' or describes a goal for one of their side hustles.",
+  inputSchema: z.object({
+    project: z
+      .string()
+      .describe("Project name or slug. Resolved server-side; fuzzy match supported."),
+    title: z.string().describe("Short milestone title."),
+    description: z.string().optional(),
+    target_date: z
+      .string()
+      .optional()
+      .describe("Optional target date in YYYY-MM-DD."),
+  }),
+  execute: async (input) => {
+    const project = await findProjectCore(input.project.trim());
+    if (!project)
+      return { ok: false, error: `No project matches "${input.project}".` };
+    const result = await createMilestoneCore({
+      project_id: project.id,
+      title: input.title,
+      description: input.description ?? null,
+      target_date: input.target_date ?? null,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Milestone added to ${project.name}: "${result.data.title}"`,
+      milestone: result.data,
+    };
+  },
+});
+
+export const completeProjectMilestoneTool = tool({
+  description:
+    "Mark a milestone as complete. Resolves the milestone by fuzzy title match within the specified project.",
+  inputSchema: z.object({
+    project: z.string().describe("Project name or slug."),
+    milestone_title: z
+      .string()
+      .describe("Milestone title (case-insensitive substring match within the project)."),
+  }),
+  execute: async (input) => {
+    const project = await findProjectCore(input.project.trim());
+    if (!project)
+      return { ok: false, error: `No project matches "${input.project}".` };
+    const milestone = await findMilestoneCore(project.id, input.milestone_title);
+    if (!milestone)
+      return {
+        ok: false,
+        error: `No milestone in ${project.name} matches "${input.milestone_title}".`,
+      };
+    const result = await setMilestoneCompletedCore(milestone.id, true);
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Marked complete: ${project.name} → ${result.data.title}`,
+      milestone: result.data,
+    };
+  },
+});
+
+export const updateProjectStatusTool = tool({
+  description:
+    "Change a project's status — e.g. mark as 'shipped' when launched, 'paused' when shelved, 'archived' to hide from defaults.",
+  inputSchema: z.object({
+    project: z.string().describe("Project name or slug."),
+    status: z.enum(["idea", "active", "paused", "shipped", "archived"]),
+  }),
+  execute: async (input) => {
+    const project = await findProjectCore(input.project.trim());
+    if (!project)
+      return { ok: false, error: `No project matches "${input.project}".` };
+    const result = await updateProjectCore(project.id, { status: input.status });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `${project.name} → status: ${result.data.status}`,
+      project: result.data,
+    };
+  },
+});
+
 // ---------- skill tools ----------
 
 export const createSkillTool = tool({
@@ -458,7 +607,16 @@ export const queryStateTool = tool({
     "Read-only snapshot of the user's current state. Call this before answering any question that requires real numbers.",
   inputSchema: z.object({
     domain: z
-      .enum(["tasks", "habits", "money", "events", "wife_shifts", "skills", "all"])
+      .enum([
+        "tasks",
+        "habits",
+        "money",
+        "events",
+        "wife_shifts",
+        "skills",
+        "projects",
+        "all",
+      ])
       .describe("Which domain(s) to fetch. 'all' returns a summary across everything."),
   }),
   execute: async ({ domain }) => {
@@ -568,6 +726,26 @@ export const queryStateTool = tool({
       };
     }
 
+    if (domain === "projects" || domain === "all") {
+      const projects = await listProjectSummaries();
+      out.projects = {
+        count: projects.length,
+        items: projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          status: p.status,
+          task_pct: p.task_pct,
+          milestone_pct: p.milestone_pct,
+          open_tasks: p.open_task_count,
+          done_tasks: p.done_task_count,
+          milestones: `${p.milestone_done}/${p.milestone_total}`,
+          next_milestone: p.next_milestone,
+          target_date: p.target_date,
+        })),
+      };
+    }
+
     return { ok: true, snapshot: out };
   },
 });
@@ -609,6 +787,10 @@ export const ALL_TOOLS = {
   delete_event: deleteEventTool,
   list_events_in_range: listEventsInRangeTool,
   list_wife_shifts: listWifeShiftsTool,
+  add_project: addProjectTool,
+  add_project_milestone: addProjectMilestoneTool,
+  complete_project_milestone: completeProjectMilestoneTool,
+  update_project_status: updateProjectStatusTool,
   create_skill: createSkillTool,
   query_state: queryStateTool,
   generate_brief: generateBriefTool,
