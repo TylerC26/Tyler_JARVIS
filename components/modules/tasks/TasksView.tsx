@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTask } from "@/lib/db/actions/tasks";
+import { createTask, setTaskStatus } from "@/lib/db/actions/tasks";
 import type { Task, TaskStatus } from "@/lib/db/types";
 import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
@@ -20,7 +20,7 @@ const STATUS_GROUPS: { key: TaskStatus; label: string; code: string }[] = [
 export type ProjectsById = Record<string, { name: string; slug: string }>;
 
 export function TasksView({
-  tasks,
+  tasks: initialTasks,
   projectsById = {},
 }: {
   tasks: Task[];
@@ -30,6 +30,35 @@ export function TasksView({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Mirror props into local state so we can apply optimistic updates on drop.
+  // Re-syncs whenever the server pushes fresh props (e.g. after Jarvis runs a
+  // tool and router.refresh fires).
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  useEffect(() => setTasks(initialTasks), [initialTasks]);
+
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [hoverStatus, setHoverStatus] = useState<TaskStatus | null>(null);
+
+  async function onDropTo(target: TaskStatus) {
+    const id = draggingId;
+    setDraggingId(null);
+    setHoverStatus(null);
+    if (!id) return;
+    const current = tasks.find((t) => t.id === id);
+    if (!current || current.status === target) return;
+
+    // Optimistic — flip status in-place; revert on server error.
+    const before = tasks;
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status: target } : t)),
+    );
+    const result = await setTaskStatus(id, target);
+    if (!result.ok) {
+      setTasks(before);
+      alert(`Could not move task: ${result.error}`);
+    }
+  }
 
   async function onSubmit(formData: FormData) {
     setPending(true);
@@ -84,43 +113,78 @@ export function TasksView({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {grouped.map((g) => (
-            <section
-              key={g.key}
-              className="rounded-md border border-edge bg-surface/40"
-            >
-              <header className="flex items-center justify-between border-b border-edge px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
-                    {g.code}
+          {grouped.map((g) => {
+            const isHover = hoverStatus === g.key;
+            const isSource =
+              draggingId !== null &&
+              tasks.find((t) => t.id === draggingId)?.status === g.key;
+            return (
+              <section
+                key={g.key}
+                onDragOver={(e) => {
+                  if (!draggingId) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (hoverStatus !== g.key) setHoverStatus(g.key);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear when leaving the section entirely, not a child.
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null))
+                    return;
+                  if (hoverStatus === g.key) setHoverStatus(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void onDropTo(g.key);
+                }}
+                className={[
+                  "rounded-md border bg-surface/40 transition-colors",
+                  isHover && !isSource
+                    ? "border-accent bg-accent/5"
+                    : "border-edge",
+                ].join(" ")}
+              >
+                <header className="flex items-center justify-between border-b border-edge px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+                      {g.code}
+                    </span>
+                    <span className="font-mono text-[12px] text-fg">
+                      {g.label}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] tabular text-fg-muted">
+                    {g.items.length}
                   </span>
-                  <span className="font-mono text-[12px] text-fg">
-                    {g.label}
-                  </span>
+                </header>
+                <div className="p-2 flex flex-col gap-1.5 min-h-[60px]">
+                  {g.items.length === 0 ? (
+                    <span className="px-2 py-3 font-mono text-[11px] text-fg-dim">
+                      {isHover && !isSource ? "// drop here" : "// empty"}
+                    </span>
+                  ) : (
+                    g.items.map((t) => (
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        project={
+                          t.project_id
+                            ? projectsById[t.project_id] ?? null
+                            : null
+                        }
+                        isDragging={draggingId === t.id}
+                        onDragStart={() => setDraggingId(t.id)}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setHoverStatus(null);
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
-                <span className="font-mono text-[10px] tabular text-fg-muted">
-                  {g.items.length}
-                </span>
-              </header>
-              <div className="p-2 flex flex-col gap-1.5 min-h-[60px]">
-                {g.items.length === 0 ? (
-                  <span className="px-2 py-3 font-mono text-[11px] text-fg-dim">
-                    // empty
-                  </span>
-                ) : (
-                  g.items.map((t) => (
-                    <TaskRow
-                      key={t.id}
-                      task={t}
-                      project={
-                        t.project_id ? projectsById[t.project_id] ?? null : null
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-          ))}
+              </section>
+            );
+          })}
         </div>
       )}
 

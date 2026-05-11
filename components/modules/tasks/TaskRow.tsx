@@ -17,17 +17,32 @@ const PRIORITY_COLOR: Record<number, string> = {
 export function TaskRow({
   task,
   project,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
 }: {
   task: Task;
   project?: { name: string; slug: string } | null;
+  isDragging?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const [pending, startTransition] = useTransition();
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        // Setting dataTransfer is required for Firefox to recognize the drag.
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task.id);
+        onDragStart?.();
+      }}
+      onDragEnd={() => onDragEnd?.()}
       className={[
-        "group flex items-center gap-3 rounded-sm border border-edge bg-surface-2/30 px-3 py-2",
+        "group flex items-center gap-3 rounded-sm border border-edge bg-surface-2/30 px-3 py-2 cursor-grab active:cursor-grabbing",
         task.status === "done" ? "opacity-60" : "",
+        isDragging ? "opacity-40 ring-1 ring-accent/50" : "",
       ].join(" ")}
     >
       <button
