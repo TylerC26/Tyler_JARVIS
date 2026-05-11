@@ -2,7 +2,8 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { ChatInput } from "./ChatInput";
 import { ChatThread } from "./ChatThread";
 import { ClearThreadButton } from "./ClearThreadButton";
@@ -22,6 +23,7 @@ export function ChatPanel({
   variant = "page",
   onClose,
 }: Props) {
+  const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
   const [version, setVersion] = useState(0); // bump on clear to reset useChat state
 
@@ -58,11 +60,25 @@ export function ChatPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [variant, onClose]);
 
+  // When a chat turn finishes (status transitions out of streaming/submitted),
+  // call router.refresh() so any server components on the current route
+  // (dashboard tiles, calendar events, status rail, etc.) re-fetch from the
+  // server. The chat API route already calls revalidatePath() in onFinish, but
+  // that only invalidates the server cache — the client still shows the
+  // previously-rendered tree until refresh() asks Next.js to re-stream it.
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    const was = prevStatus.current;
+    if ((was === "streaming" || was === "submitted") && status === "ready") {
+      router.refresh();
+    }
+    prevStatus.current = status;
+  }, [status, router]);
+
   return (
     <div
       className={[
-        "flex flex-col h-full bg-base/95",
-        variant === "drawer" ? "border-l border-edge" : "rounded-md border border-edge",
+        "flex flex-col h-full bg-base/95 rounded-md border border-edge overflow-hidden",
       ].join(" ")}
     >
       <header className="flex items-center justify-between border-b border-edge px-4 py-2.5">

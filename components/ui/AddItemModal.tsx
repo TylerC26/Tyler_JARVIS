@@ -35,7 +35,7 @@ export function AddItemModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
@@ -43,8 +43,8 @@ export function AddItemModal({
       />
       <div
         className={[
-          "absolute right-0 top-0 h-full w-full max-w-md",
-          "border-l border-edge bg-surface shadow-2xl",
+          "relative w-full max-w-2xl max-h-[90vh]",
+          "rounded-md border border-edge bg-surface shadow-2xl",
           "flex flex-col",
         ].join(" ")}
         role="dialog"

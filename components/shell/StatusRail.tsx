@@ -26,10 +26,18 @@ function Indicator({ label, status }: { label: string; status: Status }) {
 }
 
 export function StatusRail() {
+  const claudeStatus: Status = process.env.ANTHROPIC_API_KEY
+    ? "online"
+    : "offline";
+  const deepseekStatus: Status = process.env.DEEPSEEK_API_KEY
+    ? "online"
+    : "offline";
+
   return (
     <div className="hidden items-center gap-4 md:flex">
       <Indicator label="DB" status="online" />
-      <Indicator label="AI" status="offline" />
+      <Indicator label="CLAUDE" status={claudeStatus} />
+      <Indicator label="DEEPSEEK" status={deepseekStatus} />
       <Indicator label="SYNC" status="online" />
     </div>
   );

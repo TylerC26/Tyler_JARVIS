@@ -62,14 +62,14 @@ export function ChatLauncher({
         </button>
       )}
       {open && (
-        <div className="fixed inset-0 z-50 flex">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             aria-label="Close chat"
             onClick={() => setOpen(false)}
-            className="flex-1 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
-          <div className="w-full md:w-[600px] lg:w-[700px] h-full">
+          <div className="relative w-full max-w-3xl h-[85vh] max-h-[800px] shadow-2xl">
             <ChatPanel
               configured={configured}
               variant="drawer"
