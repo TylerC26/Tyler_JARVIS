@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { generateMorningAction } from "@/app/(app)/assistant/actions";
-import type { AiBrief } from "@/lib/db/types";
+import { HeroMetaStrip } from "@/components/modules/dashboard/HeroMetaStrip";
+import type { AiBrief, WifeShiftCode } from "@/lib/db/types";
 
 const WEEKDAYS = [
   "SUNDAY",
@@ -25,7 +26,13 @@ const TONE = {
   crit: "text-danger",
 } as const;
 
-export function DateHeroTile({ brief }: { brief: AiBrief | null }) {
+export function DateHeroTile({
+  brief,
+  wifeShiftToday = null,
+}: {
+  brief: AiBrief | null;
+  wifeShiftToday?: WifeShiftCode | null;
+}) {
   const [now, setNow] = useState<Date | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -71,7 +78,9 @@ export function DateHeroTile({ brief }: { brief: AiBrief | null }) {
           </div>
         </div>
 
-        <div className="md:col-span-7 rounded-md border border-edge bg-surface/60 p-3">
+        <div className="md:col-span-7 flex flex-col gap-2">
+          <HeroMetaStrip wifeShiftToday={wifeShiftToday} />
+        <div className="flex-1 rounded-md border border-edge bg-surface/60 p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
               <span className="text-accent">◊</span>
@@ -151,6 +160,7 @@ export function DateHeroTile({ brief }: { brief: AiBrief | null }) {
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
     </section>

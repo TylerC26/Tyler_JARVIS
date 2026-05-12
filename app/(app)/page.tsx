@@ -1,36 +1,53 @@
-import { ChatPanel } from "@/components/modules/chat/ChatPanel";
+import { AgendaTile } from "@/components/modules/dashboard/AgendaTile";
 import { DateHeroTile } from "@/components/modules/dashboard/DateHeroTile";
+import { FocusTile } from "@/components/modules/dashboard/FocusTile";
 import { HabitsTile } from "@/components/modules/dashboard/HabitsTile";
-import { TasksTile } from "@/components/modules/dashboard/TasksTile";
-import { TransactionsTile } from "@/components/modules/dashboard/TransactionsTile";
+import { MoneyPulseTile } from "@/components/modules/dashboard/MoneyPulseTile";
+import { ProjectsPulseTile } from "@/components/modules/dashboard/ProjectsPulseTile";
+import { SignalsTile } from "@/components/modules/dashboard/SignalsTile";
+import { TodayTimelineTile } from "@/components/modules/dashboard/TodayTimelineTile";
 import { getLatestBrief } from "@/lib/ai/store";
 import { todayISO } from "@/lib/date";
+import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const brief = await getLatestBrief("morning", todayISO());
-  const configured = {
-    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
-  };
+  const today = todayISO();
+  const [brief, shifts] = await Promise.all([
+    getLatestBrief("morning", today),
+    listWifeShiftsInRangeCore(today, today),
+  ]);
+  const wifeShiftToday = shifts[0]?.code ?? null;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
       <div className="md:col-span-12">
-        <DateHeroTile brief={brief} />
+        <DateHeroTile brief={brief} wifeShiftToday={wifeShiftToday} />
       </div>
 
-      <div className="md:col-span-5">
-        <div className="h-[600px]">
-          <ChatPanel configured={configured} variant="page" />
-        </div>
+      <div className="md:col-span-8">
+        <TodayTimelineTile />
+      </div>
+      <div className="md:col-span-4">
+        <FocusTile />
       </div>
 
-      <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="md:col-span-4">
         <HabitsTile />
-        <TasksTile />
-        <TransactionsTile />
+      </div>
+      <div className="md:col-span-4">
+        <ProjectsPulseTile />
+      </div>
+      <div className="md:col-span-4">
+        <SignalsTile />
+      </div>
+
+      <div className="md:col-span-8">
+        <MoneyPulseTile />
+      </div>
+      <div className="md:col-span-4">
+        <AgendaTile />
       </div>
     </div>
   );
