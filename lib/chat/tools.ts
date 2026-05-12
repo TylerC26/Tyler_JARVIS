@@ -7,6 +7,8 @@ import {
   createHabitCore,
   logHabitTodayCore,
 } from "@/lib/db/core/habits";
+import { getAgentBySlug } from "@/lib/db/queries/agents";
+import { createMemoryCore, deleteMemoryCore } from "@/lib/db/core/memory";
 import {
   createAccountCore,
   createFixedExpenseCore,
@@ -769,6 +771,122 @@ export const generateBriefTool = tool({
   },
 });
 
+// ---------- agent delegation ----------
+
+export const delegateToAgentTool = tool({
+  description:
+    "Delegate a focused task to a sub-agent (Daily Planner, Scheduler, Finance Analyst, Quick Capture, or any custom agent the user has authored). Use this for specialized work where a dedicated prompt + tool subset will produce a sharper result than handling it inline. The agent runs in an isolated reasoning loop with only its allowlisted tools and returns a final text result that you should relay or summarize for the user. List of available agents lives at /agents — slugs are short kebab-case.",
+  inputSchema: z.object({
+    agent_slug: z
+      .string()
+      .describe(
+        "Slug of the agent to invoke (e.g. 'planner', 'scheduler', 'finance', 'capture').",
+      ),
+    task: z
+      .string()
+      .describe(
+        "What the sub-agent should do, phrased as a clear self-contained instruction. The agent does not see prior chat history beyond this string + optional context_summary.",
+      ),
+    context_summary: z
+      .string()
+      .optional()
+      .describe(
+        "Optional short summary of relevant prior conversation context (1-3 sentences). Use to give the agent state it would otherwise be blind to.",
+      ),
+  }),
+  execute: async ({ agent_slug, task, context_summary }) => {
+    const agent = await getAgentBySlug(agent_slug);
+    if (!agent)
+      return { ok: false, error: `No agent matches slug "${agent_slug}".` };
+    if (!agent.active)
+      return {
+        ok: false,
+        error: `Agent "${agent.name}" is disabled. Enable it at /agents or pick another.`,
+      };
+
+    // Lazy import to avoid a module cycle: agents/run.ts → chat/router.ts →
+    // chat/tools.ts (this file).
+    const { runAgent } = await import("@/lib/ai/agents/run");
+    const result = await runAgent(agent, task, context_summary);
+
+    if (!result.ok) return { ok: false, error: result.error };
+    const calls = result.tool_calls.length;
+    const callsSuffix =
+      calls === 0 ? "no tool calls" : `${calls} tool call${calls === 1 ? "" : "s"}`;
+    return {
+      ok: true,
+      message: `→ ${agent.name} (${callsSuffix})`,
+      agent_name: agent.name,
+      agent_slug: agent.slug,
+      result: result.text,
+      tool_calls_count: calls,
+      tool_calls: result.tool_calls.map((c) => c.name),
+    };
+  },
+});
+
+// ---------- memory tools ----------
+
+export const rememberTool = tool({
+  description:
+    "Persist a fact about Tyler so you can recall it in future conversations. Use this when the user says things like 'remember that…', 'note that I prefer…', 'just so you know…', or reveals a durable preference / fact (food allergies, preferred working hours, family details). The fact will be injected into your system prefix on every future chat turn. Keep the `key` short (3-6 words) and the `value` concrete and specific. Don't store transient state (today's task list, current mood).",
+  inputSchema: z.object({
+    key: z
+      .string()
+      .describe(
+        "Short label for the fact, like a dictionary key. Examples: 'coffee preference', 'wife job', 'allergic to'.",
+      ),
+    value: z
+      .string()
+      .describe("The fact itself, written as a clear declarative statement."),
+    kind: z
+      .enum(["fact", "preference", "context"])
+      .describe(
+        "'fact' = objective truth; 'preference' = how the user likes things; 'context' = situational background.",
+      ),
+    confidence: z
+      .enum(["high", "medium", "low"])
+      .optional()
+      .describe("Defaults to 'high' when the user states it explicitly."),
+    pinned: z
+      .boolean()
+      .optional()
+      .describe(
+        "Pin if this is a core, always-relevant fact (e.g. allergies, family). Pinned entries are always included in the prefix.",
+      ),
+  }),
+  execute: async (input) => {
+    const result = await createMemoryCore({
+      kind: input.kind,
+      key: input.key,
+      value: input.value,
+      source: "user",
+      confidence: input.confidence ?? "high",
+      pinned: input.pinned ?? false,
+      scope: "global",
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Remembered: ${result.data.key}`,
+      memory_id: result.data.id,
+    };
+  },
+});
+
+export const forgetTool = tool({
+  description:
+    "Delete a stored memory by id. Use when the user says 'forget that', 'remove that note', or contradicts a previously-saved fact. The memory_id is visible in the REMEMBERED section of your system prefix.",
+  inputSchema: z.object({
+    memory_id: z.string().describe("The id of the memory entry to delete."),
+  }),
+  execute: async ({ memory_id }) => {
+    const result = await deleteMemoryCore(memory_id);
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, message: "Memory forgotten." };
+  },
+});
+
 // ---------- registry ----------
 
 export const ALL_TOOLS = {
@@ -794,6 +912,9 @@ export const ALL_TOOLS = {
   create_skill: createSkillTool,
   query_state: queryStateTool,
   generate_brief: generateBriefTool,
+  delegate_to_agent: delegateToAgentTool,
+  remember: rememberTool,
+  forget: forgetTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

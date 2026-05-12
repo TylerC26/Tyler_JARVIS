@@ -1,6 +1,7 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { extractMemoriesFromTurn } from "@/lib/ai/memory/extract";
 import { appendMessage } from "@/lib/chat/persist";
 import {
   decideRoute,
@@ -10,6 +11,7 @@ import {
   streamDeepseekResponse,
   type ForceRoute,
 } from "@/lib/chat/router";
+import { createMemoryCore } from "@/lib/db/core/memory";
 import type { ChatToolCall } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -131,6 +133,32 @@ export async function POST(req: Request) {
       revalidatePath("/projects");
       revalidatePath("/assistant");
       revalidatePath("/chat");
+      revalidatePath("/agents");
+      revalidatePath("/memory");
+
+      // Auto-memory extraction (v1 placeholder — returns []). Fire-and-forget
+      // so the user doesn't wait. Real extractor lands later in
+      // lib/ai/memory/extract.ts.
+      try {
+        const userText = latestUser
+          ? latestUser.parts
+              .filter((p) => p.type === "text")
+              .map((p) => (p as { type: "text"; text: string }).text)
+              .join("\n")
+          : "";
+        const assistantText = finishedMessages
+          .filter((m) => m.role === "assistant" && !previousIds.has(m.id))
+          .flatMap((m) => m.parts)
+          .filter((p) => p.type === "text")
+          .map((p) => (p as { type: "text"; text: string }).text)
+          .join("\n");
+        const drafts = await extractMemoriesFromTurn(userText, assistantText);
+        for (const d of drafts) {
+          void createMemoryCore(d);
+        }
+      } catch (e) {
+        console.warn("[chat] memory extraction failed:", e);
+      }
     },
   });
 }

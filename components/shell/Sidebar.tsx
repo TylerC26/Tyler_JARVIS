@@ -11,19 +11,59 @@ type NavItem = {
   status?: "live" | "offline";
 };
 
-export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Dashboard", code: "DSH", glyph: "◈", status: "live" },
-  { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
-  { href: "/habits", label: "Habits", code: "HBT", glyph: "◉", status: "live" },
-  { href: "/money", label: "Finance", code: "FIN", glyph: "⌗", status: "live" },
-  { href: "/tasks", label: "Tasks", code: "TSK", glyph: "▤", status: "live" },
-  { href: "/projects", label: "Projects", code: "PRJ", glyph: "⌬", status: "live" },
-  { href: "/health", label: "Health", code: "HLT", glyph: "✚", status: "offline" },
-  { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
-  { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
-  { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
-  { href: "/settings", label: "Settings", code: "SET", glyph: "◇", status: "live" },
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+export const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "overview",
+    items: [
+      { href: "/", label: "Dashboard", code: "DSH", glyph: "◈", status: "live" },
+    ],
+  },
+  {
+    label: "life",
+    items: [
+      { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
+      { href: "/habits", label: "Habits", code: "HBT", glyph: "◉", status: "live" },
+      { href: "/health", label: "Health", code: "HLT", glyph: "✚", status: "offline" },
+    ],
+  },
+  {
+    label: "work",
+    items: [
+      { href: "/tasks", label: "Tasks", code: "TSK", glyph: "▤", status: "live" },
+      { href: "/projects", label: "Projects", code: "PRJ", glyph: "⌬", status: "live" },
+    ],
+  },
+  {
+    label: "track",
+    items: [
+      { href: "/money", label: "Finance", code: "FIN", glyph: "⌗", status: "live" },
+    ],
+  },
+  {
+    label: "ai",
+    items: [
+      { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
+      { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
+      { href: "/agents", label: "Agents", code: "AGT", glyph: "◔", status: "live" },
+      { href: "/memory", label: "Memory", code: "MEM", glyph: "◐", status: "live" },
+      { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
+    ],
+  },
+  {
+    label: "system",
+    items: [
+      { href: "/settings", label: "Settings", code: "SET", glyph: "◇", status: "live" },
+    ],
+  },
 ];
+
+// Flat list preserved for MobileTabBar and any external consumers.
+export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -38,52 +78,56 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
-        <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-          // modules
-        </div>
-        <ul className="mt-1 flex flex-col gap-0.5">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={[
-                    "group flex items-center gap-3 rounded-sm px-3 py-2 font-mono text-xs transition-colors",
-                    active
-                      ? "bg-accent/10 text-accent"
-                      : "text-fg-muted hover:bg-surface-2 hover:text-fg",
-                  ].join(" ")}
-                >
-                  <span
-                    className={[
-                      "w-4 text-center text-base leading-none",
-                      active ? "text-accent" : "text-fg-dim group-hover:text-fg-muted",
-                    ].join(" ")}
-                    aria-hidden
-                  >
-                    {item.glyph}
-                  </span>
-                  <span className="tracking-wider">{item.code}</span>
-                  <span className="ml-1 normal-case tracking-normal text-[11px]">
-                    {item.label}
-                  </span>
-                  {item.status === "offline" && (
-                    <span className="ml-auto rounded-sm bg-edge px-1 text-[9px] text-fg-dim">
-                      P2
-                    </span>
-                  )}
-                  {active && (
-                    <span className="ml-auto text-accent text-base">›</span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        {NAV_SECTIONS.map((section, idx) => (
+          <div key={section.label} className={idx === 0 ? "" : "mt-4"}>
+            <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+              // {section.label}
+            </div>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {section.items.map((item) => {
+                const active =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(item.href);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={[
+                        "group flex items-center gap-3 rounded-sm px-3 py-2 font-mono text-xs transition-colors",
+                        active
+                          ? "bg-accent/10 text-accent"
+                          : "text-fg-muted hover:bg-surface-2 hover:text-fg",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "w-4 text-center text-base leading-none",
+                          active ? "text-accent" : "text-fg-dim group-hover:text-fg-muted",
+                        ].join(" ")}
+                        aria-hidden
+                      >
+                        {item.glyph}
+                      </span>
+                      <span className="tracking-wider">{item.code}</span>
+                      <span className="ml-1 normal-case tracking-normal text-[11px]">
+                        {item.label}
+                      </span>
+                      {item.status === "offline" && (
+                        <span className="ml-auto rounded-sm bg-edge px-1 text-[9px] text-fg-dim">
+                          P2
+                        </span>
+                      )}
+                      {active && (
+                        <span className="ml-auto text-accent text-base">›</span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-edge p-3">

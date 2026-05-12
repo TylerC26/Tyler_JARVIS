@@ -196,6 +196,47 @@ export type Skill = {
   updated_at: string | null;
 };
 
+export type AgentModelPref = "claude" | "deepseek" | "auto";
+export type AgentSource = "manual" | "seeded";
+
+export type Agent = {
+  id: string;
+  owner_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  system_prompt: string;
+  tool_allowlist: string[];
+  model_pref: AgentModelPref;
+  color: string | null;
+  active: boolean;
+  source: AgentSource;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type MemoryKind = "fact" | "preference" | "context";
+export type MemorySource = "user" | "extracted" | "agent";
+export type MemoryConfidence = "high" | "medium" | "low";
+// 'global' or 'agent:<slug>' — v1 only uses 'global'.
+export type MemoryScope = string;
+
+export type MemoryEntry = {
+  id: string;
+  owner_id: string;
+  scope: MemoryScope;
+  kind: MemoryKind;
+  key: string;
+  value: string;
+  source: MemorySource;
+  confidence: MemoryConfidence;
+  pinned: boolean;
+  used_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type PromptSettings = {
   owner_id: string;
   orchestrator_prompt: string | null;
@@ -452,6 +493,46 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Skill>;
+        Relationships: [];
+      };
+      agents: {
+        Row: Agent;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          slug: string;
+          description: string;
+          system_prompt: string;
+          tool_allowlist?: string[];
+          model_pref?: AgentModelPref;
+          color?: string | null;
+          active?: boolean;
+          source?: AgentSource;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Agent>;
+        Relationships: [];
+      };
+      memory_entries: {
+        Row: MemoryEntry;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          scope?: MemoryScope;
+          kind: MemoryKind;
+          key: string;
+          value: string;
+          source: MemorySource;
+          confidence?: MemoryConfidence;
+          pinned?: boolean;
+          used_count?: number;
+          last_used_at?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<MemoryEntry>;
         Relationships: [];
       };
       prompt_settings: {

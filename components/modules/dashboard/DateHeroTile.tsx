@@ -1,5 +1,6 @@
 "use client";
 
+import { format } from "date-fns";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { generateMorningAction } from "@/app/(app)/assistant/actions";
@@ -123,7 +124,7 @@ export function DateHeroTile({
               )}
               <div className="mt-3 flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-                  generated {new Date(brief.created_at).toLocaleTimeString()}
+                  generated {format(new Date(brief.created_at), "HH:mm:ss")}
                 </span>
                 <Link
                   href="/assistant"

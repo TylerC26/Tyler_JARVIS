@@ -47,7 +47,7 @@ export async function TodayTimelineTile() {
           </div>
         </div>
       ) : (
-        <TodayTimelineGrid events={events} now={now} />
+        <TodayTimelineGrid events={events} />
       )}
     </DashboardCard>
   );

@@ -61,9 +61,15 @@ The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 
 
 Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.
 
-Side-business projects: the prefix has a Projects block listing the user's active and paused side hustles with task% and milestone progress. When he mentions a project by name ("what's left on Lemon Lab", "add a task to Saffron Studio", "mark Beta launch as done"), match it to the prefix and act on it — use \`add_task\` with the \`project\` arg, \`add_project_milestone\`, \`complete_project_milestone\`, or \`update_project_status\` as appropriate. For status questions ("how's it going") read directly from the prefix's task% and milestone% values; do NOT query_state unless the user asks for details beyond what's shown. Use \`add_project\` only when he asks to start a new project.`;
+Side-business projects: the prefix has a Projects block listing the user's active and paused side hustles with task% and milestone progress. When he mentions a project by name ("what's left on Lemon Lab", "add a task to Saffron Studio", "mark Beta launch as done"), match it to the prefix and act on it — use \`add_task\` with the \`project\` arg, \`add_project_milestone\`, \`complete_project_milestone\`, or \`update_project_status\` as appropriate. For status questions ("how's it going") read directly from the prefix's task% and milestone% values; do NOT query_state unless the user asks for details beyond what's shown. Use \`add_project\` only when he asks to start a new project.
 
+Delegation (sub-agents): the prefix has an Agents block listing every sub-agent the user has authored, with slug + one-line description. When a user request maps cleanly to a specialist agent (e.g. "plan my day" → planner, "find time for dinner" → scheduler, "how am I doing on spend" → finance, brain-dumps → capture), call \`delegate_to_agent\` with the matching slug and a clear self-contained task string. The sub-agent runs in its own isolated loop with a restricted tool set and returns a final text result — relay or summarize for the user. Use delegation when (a) a dedicated agent prompt will yield sharper output than your generalist behavior, OR (b) the work needs multiple tool calls within one focused domain. Do NOT delegate trivial single-tool requests ("log a task" — just call add_task yourself). If the matched agent is inactive, mention it and offer to enable it.
+
+Memory: the prefix has a REMEMBERED block of facts you have persistently stored about the user (preferences, durable context). Read it before answering. If the user reveals a new durable fact, preference, or context worth remembering ("I prefer espresso", "I'm allergic to peanuts", "my wife's birthday is X"), call \`remember\` with a short key + concrete value + appropriate kind (fact/preference/context). Pin entries that are core/safety-critical (allergies, family). If the user contradicts a saved fact ("actually I switched to filter coffee") or says "forget that", call \`forget\` with the memory_id from the REMEMBERED block. Don't over-collect — only save things that will matter later, never transient state.`;
+
+import { listActiveAgents } from "@/lib/db/queries/agents";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
+import { getRecentRelevantMemories } from "@/lib/db/queries/memory";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import {
@@ -72,10 +78,17 @@ import {
 } from "@/lib/db/queries/projects";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
-import type { Event, HabitWithToday, Task } from "@/lib/db/types";
+import type {
+  Agent,
+  Event,
+  HabitWithToday,
+  MemoryEntry,
+  Task,
+} from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
 const MAX_PROJECTS_IN_PREFIX = 10;
+const MAX_MEMORIES_IN_PREFIX = 8;
 
 // Resolve the active orchestrator prompt: if the user has saved a non-empty
 // override on /settings, use it; otherwise fall back to the hard-coded default.
@@ -300,6 +313,25 @@ function renderProjectsBlock(summaries: ProjectSummary[]): string {
   return `\n\nSide-business projects (active + paused, ${live.length} total):\n${lines}${tail}\nUse this for "how's <project> going" questions without a tool call. Project-tagged tasks also appear in the Tasks block above when relevant.`;
 }
 
+function renderAgentsBlock(agents: Agent[]): string {
+  if (agents.length === 0) return "";
+  const lines = agents
+    .map((a) => `  • ${a.slug} — ${a.description}`)
+    .join("\n");
+  return `\n\nAgents available for delegation (${agents.length} active):\n${lines}\nCall delegate_to_agent({ agent_slug, task, context_summary? }) when one is the right specialist for the user's request.`;
+}
+
+function renderMemoryBlock(memories: MemoryEntry[]): string {
+  if (memories.length === 0) return "";
+  const lines = memories
+    .map((m) => {
+      const pin = m.pinned ? "📌 " : "";
+      return `  • ${pin}[${m.kind}] ${m.key}: ${m.value}  (id=${m.id}, source=${m.source})`;
+    })
+    .join("\n");
+  return `\n\nREMEMBERED — persistent facts about Tyler (top ${memories.length}, pinned first):\n${lines}\nUse this block before answering. If something is stale/wrong, call forget with the id. If the user reveals a new durable fact, call remember.`;
+}
+
 export async function buildContextPrefix(tz?: string, userText?: string) {
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
@@ -337,28 +369,37 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     now.getTime() + EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [shifts, tasks, habits, events, projects] = await Promise.all([
-    listUpcomingWifeShifts(21).catch((e) => {
-      console.warn("[chat] could not load wife shifts:", e);
-      return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
-    }),
-    listTasks().catch((e) => {
-      console.warn("[chat] could not load tasks:", e);
-      return [] as Awaited<ReturnType<typeof listTasks>>;
-    }),
-    listHabitsWithToday().catch((e) => {
-      console.warn("[chat] could not load habits:", e);
-      return [] as Awaited<ReturnType<typeof listHabitsWithToday>>;
-    }),
-    listEventsInRangeCore(eventsFrom, eventsTo).catch((e) => {
-      console.warn("[chat] could not load events:", e);
-      return [] as Awaited<ReturnType<typeof listEventsInRangeCore>>;
-    }),
-    listProjectSummaries().catch((e) => {
-      console.warn("[chat] could not load projects:", e);
-      return [] as Awaited<ReturnType<typeof listProjectSummaries>>;
-    }),
-  ]);
+  const [shifts, tasks, habits, events, projects, agents, memories] =
+    await Promise.all([
+      listUpcomingWifeShifts(21).catch((e) => {
+        console.warn("[chat] could not load wife shifts:", e);
+        return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
+      }),
+      listTasks().catch((e) => {
+        console.warn("[chat] could not load tasks:", e);
+        return [] as Awaited<ReturnType<typeof listTasks>>;
+      }),
+      listHabitsWithToday().catch((e) => {
+        console.warn("[chat] could not load habits:", e);
+        return [] as Awaited<ReturnType<typeof listHabitsWithToday>>;
+      }),
+      listEventsInRangeCore(eventsFrom, eventsTo).catch((e) => {
+        console.warn("[chat] could not load events:", e);
+        return [] as Awaited<ReturnType<typeof listEventsInRangeCore>>;
+      }),
+      listProjectSummaries().catch((e) => {
+        console.warn("[chat] could not load projects:", e);
+        return [] as Awaited<ReturnType<typeof listProjectSummaries>>;
+      }),
+      listActiveAgents().catch((e) => {
+        console.warn("[chat] could not load agents:", e);
+        return [] as Awaited<ReturnType<typeof listActiveAgents>>;
+      }),
+      getRecentRelevantMemories(MAX_MEMORIES_IN_PREFIX).catch((e) => {
+        console.warn("[chat] could not load memories:", e);
+        return [] as Awaited<ReturnType<typeof getRecentRelevantMemories>>;
+      }),
+    ]);
 
   let shiftsPart = "";
   try {
@@ -429,13 +470,29 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not load prefix addendum:", e);
   }
 
+  let agentsPart = "";
+  try {
+    agentsPart = renderAgentsBlock(agents);
+  } catch (e) {
+    console.warn("[chat] could not render agents for context prefix:", e);
+  }
+
+  let memoryPart = "";
+  try {
+    memoryPart = renderMemoryBlock(memories);
+  } catch (e) {
+    console.warn("[chat] could not render memory for context prefix:", e);
+  }
+
   return (
     datePart +
+    memoryPart +
     eventsPart +
     tasksPart +
     habitsPart +
     projectsPart +
     shiftsPart +
+    agentsPart +
     skillsPart +
     addendumPart
   );
