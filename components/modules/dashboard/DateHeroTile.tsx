@@ -139,7 +139,7 @@ export function DateHeroTile({
               <p className="font-mono text-sm text-fg-muted leading-relaxed">
                 <span className="text-accent">›</span> awaiting morning brief.
                 placeholder engine ready — generate to receive grounded
-                heuristics over your habits, tasks, and spend.
+                heuristics over your tasks and schedule.
               </p>
               <div className="mt-3 flex items-center gap-3">
                 <button

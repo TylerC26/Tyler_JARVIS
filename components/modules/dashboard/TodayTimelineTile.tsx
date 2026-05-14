@@ -27,27 +27,21 @@ export async function TodayTimelineTile() {
       rightSlot={wifeToday ? <WifeShiftBadge code={wifeToday} /> : undefined}
       action={{ href: "/calendar", label: "OPEN" }}
     >
-      {eventCount === 0 ? (
-        <div className="grid h-full place-items-center py-8 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <span className="font-mono text-sm uppercase tracking-[0.3em] text-fg-muted">
-              free day
-            </span>
-            <span className="font-mono text-[10px] text-fg-dim">
-              {wifeToday
-                ? "// nothing scheduled — wife shift only"
-                : "// nothing scheduled"}
-            </span>
-            <Link
-              href="/calendar"
-              className="font-mono text-[11px] text-accent hover:underline"
-            >
-              + add event →
-            </Link>
-          </div>
+      <TodayTimelineGrid events={events} />
+      {eventCount === 0 && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-sm border border-dashed border-edge bg-surface-2/30 px-3 py-2">
+          <span className="font-mono text-[11px] text-fg-dim">
+            {wifeToday
+              ? "// nothing scheduled — wife shift only"
+              : "// nothing scheduled today"}
+          </span>
+          <Link
+            href="/calendar"
+            className="font-mono text-[11px] text-accent hover:underline"
+          >
+            + add event →
+          </Link>
         </div>
-      ) : (
-        <TodayTimelineGrid events={events} />
       )}
     </DashboardCard>
   );

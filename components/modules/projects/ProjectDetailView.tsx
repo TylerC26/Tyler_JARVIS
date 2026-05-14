@@ -10,17 +10,12 @@ import {
   updateMilestoneAction,
   updateProjectAction,
 } from "@/app/(app)/projects/actions";
-import {
-  cycleTaskStatus,
-  deleteTask,
-  quickAddTask,
-} from "@/lib/db/actions/tasks";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
-import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ProjectTaskBoard } from "./ProjectTaskBoard";
+import { RoadmapStrip } from "./RoadmapStrip";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
 import type { ProjectMilestone, ProjectStatus, Task } from "@/lib/db/types";
 
@@ -46,44 +41,17 @@ type Props = {
   tasks: Task[];
 };
 
-export function ProjectDetailView({ project, milestones: initialMilestones, tasks: initialTasks }: Props) {
+export function ProjectDetailView({ project, milestones: initialMilestones, tasks }: Props) {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>(initialMilestones);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | "new" | null>(null);
   const [milestonePending, setMilestonePending] = useState(false);
   const [milestoneError, setMilestoneError] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectPending, setProjectPending] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => setMilestones(initialMilestones), [initialMilestones]);
-  useEffect(() => setTasks(initialTasks), [initialTasks]);
-
-  async function onAddTask() {
-    const title = newTaskTitle.trim();
-    if (!title) return;
-    setNewTaskTitle("");
-    const result = await quickAddTask(title, project.id);
-    if (!result.ok) alert(`Failed: ${result.error}`);
-  }
-
-  async function onCycleTask(t: Task) {
-    setBusyId(t.id);
-    const result = await cycleTaskStatus(t.id, t.status);
-    setBusyId(null);
-    if (!result.ok) alert(`Failed: ${result.error}`);
-  }
-
-  async function onDeleteTask(t: Task) {
-    if (!confirm(`Delete "${t.title}"?`)) return;
-    setBusyId(t.id);
-    const result = await deleteTask(t.id);
-    setBusyId(null);
-    if (!result.ok) alert(`Failed: ${result.error}`);
-    else setTasks((prev) => prev.filter((x) => x.id !== t.id));
-  }
 
   async function onSaveMilestone(formData: FormData) {
     setMilestoneError(null);
@@ -164,6 +132,9 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         target_date: ((formData.get("target_date") as string | null) ?? "").trim() || null,
         color: ((formData.get("color") as string | null) ?? "").trim() || null,
         notes: ((formData.get("notes") as string | null) ?? "").trim() || null,
+        github_repo_url:
+          ((formData.get("github_repo_url") as string | null) ?? "").trim() ||
+          null,
       };
       const result = await updateProjectAction(project.id, patch, project.slug);
       if (!result.ok) {
@@ -197,107 +168,6 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
     }
     if (typeof window !== "undefined") window.location.href = "/projects";
   }
-
-  const taskColumns: Column<Task>[] = [
-    {
-      key: "status",
-      header: "",
-      width: "40px",
-      render: (t) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void onCycleTask(t);
-          }}
-          disabled={busyId === t.id}
-          aria-label="Cycle status"
-          title={`status: ${t.status} (click to cycle)`}
-          className={[
-            "size-5 rounded-sm border font-mono text-[10px]",
-            t.status === "done"
-              ? "border-success/40 bg-success/20 text-success"
-              : t.status === "doing"
-                ? "border-accent/40 bg-accent/10 text-accent"
-                : t.status === "blocked"
-                  ? "border-warn/40 bg-warn/10 text-warn"
-                  : "border-edge text-fg-dim",
-          ].join(" ")}
-        >
-          {t.status === "done"
-            ? "✓"
-            : t.status === "doing"
-              ? "→"
-              : t.status === "blocked"
-                ? "!"
-                : "·"}
-        </button>
-      ),
-    },
-    {
-      key: "title",
-      header: "Title",
-      render: (t) => (
-        <div className="flex flex-col">
-          <span
-            className={[
-              t.status === "done" ? "text-fg-dim line-through" : "text-fg",
-            ].join(" ")}
-          >
-            {t.title}
-          </span>
-          {t.description && (
-            <span className="font-mono text-[10px] text-fg-dim">
-              {t.description}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "priority",
-      header: "P",
-      width: "40px",
-      align: "center",
-      render: (t) => <span className="tabular text-fg-muted">P{t.priority}</span>,
-    },
-    {
-      key: "due",
-      header: "Due",
-      width: "100px",
-      render: (t) => (
-        <span className="tabular text-fg-muted">
-          {t.due_at
-            ? new Date(t.due_at).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })
-            : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "40px",
-      align: "right",
-      render: (t) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void onDeleteTask(t);
-          }}
-          disabled={busyId === t.id}
-          aria-label="Delete task"
-          title="Delete task"
-          className="rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-danger hover:text-danger"
-        >
-          ×
-        </button>
-      ),
-    },
-  ];
 
   const totalTasks = project.open_task_count + project.done_task_count;
 
@@ -336,6 +206,20 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         />
       </div>
 
+      {project.github_repo_url && (
+        <div className="mb-4 flex items-center gap-2 rounded-md border border-edge bg-surface/40 px-3 py-2 font-mono text-[11px]">
+          <span className="text-fg-dim">// repo</span>
+          <a
+            href={project.github_repo_url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="truncate text-accent hover:underline"
+          >
+            {project.github_repo_url.replace(/^https?:\/\/(www\.)?/, "")}
+          </a>
+        </div>
+      )}
+
       {project.notes && (
         <div className="mb-6 rounded-md border border-edge bg-surface/40 p-4">
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
@@ -347,111 +231,15 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         </div>
       )}
 
-      <section className="mb-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
-            // milestones
-          </h2>
-          <Button variant="primary" onClick={() => setEditingMilestone("new")}>
-            + ADD MILESTONE
-          </Button>
-        </div>
-        {milestones.length === 0 ? (
-          <div className="grid place-items-center rounded-sm border border-dashed border-edge px-4 py-8 text-center">
-            <span className="font-mono text-[11px] text-fg-dim">
-              // no milestones yet — add the first &quot;big rock&quot; for this project
-            </span>
-          </div>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {milestones.map((m) => {
-              const done = !!m.completed_at;
-              return (
-                <li
-                  key={m.id}
-                  className="flex items-center gap-3 rounded-sm border border-edge bg-surface/40 px-3 py-2"
-                >
-                  <button
-                    type="button"
-                    onClick={() => void onToggleMilestone(m)}
-                    disabled={busyId === m.id}
-                    aria-label={done ? "Reopen milestone" : "Complete milestone"}
-                    className={[
-                      "size-5 shrink-0 rounded-sm border font-mono text-[10px]",
-                      done
-                        ? "border-success/40 bg-success/20 text-success"
-                        : "border-edge text-fg-dim hover:border-accent",
-                    ].join(" ")}
-                  >
-                    {done ? "✓" : "·"}
-                  </button>
-                  <div
-                    onClick={() => setEditingMilestone(m)}
-                    className="min-w-0 flex-1 cursor-pointer"
-                  >
-                    <div
-                      className={[
-                        "truncate font-mono text-sm",
-                        done ? "text-fg-dim line-through" : "text-fg",
-                      ].join(" ")}
-                    >
-                      {m.title}
-                    </div>
-                    {m.description && (
-                      <div className="truncate font-mono text-[10px] text-fg-dim">
-                        {m.description}
-                      </div>
-                    )}
-                  </div>
-                  <div className="shrink-0 font-mono text-[10px] text-fg-muted">
-                    {m.target_date ? fmtDate(m.target_date) : ""}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void onDeleteMilestone(m)}
-                    disabled={busyId === m.id}
-                    aria-label="Delete milestone"
-                    className="rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-danger hover:text-danger"
-                  >
-                    ×
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+      <RoadmapStrip
+        milestones={milestones}
+        busyId={busyId}
+        onToggle={(m) => void onToggleMilestone(m)}
+        onEdit={(m) => setEditingMilestone(m)}
+        onAdd={() => setEditingMilestone("new")}
+      />
 
-      <section className="mb-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
-            // tasks
-          </h2>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void onAddTask();
-            }}
-            className="flex items-center gap-2"
-          >
-            <Input
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              placeholder="quick-add task…"
-              className="h-8 w-64"
-            />
-            <Button variant="primary" type="submit" disabled={!newTaskTitle.trim()}>
-              + ADD
-            </Button>
-          </form>
-        </div>
-        <DataTable
-          columns={taskColumns}
-          rows={tasks}
-          rowKey={(t) => t.id}
-          emptyLabel="// no tasks yet"
-        />
-      </section>
+      <ProjectTaskBoard tasks={tasks} projectId={project.id} />
 
       <div className="mt-8 flex items-center justify-end gap-2">
         <Button variant="danger" onClick={() => void onDeleteProject()}>
@@ -469,6 +257,20 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         subtitle="big rock"
         footer={
           <>
+            {editingMilestone && editingMilestone !== "new" && (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const m = editingMilestone;
+                  void (async () => {
+                    await onDeleteMilestone(m);
+                    setEditingMilestone(null);
+                  })();
+                }}
+              >
+                DELETE
+              </Button>
+            )}
             <Button
               variant="ghost"
               onClick={() => {
@@ -591,6 +393,16 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
               <Input name="target_date" type="date" defaultValue={project.target_date ?? ""} />
             </Field>
           </div>
+          <Field
+            label="GitHub repo"
+            hint="optional · Jarvis can read README / files / commits"
+          >
+            <Input
+              name="github_repo_url"
+              defaultValue={project.github_repo_url ?? ""}
+              placeholder="https://github.com/owner/repo"
+            />
+          </Field>
           <Field label="Notes" hint="freeform; shown on this page">
             <Textarea name="notes" rows={6} defaultValue={project.notes ?? ""} />
           </Field>

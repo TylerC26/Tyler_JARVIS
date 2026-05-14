@@ -1,96 +1,7 @@
 // Hand-written types for v1 — regenerate with `supabase gen types typescript`
 // once a Supabase project is connected and the migrations have been applied.
 
-export type HabitCadence = "daily" | "weekly";
-
-export type AccountType =
-  | "checking"
-  | "savings"
-  | "credit"
-  | "investment"
-  | "cash";
-
-export type CategoryKind = "income" | "expense";
-
-export type TxDirection = "in" | "out";
-
-export type ExpenseCadence = "monthly" | "weekly" | "yearly";
-
 export type TaskStatus = "todo" | "doing" | "blocked" | "done";
-
-export type Habit = {
-  id: string;
-  owner_id: string;
-  name: string;
-  cadence: HabitCadence;
-  target_per_period: number;
-  color: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type HabitLog = {
-  id: string;
-  owner_id: string;
-  habit_id: string;
-  logged_on: string;
-  count: number;
-  note: string | null;
-  created_at: string;
-};
-
-export type Account = {
-  id: string;
-  owner_id: string;
-  name: string;
-  type: AccountType;
-  currency: string;
-  current_balance: string;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type Category = {
-  id: string;
-  owner_id: string;
-  name: string;
-  kind: CategoryKind;
-  color: string | null;
-  parent_id: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type Transaction = {
-  id: string;
-  owner_id: string;
-  account_id: string;
-  occurred_on: string;
-  amount: string;
-  direction: TxDirection;
-  category_id: string | null;
-  merchant: string | null;
-  note: string | null;
-  source: string;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type FixedExpense = {
-  id: string;
-  owner_id: string;
-  name: string;
-  amount: string;
-  category_id: string | null;
-  cadence: ExpenseCadence;
-  day_of_period: number;
-  account_id: string | null;
-  active: boolean;
-  created_at: string;
-  updated_at: string | null;
-};
 
 export type Task = {
   id: string;
@@ -124,6 +35,8 @@ export type Project = {
   started_at: string | null;
   target_date: string | null;
   notes: string | null;
+  github_repo_url: string | null;
+  github_default_branch: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -269,8 +182,15 @@ export type ChatMessage = {
   tokens_out: number | null;
 };
 
+// Dedupe ledger for the Telegram webhook — one row per processed update_id so
+// Telegram retries don't double-run a turn. See lib/telegram/dedupe.ts.
+export type TelegramUpdateRow = {
+  update_id: number;
+  created_at: string;
+};
+
 export type AiBriefKind = "morning" | "evening";
-export type AiSuggestionKind = "productivity" | "spending" | "habit";
+export type AiSuggestionKind = "productivity";
 export type AiSuggestionStatus = "open" | "dismissed" | "acted";
 export type AiSeverity = "info" | "warn" | "crit";
 
@@ -323,104 +243,6 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Profile>;
-        Relationships: [];
-      };
-      habits: {
-        Row: Habit;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          name: string;
-          cadence?: HabitCadence;
-          target_per_period?: number;
-          color?: string | null;
-          archived_at?: string | null;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<Habit>;
-        Relationships: [];
-      };
-      habit_logs: {
-        Row: HabitLog;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          habit_id: string;
-          logged_on: string;
-          count?: number;
-          note?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<HabitLog>;
-        Relationships: [];
-      };
-      accounts: {
-        Row: Account;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          name: string;
-          type: AccountType;
-          currency?: string;
-          current_balance?: string | number;
-          archived_at?: string | null;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<Account>;
-        Relationships: [];
-      };
-      categories: {
-        Row: Category;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          name: string;
-          kind: CategoryKind;
-          color?: string | null;
-          parent_id?: string | null;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<Category>;
-        Relationships: [];
-      };
-      transactions: {
-        Row: Transaction;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          account_id: string;
-          occurred_on: string;
-          amount: string | number;
-          direction: TxDirection;
-          category_id?: string | null;
-          merchant?: string | null;
-          note?: string | null;
-          source?: string;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<Transaction>;
-        Relationships: [];
-      };
-      fixed_expenses: {
-        Row: FixedExpense;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          name: string;
-          amount: string | number;
-          cadence: ExpenseCadence;
-          day_of_period: number;
-          category_id?: string | null;
-          account_id?: string | null;
-          active?: boolean;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<FixedExpense>;
         Relationships: [];
       };
       tasks: {
@@ -561,6 +383,8 @@ export type Database = {
           started_at?: string | null;
           target_date?: string | null;
           notes?: string | null;
+          github_repo_url?: string | null;
+          github_default_branch?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };
@@ -637,27 +461,19 @@ export type Database = {
         Update: Partial<AiSuggestion>;
         Relationships: [];
       };
+      telegram_updates: {
+        Row: TelegramUpdateRow;
+        Insert: {
+          update_id: number;
+          created_at?: string;
+        };
+        Update: Partial<TelegramUpdateRow>;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };
-};
-
-// Composite types for view layer
-export type HabitWithToday = Habit & {
-  logged_today: boolean;
-  current_streak: number;
-};
-
-export type TransactionWithMeta = Transaction & {
-  account_name: string | null;
-  category_name: string | null;
-  category_color: string | null;
-};
-
-export type FixedExpenseUpcoming = FixedExpense & {
-  next_occurs_on: string;
-  account_name: string | null;
 };

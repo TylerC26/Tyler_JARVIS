@@ -1,15 +1,11 @@
 import type {
-  Account,
   AiBrief,
   AiBriefBullet,
   AiBriefKind,
   AiSeverity,
   AiSuggestion,
   AiSuggestionKind,
-  FixedExpenseUpcoming,
-  HabitWithToday,
   Task,
-  TransactionWithMeta,
   WifeShift,
 } from "@/lib/db/types";
 
@@ -26,25 +22,17 @@ export type {
 export type AIContext = {
   forDate: string; // YYYY-MM-DD
   generatedAt: string; // ISO timestamp
-  habits: HabitWithToday[];
   tasks: {
     today: Task[];
     overdue: Task[];
     upcoming: Task[];
     all: Task[];
   };
-  money: {
-    mtdSpend: number;
-    accounts: Account[];
-    recentTransactions: TransactionWithMeta[];
-    fixedExpensesUpcoming: FixedExpenseUpcoming[];
-  };
   wifeShifts: {
     next21: WifeShift[]; // upcoming 21 days inclusive of today
   };
   // Slots designed for, populated when those modules ship.
   calendar?: never[];
-  health?: never[];
 };
 
 export type BriefDraft = {

@@ -79,6 +79,9 @@ export function ProjectsDashboard({
           null,
         color:
           ((formData.get("color") as string | null)?.trim() || null) ?? null,
+        github_repo_url:
+          ((formData.get("github_repo_url") as string | null)?.trim() ||
+            null) ?? null,
       });
       if (!result.ok) {
         setError(result.error);
@@ -212,6 +215,15 @@ export function ProjectsDashboard({
           </div>
           <Field label="Color" hint="optional accent color (any CSS color)">
             <Input name="color" placeholder="e.g. #facc15" />
+          </Field>
+          <Field
+            label="GitHub repo"
+            hint="optional · Jarvis can read README / files / commits"
+          >
+            <Input
+              name="github_repo_url"
+              placeholder="https://github.com/owner/repo"
+            />
           </Field>
           {error && (
             <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">

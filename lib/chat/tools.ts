@@ -1,19 +1,9 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runBrief } from "@/lib/ai/run";
-import { fmtCurrency, fmtDate } from "@/lib/date";
-import {
-  archiveHabitCore,
-  createHabitCore,
-  logHabitTodayCore,
-} from "@/lib/db/core/habits";
+import { fmtDate } from "@/lib/date";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { createMemoryCore, deleteMemoryCore } from "@/lib/db/core/memory";
-import {
-  createAccountCore,
-  createFixedExpenseCore,
-  createTransactionCore,
-} from "@/lib/db/core/money";
 import {
   createEventCore,
   deleteEventCore,
@@ -35,17 +25,18 @@ import {
   setMilestoneCompletedCore,
   updateProjectCore,
 } from "@/lib/db/core/projects";
+import {
+  fetchRecentCommits,
+  fetchRepoFile,
+  fetchRepoMetadata,
+  fetchRepoReadme,
+  fetchRepoTree,
+  parseRepoUrl,
+} from "@/lib/github/client";
 import { createSkillCore } from "@/lib/db/core/skills";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
-import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import { listProjectSummaries } from "@/lib/db/queries/projects";
 import { listActiveSkills } from "@/lib/db/queries/skills";
-import {
-  listAccounts,
-  listFixedExpenses,
-  listTransactions,
-  monthToDateSpend,
-} from "@/lib/db/queries/money";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 
@@ -125,156 +116,6 @@ export const deleteTaskTool = tool({
     const result = await deleteTaskCore(task_id);
     if (!result.ok) return { ok: false, error: result.error };
     return { ok: true, message: "Task deleted." };
-  },
-});
-
-// ---------- habit tools ----------
-
-export const addHabitTool = tool({
-  description: "Create a new tracked habit.",
-  inputSchema: z.object({
-    name: z.string(),
-    cadence: z.enum(["daily", "weekly"]).optional(),
-    color: z.string().optional(),
-  }),
-  execute: async (input) => {
-    const result = await createHabitCore({
-      name: input.name,
-      cadence: input.cadence ?? "daily",
-      color: input.color ?? null,
-    });
-    if (!result.ok) return { ok: false, error: result.error };
-    return {
-      ok: true,
-      message: `Habit added: ${result.data.name} (${result.data.cadence})`,
-      habit: result.data,
-    };
-  },
-});
-
-export const logHabitTodayTool = tool({
-  description:
-    "Toggle today's log for a habit by name (case-insensitive) or id. Inserts a log if one doesn't exist for today, otherwise removes it.",
-  inputSchema: z.object({
-    habit_name_or_id: z.string(),
-  }),
-  execute: async ({ habit_name_or_id }) => {
-    const result = await logHabitTodayCore(habit_name_or_id);
-    if (!result.ok) return { ok: false, error: result.error };
-    return {
-      ok: true,
-      message: result.data.logged
-        ? `Logged for today: ${result.data.habit.name}`
-        : `Un-logged for today: ${result.data.habit.name}`,
-      logged: result.data.logged,
-      habit: result.data.habit,
-    };
-  },
-});
-
-export const archiveHabitTool = tool({
-  description: "Archive a habit so it stops appearing in active lists.",
-  inputSchema: z.object({ habit_id: z.string() }),
-  execute: async ({ habit_id }) => {
-    const result = await archiveHabitCore(habit_id);
-    if (!result.ok) return { ok: false, error: result.error };
-    return { ok: true, message: "Habit archived." };
-  },
-});
-
-// ---------- money tools ----------
-
-export const addAccountTool = tool({
-  description:
-    "Create a financial account (chequing/savings/credit/investment/cash).",
-  inputSchema: z.object({
-    name: z.string(),
-    type: z.enum(["checking", "savings", "credit", "investment", "cash"]),
-    currency: z.string().optional(),
-    current_balance: z.number().optional(),
-  }),
-  execute: async (input) => {
-    const result = await createAccountCore(input);
-    if (!result.ok) return { ok: false, error: result.error };
-    return {
-      ok: true,
-      message: `Account added: ${result.data.name} (${result.data.type})`,
-      account: result.data,
-    };
-  },
-});
-
-export const addTransactionTool = tool({
-  description:
-    "Log a financial transaction. Account match is by name (case-insensitive) — if the user just says 'debit' you may pass 'debit' or 'chequing' as account_name_or_id and the system will resolve. If no match, you'll get an error and should ask the user.",
-  inputSchema: z.object({
-    account_name_or_id: z.string(),
-    amount: z.number().positive(),
-    direction: z.enum(["in", "out"]).describe("'out' = expense, 'in' = income"),
-    occurred_on: z
-      .string()
-      .optional()
-      .describe("YYYY-MM-DD. Defaults to today."),
-    merchant: z.string().optional(),
-    note: z.string().optional(),
-    category_name: z
-      .string()
-      .optional()
-      .describe(
-        "Category name. Will be created if not present (e.g. 'Dining', 'Groceries', 'Transport').",
-      ),
-  }),
-  execute: async (input) => {
-    const result = await createTransactionCore({
-      account_name_or_id: input.account_name_or_id,
-      amount: input.amount,
-      direction: input.direction,
-      occurred_on: input.occurred_on,
-      merchant: input.merchant ?? null,
-      note: input.note ?? null,
-      category_name: input.category_name ?? null,
-    });
-    if (!result.ok) return { ok: false, error: result.error };
-    const { transaction, account, category } = result.data;
-    const sign = transaction.direction === "out" ? "-" : "+";
-    return {
-      ok: true,
-      message: `Transaction added · ${transaction.merchant ?? "no merchant"} · ${sign}${fmtCurrency(Number(transaction.amount))} · ${fmtDate(transaction.occurred_on)} · ${account.name}${category ? ` · ${category.name}` : ""}`,
-      transaction,
-      account_name: account.name,
-      category_name: category?.name ?? null,
-    };
-  },
-});
-
-export const addFixedExpenseTool = tool({
-  description: "Schedule a recurring fixed expense.",
-  inputSchema: z.object({
-    name: z.string(),
-    amount: z.number().positive(),
-    cadence: z.enum(["monthly", "weekly", "yearly"]),
-    day_of_period: z
-      .number()
-      .int()
-      .describe(
-        "Day-of-month (1-31) for monthly, day-of-week (0=Sun..6=Sat) for weekly, day-of-year for yearly.",
-      ),
-    account_name: z.string().optional(),
-  }),
-  execute: async (input) => {
-    const result = await createFixedExpenseCore({
-      name: input.name,
-      amount: input.amount,
-      cadence: input.cadence,
-      day_of_period: input.day_of_period,
-      account_name_or_id: input.account_name ?? null,
-    });
-    if (!result.ok) return { ok: false, error: result.error };
-    return {
-      ok: true,
-      message: `Fixed expense scheduled: ${result.data.name} ${fmtCurrency(Number(result.data.amount))} (${result.data.cadence})`,
-      fixed_expense: result.data,
-    };
   },
 });
 
@@ -559,6 +400,149 @@ export const updateProjectStatusTool = tool({
   },
 });
 
+export const readProjectRepoTool = tool({
+  description:
+    "Read from the GitHub repo linked to one of the user's side-business projects. Use when the user asks code/repo questions about a specific project (e.g. 'what's in the Lemon Lab readme', 'list the files in Saffron Studio', 'show me lib/foo.ts from Beta', 'what are the latest commits on Lemon Lab'). The project must have a github_repo_url set — if it doesn't, surface that and ask the user to add one on the project page.",
+  inputSchema: z.object({
+    project: z
+      .string()
+      .describe("Project name or slug. Fuzzy resolver — server picks the best match."),
+    section: z
+      .enum(["readme", "tree", "file", "commits", "meta"])
+      .describe(
+        "Which slice of the repo to fetch. 'readme' = decoded README text. 'tree' = recursive file listing. 'file' = a single file's contents (also pass `path`). 'commits' = recent commits. 'meta' = repo metadata (default branch, language, last push).",
+      ),
+    path: z
+      .string()
+      .optional()
+      .describe(
+        "Required when section='file' — repo-relative path like 'lib/foo.ts'. Ignored for other sections.",
+      ),
+    branch: z
+      .string()
+      .optional()
+      .describe(
+        "Branch/ref to read from. Defaults to the repo's default branch (cached on the project row if known, otherwise resolved via the GitHub API).",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("For section='commits': max commits to return (default 10, capped at 50)."),
+  }),
+  execute: async (input) => {
+    const project = await findProjectCore(input.project.trim());
+    if (!project)
+      return { ok: false, error: `No project matches "${input.project}".` };
+    const url = project.github_repo_url?.trim();
+    if (!url)
+      return {
+        ok: false,
+        error: `Project "${project.name}" has no github_repo_url set. Open /projects/${project.slug} and add one.`,
+      };
+    const ref = parseRepoUrl(url);
+    if (!ref)
+      return {
+        ok: false,
+        error: `Could not parse "${url}" as a github.com repo URL.`,
+      };
+
+    // Resolve the branch lazily: prefer caller > stored default > live default.
+    async function resolveBranch(): Promise<
+      { ok: true; branch: string } | { ok: false; error: string }
+    > {
+      if (input.branch && input.branch.trim()) {
+        return { ok: true, branch: input.branch.trim() };
+      }
+      if (project!.github_default_branch) {
+        return { ok: true, branch: project!.github_default_branch };
+      }
+      const meta = await fetchRepoMetadata(ref!);
+      if (!meta.ok) return { ok: false, error: meta.error };
+      return { ok: true, branch: meta.data.default_branch };
+    }
+
+    if (input.section === "meta") {
+      const meta = await fetchRepoMetadata(ref);
+      if (!meta.ok) return { ok: false, error: meta.error };
+      return {
+        ok: true,
+        project: project.name,
+        repo: meta.data.full_name,
+        meta: meta.data,
+      };
+    }
+
+    if (input.section === "readme") {
+      const readme = await fetchRepoReadme(ref);
+      if (!readme.ok) return { ok: false, error: readme.error };
+      return {
+        ok: true,
+        project: project.name,
+        repo: `${ref.owner}/${ref.repo}`,
+        path: readme.data.path,
+        content: readme.data.content,
+      };
+    }
+
+    if (input.section === "tree") {
+      const branch = await resolveBranch();
+      if (!branch.ok) return { ok: false, error: branch.error };
+      const tree = await fetchRepoTree(ref, branch.branch);
+      if (!tree.ok) return { ok: false, error: tree.error };
+      // Cap entries so we don't blow the response size on huge repos.
+      const CAP = 400;
+      const entries = tree.data.entries.slice(0, CAP);
+      return {
+        ok: true,
+        project: project.name,
+        repo: `${ref.owner}/${ref.repo}`,
+        branch: branch.branch,
+        truncated: tree.data.truncated || tree.data.entries.length > CAP,
+        count: entries.length,
+        entries,
+      };
+    }
+
+    if (input.section === "file") {
+      if (!input.path || !input.path.trim())
+        return {
+          ok: false,
+          error: "section='file' requires a `path` argument.",
+        };
+      const branch = await resolveBranch();
+      if (!branch.ok) return { ok: false, error: branch.error };
+      const file = await fetchRepoFile(ref, input.path.trim(), branch.branch);
+      if (!file.ok) return { ok: false, error: file.error };
+      return {
+        ok: true,
+        project: project.name,
+        repo: `${ref.owner}/${ref.repo}`,
+        branch: branch.branch,
+        path: file.data.path,
+        size: file.data.size,
+        content: file.data.content,
+      };
+    }
+
+    // section === "commits"
+    const branch = await resolveBranch();
+    if (!branch.ok) return { ok: false, error: branch.error };
+    const commits = await fetchRecentCommits(ref, branch.branch, input.limit ?? 10);
+    if (!commits.ok) return { ok: false, error: commits.error };
+    return {
+      ok: true,
+      project: project.name,
+      repo: `${ref.owner}/${ref.repo}`,
+      branch: branch.branch,
+      count: commits.data.length,
+      commits: commits.data,
+    };
+  },
+});
+
 // ---------- skill tools ----------
 
 export const createSkillTool = tool({
@@ -611,8 +595,6 @@ export const queryStateTool = tool({
     domain: z
       .enum([
         "tasks",
-        "habits",
-        "money",
         "events",
         "wife_shifts",
         "skills",
@@ -642,53 +624,6 @@ export const queryStateTool = tool({
             priority: t.priority,
             due_at: t.due_at,
           })),
-      };
-    }
-
-    if (domain === "habits" || domain === "all") {
-      const habits = await listHabitsWithToday();
-      out.habits = {
-        total: habits.length,
-        logged_today: habits.filter((h) => h.logged_today).length,
-        items: habits.map((h) => ({
-          id: h.id,
-          name: h.name,
-          cadence: h.cadence,
-          current_streak: h.current_streak,
-          logged_today: h.logged_today,
-        })),
-      };
-    }
-
-    if (domain === "money" || domain === "all") {
-      const [accounts, transactions, fixedExpenses, mtd] = await Promise.all([
-        listAccounts(),
-        listTransactions({ limit: 20 }),
-        listFixedExpenses(),
-        monthToDateSpend(),
-      ]);
-      out.money = {
-        accounts: accounts.map((a) => ({
-          id: a.id,
-          name: a.name,
-          type: a.type,
-          balance: Number(a.current_balance),
-        })),
-        mtd_spend: mtd,
-        recent_transactions: transactions.slice(0, 10).map((t) => ({
-          occurred_on: t.occurred_on,
-          merchant: t.merchant,
-          amount: Number(t.amount),
-          direction: t.direction,
-          category: t.category_name,
-          account: t.account_name,
-        })),
-        upcoming_fixed: fixedExpenses.slice(0, 5).map((e) => ({
-          name: e.name,
-          amount: Number(e.amount),
-          next_occurs_on: e.next_occurs_on,
-          account: e.account_name,
-        })),
       };
     }
 
@@ -893,12 +828,6 @@ export const ALL_TOOLS = {
   add_task: addTaskTool,
   complete_task: completeTaskTool,
   delete_task: deleteTaskTool,
-  add_habit: addHabitTool,
-  log_habit_today: logHabitTodayTool,
-  archive_habit: archiveHabitTool,
-  add_account: addAccountTool,
-  add_transaction: addTransactionTool,
-  add_fixed_expense: addFixedExpenseTool,
   add_calendar_event: addCalendarEventTool,
   update_event: updateEventTool,
   move_event: moveEventTool,
@@ -909,6 +838,7 @@ export const ALL_TOOLS = {
   add_project_milestone: addProjectMilestoneTool,
   complete_project_milestone: completeProjectMilestoneTool,
   update_project_status: updateProjectStatusTool,
+  read_project_repo: readProjectRepoTool,
   create_skill: createSkillTool,
   query_state: queryStateTool,
   generate_brief: generateBriefTool,

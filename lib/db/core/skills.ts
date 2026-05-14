@@ -158,7 +158,7 @@ const SEED_SKILLS: CreateSkillInput[] = [
   {
     name: "Daily Planner",
     description:
-      "Proposes a time-boxed day plan honoring wife shifts, today's tasks, and habits.",
+      "Proposes a time-boxed day plan honoring wife shifts and today's tasks.",
     trigger_keywords: ["plan my day", "what should i do today", "schedule today", "today's plan"],
     instructions: `You are acting as Tyler's Daily Planner.
 
@@ -176,17 +176,16 @@ Do not invent commitments not present in tasks or events. If today is light, say
   {
     name: "Weekly Review",
     description:
-      "Sunday-style retrospective: what got done, what slipped, MTD spend vs. last week.",
+      "Sunday-style retrospective: what got done, what slipped, what's next.",
     trigger_keywords: ["weekly review", "review my week", "how was my week", "week recap"],
     instructions: `You are running Tyler's Weekly Review.
 
 When triggered:
-- Use query_state (domain: all) to pull tasks, habits, money, events for the week.
-- Structure the response in four short sections:
+- Use query_state (domain: all) to pull tasks, events, and projects for the week.
+- Structure the response in three short sections:
   1. **Done** — tasks marked complete in the last 7 days. List up to 5.
-  2. **Slipped** — overdue tasks or habits with broken streaks. Be honest, not harsh.
-  3. **Money** — MTD spend, biggest category, any unusual transactions. One sentence.
-  4. **Next week** — 2-3 priorities to carry forward.
+  2. **Slipped** — overdue tasks still open. Be honest, not harsh.
+  3. **Next week** — 2-3 priorities to carry forward.
 - Keep the whole reply under 200 words. Use plain bullets, not nested formatting.
 - End with one question that prompts reflection (e.g. "What's the one thing you'd repeat?").`,
     source: "seeded",
@@ -194,18 +193,18 @@ When triggered:
   {
     name: "Quick Capture",
     description:
-      "Splits a brain-dump paragraph into tasks, events, transactions, and habit logs.",
+      "Splits a brain-dump paragraph into tasks and calendar events.",
     trigger_keywords: ["capture", "inbox", "dump", "brain dump", "process this"],
     instructions: `You are Tyler's Quick Capture processor.
 
 When triggered:
 - Read the user's message carefully. It will contain a mixed brain-dump.
-- Extract every actionable item and classify each as one of: task, calendar event, transaction, habit log.
-- For each, call the appropriate tool: add_task / add_calendar_event / add_transaction / log_habit_today.
-- Infer sensible defaults: tasks get a priority based on language ("urgent" = high), events get a 1-hour duration unless stated, transactions default to "out" direction.
+- Extract every actionable item and classify each as one of: task, calendar event.
+- For each, call the appropriate tool: add_task or add_calendar_event.
+- Infer sensible defaults: tasks get a priority based on language ("urgent" = high), events get a 1-hour duration unless stated.
 - After all tool calls succeed, respond with a single compact summary like:
-  "Captured: 3 tasks · 1 event · 2 transactions. All saved."
-- If anything is ambiguous (e.g. an amount without a merchant), surface that in one line at the end and ask for clarification — but only after saving the unambiguous items.`,
+  "Captured: 3 tasks · 1 event. All saved."
+- If anything is ambiguous, surface that in one line at the end and ask for clarification — but only after saving the unambiguous items.`,
     source: "seeded",
   },
   {

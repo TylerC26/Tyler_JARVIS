@@ -92,6 +92,51 @@ export async function setTaskStatusCore(
   return { ok: true, data: data as Task };
 }
 
+export type UpdateTaskInput = Partial<{
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: number;
+  due_at: string | null;
+}>;
+
+export async function updateTaskCore(
+  id: string,
+  patch: UpdateTaskInput,
+): Promise<CoreResult<Task>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Task id is required." };
+
+  const updates: Partial<Task> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.title !== undefined) {
+    const t = patch.title.trim();
+    if (!t) return { ok: false, error: "Title cannot be empty." };
+    updates.title = t;
+  }
+  if (patch.description !== undefined) updates.description = patch.description;
+  if (patch.status !== undefined) {
+    updates.status = patch.status;
+    updates.completed_at =
+      patch.status === "done" ? new Date().toISOString() : null;
+  }
+  if (patch.priority !== undefined)
+    updates.priority = Math.min(4, Math.max(1, Math.trunc(patch.priority)));
+  if (patch.due_at !== undefined) updates.due_at = patch.due_at;
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as Task };
+}
+
 export async function deleteTaskCore(id: string): Promise<CoreResult<true>> {
   const supabase = await getSupabaseServer();
   if (!supabase) return { ok: false, error: "Supabase not configured." };

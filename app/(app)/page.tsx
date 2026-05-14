@@ -1,8 +1,6 @@
 import { AgendaTile } from "@/components/modules/dashboard/AgendaTile";
 import { DateHeroTile } from "@/components/modules/dashboard/DateHeroTile";
 import { FocusTile } from "@/components/modules/dashboard/FocusTile";
-import { HabitsTile } from "@/components/modules/dashboard/HabitsTile";
-import { MoneyPulseTile } from "@/components/modules/dashboard/MoneyPulseTile";
 import { ProjectsPulseTile } from "@/components/modules/dashboard/ProjectsPulseTile";
 import { SignalsTile } from "@/components/modules/dashboard/SignalsTile";
 import { TodayTimelineTile } from "@/components/modules/dashboard/TodayTimelineTile";
@@ -26,15 +24,12 @@ export default async function DashboardPage() {
         <DateHeroTile brief={brief} wifeShiftToday={wifeShiftToday} />
       </div>
 
-      <div className="md:col-span-8">
+      <div className="md:col-span-12">
         <TodayTimelineTile />
-      </div>
-      <div className="md:col-span-4">
-        <FocusTile />
       </div>
 
       <div className="md:col-span-4">
-        <HabitsTile />
+        <FocusTile />
       </div>
       <div className="md:col-span-4">
         <ProjectsPulseTile />
@@ -43,10 +38,7 @@ export default async function DashboardPage() {
         <SignalsTile />
       </div>
 
-      <div className="md:col-span-8">
-        <MoneyPulseTile />
-      </div>
-      <div className="md:col-span-4">
+      <div className="md:col-span-12">
         <AgendaTile />
       </div>
     </div>

@@ -40,26 +40,6 @@ const QUICK_START_TEMPLATES: Array<{
   form: FormState;
 }> = [
   {
-    label: "Spend Coach",
-    form: {
-      name: "Spend Coach",
-      description:
-        "Flags MTD overspend by category, suggests cutbacks based on recent transactions.",
-      triggers: "spend check, money coach, budget",
-      instructions: "",
-    },
-  },
-  {
-    label: "Habit Recovery",
-    form: {
-      name: "Habit Recovery",
-      description:
-        "When a streak breaks, asks why and proposes a smaller version for tomorrow.",
-      triggers: "missed habit, broken streak, habit recovery",
-      instructions: "",
-    },
-  },
-  {
     label: "Gym / Training",
     form: {
       name: "Gym Training",
@@ -74,7 +54,7 @@ const QUICK_START_TEMPLATES: Array<{
     form: {
       name: "Travel Mode",
       description:
-        "For multi-day travel events: pre-flight checklist and offers to pause habits/fixed expenses.",
+        "For multi-day travel events: pre-flight checklist and packing prompts.",
       triggers: "going on a trip, travel checklist, packing",
       instructions: "",
     },

@@ -5,8 +5,8 @@ export const CLASSIFIER_SYSTEM_PROMPT = `You are the routing layer for a persona
 Your single job: decide whether the user's latest message needs the heavyweight model (Claude with tool access to the user's database) or whether the lightweight model can handle it conversationally.
 
 Route to "claude" when:
-- The user is asking you to add, log, create, update, complete, dismiss, or remove anything (tasks, habits, transactions, expenses, calendar events).
-- The user is asking a question that requires reading their actual data (e.g. "what's my MTD spend", "what tasks are due today", "show me my habits").
+- The user is asking you to add, log, create, update, complete, dismiss, or remove anything (tasks, calendar events, projects, skills, memory).
+- The user is asking a question that requires reading their actual data (e.g. "what tasks are due today", "what's on my calendar Friday", "how's Lemon Lab going").
 - The user wants a brief, summary, or analysis of their state.
 - You're unsure. Default to claude — false positives are cheap; missing a tool call is bad UX.
 
@@ -34,14 +34,13 @@ export const CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT = `You are Jarvis, the central br
 You have direct access to the user's database via tools. They are the sole user of this system.
 
 Your job:
-1. If the user asked you to add/log/update/remove data, call the appropriate tool. Be aggressive about inferring sensible defaults from natural language ("last night" = yesterday, "log it" after talking about a habit = log_habit_today on that habit).
+1. If the user asked you to add/update/remove data, call the appropriate tool. Be aggressive about inferring sensible defaults from natural language ("tomorrow at 7" = next day 19:00 local).
 2. If the user asked a question about their state, call query_state and answer with the data you got back.
 3. If they asked for a brief or summary, call generate_brief.
-4. After tool calls succeed, respond briefly confirming what you did. One sentence usually enough. Surface the key fact (amount, date, count) so the user knows it landed.
+4. After tool calls succeed, respond briefly confirming what you did. One sentence usually enough. Surface the key fact (title, date, count) so the user knows it landed.
 
 Style:
 - Terse. Confident. Minimal prose.
-- Numbers in monospace-friendly format ($42.00, not "forty-two dollars").
 - If a tool errors, surface the error verbatim and ask for the missing info.
 - Never make up data. If query_state returns empty, say so.
 
@@ -49,19 +48,18 @@ Today's date and time will be in the conversation context as the most recent use
 
 The user-context system message ALSO pre-loads on every turn:
 - the user's open tasks (titles, priority, due dates, overdue flag) — capped at 15 for prompt-length reasons
-- all active habits (cadence, current streak, whether logged today)
 - the wife's next 21 days of shifts
 - ALL calendar events in the next 28 days (including ones currently in progress), with start/end times in the user's local timezone — capped at 30
 
 SCHEDULING — BEFORE you propose any time, suggest moving an event, or answer "when am I free", you MUST read the Calendar block in the prefix and check for conflicts. Treat every event there as a hard block on that time range. If two events overlap, surface that. If the user asks for a free slot, scan the block for gaps. NEVER invent a time without checking. If the user is asking about a date beyond the 28-day window, THEN call list_events_in_range — otherwise the prefix is authoritative.
 
-You do NOT need to call query_state for tasks, habits, shifts, or events inside the windows above. Read directly from the prefix. Call query_state ONLY when you need money/finance state, or when the prefix indicated "…and N more" and the user is asking about the truncated tail.
+You do NOT need to call query_state for tasks, shifts, or events inside the windows above. Read directly from the prefix. Call query_state ONLY when the prefix indicated "…and N more" and the user is asking about the truncated tail.
 
 The user's wife is a nurse working rotating shifts. Shift codes and hours: A=AM 07:00–15:00 (7am–3pm), P=PM 14:30–22:30 (2:30pm–10:30pm), P1=PM-1 14:00–22:00 (2pm–10pm), Anight=AM+Night split (works 07:00–14:00 then returns at 22:00 for the overnight), NO=Night 22:00 prev day–07:00 (10pm overnight–7am), DO=Day Off. Her upcoming shifts are pre-loaded into the user-context system message on every turn — you do not need to call a tool to see the next 21 days. Always factor her availability into planning, dinner timing, social suggestions, gym slots, and quiet-hours reasoning, even when the user does not explicitly mention her. On NO and Anight days she works overnight and typically sleeps during the day. Use \`list_wife_shifts\` only for dates beyond the 21-day window already in context.
 
 Skills: the context prefix lists every Skill the user has authored, and inlines the full instructions for any Skills whose triggers matched the latest message. When a Skill is active for the turn, follow its instructions as additional guidance — they extend (not replace) your normal behavior. If no Skill triggered but a listed Skill is clearly relevant to what the user just asked, you can offer to use it ("There's a Date Night Planner Skill for this — want me to run it?"). If the user asks you to author a new Skill (e.g. "make me a skill that…", "teach Jarvis to…"), use the \`create_skill\` tool.
 
-Side-business projects: the prefix has a Projects block listing the user's active and paused side hustles with task% and milestone progress. When he mentions a project by name ("what's left on Lemon Lab", "add a task to Saffron Studio", "mark Beta launch as done"), match it to the prefix and act on it — use \`add_task\` with the \`project\` arg, \`add_project_milestone\`, \`complete_project_milestone\`, or \`update_project_status\` as appropriate. For status questions ("how's it going") read directly from the prefix's task% and milestone% values; do NOT query_state unless the user asks for details beyond what's shown. Use \`add_project\` only when he asks to start a new project.
+Side-business projects: the prefix has a Projects block listing the user's active and paused side hustles with task% and milestone progress. When he mentions a project by name ("what's left on Lemon Lab", "add a task to Saffron Studio", "mark Beta launch as done"), match it to the prefix and act on it — use \`add_task\` with the \`project\` arg, \`add_project_milestone\`, \`complete_project_milestone\`, or \`update_project_status\` as appropriate. For status questions ("how's it going") read directly from the prefix's task% and milestone% values; do NOT query_state unless the user asks for details beyond what's shown. Use \`add_project\` only when he asks to start a new project. If a project has a linked GitHub repo (shown as "repo: owner/repo" in the block) and the user asks code/repo questions about it ("what's in the readme", "list the files", "show me lib/foo.ts", "latest commits"), call \`read_project_repo\` with the matching section (readme / tree / file / commits / meta) instead of guessing.
 
 Delegation (sub-agents): the prefix has an Agents block listing every sub-agent the user has authored, with slug + one-line description. When a user request maps cleanly to a specialist agent (e.g. "plan my day" → planner, "find time for dinner" → scheduler, "how am I doing on spend" → finance, brain-dumps → capture), call \`delegate_to_agent\` with the matching slug and a clear self-contained task string. The sub-agent runs in its own isolated loop with a restricted tool set and returns a final text result — relay or summarize for the user. Use delegation when (a) a dedicated agent prompt will yield sharper output than your generalist behavior, OR (b) the work needs multiple tool calls within one focused domain. Do NOT delegate trivial single-tool requests ("log a task" — just call add_task yourself). If the matched agent is inactive, mention it and offer to enable it.
 
@@ -71,20 +69,13 @@ import { listActiveAgents } from "@/lib/db/queries/agents";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { getRecentRelevantMemories } from "@/lib/db/queries/memory";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
-import { listHabitsWithToday } from "@/lib/db/queries/habits";
 import {
   listProjectSummaries,
   type ProjectSummary,
 } from "@/lib/db/queries/projects";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
-import type {
-  Agent,
-  Event,
-  HabitWithToday,
-  MemoryEntry,
-  Task,
-} from "@/lib/db/types";
+import type { Agent, Event, MemoryEntry, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
 const MAX_PROJECTS_IN_PREFIX = 10;
@@ -116,7 +107,6 @@ export async function getActiveResponderPrompt(): Promise<string> {
 }
 
 const MAX_TASKS_IN_PREFIX = 15;
-const MAX_HABITS_IN_PREFIX = 20;
 const MAX_EVENTS_IN_PREFIX = 30;
 const EVENTS_WINDOW_DAYS = 28;
 
@@ -225,26 +215,6 @@ function renderEventsBlock(events: Event[], now: Date, tz: string): string {
   return `\n\nCalendar (next ${EVENTS_WINDOW_DAYS}d, ${live.length} event${live.length === 1 ? "" : "s"}):\n${lines}${tail}\nUse this to answer any scheduling, conflict-detection, or "when am I free" question — do NOT propose times that overlap these blocks.`;
 }
 
-function renderHabitsBlock(habits: HabitWithToday[]): string {
-  // Active habits only. Surface each habit's name, cadence, current streak,
-  // and whether logged today — enough for Jarvis to reason about adherence
-  // without a tool call.
-  const active = habits.filter((h) => !h.archived_at);
-  if (active.length === 0) return `\n\nHabits: none tracked.`;
-
-  const shown = active.slice(0, MAX_HABITS_IN_PREFIX);
-  const more = active.length - shown.length;
-  const lines = shown
-    .map((h) => {
-      const status = h.logged_today ? "✓ today" : "not logged today";
-      const streak = h.current_streak > 0 ? ` · streak ${h.current_streak}` : "";
-      return `  • ${h.name} (${h.cadence}, target ${h.target_per_period}/period) — ${status}${streak}`;
-    })
-    .join("\n");
-  const tail = more > 0 ? `\n  …and ${more} more habits.` : "";
-  return `\n\nHabits (${active.length} active):\n${lines}${tail}`;
-}
-
 // Format the user's IANA offset as "+HH:MM" / "-HH:MM" at the given instant.
 // Required because the server runs in UTC on Vercel and JS Date has no API to
 // ask for an arbitrary zone's offset directly.
@@ -306,7 +276,10 @@ function renderProjectsBlock(summaries: ProjectSummary[]): string {
       const next = p.next_milestone
         ? ` — next: ${p.next_milestone.title}${p.next_milestone.target_date ? ` (${p.next_milestone.target_date})` : ""}`
         : "";
-      return `  • [${p.status}] ${p.name} (${p.task_pct}% tasks · ${p.milestone_done}/${p.milestone_total} milestones)${next}`;
+      const repo = p.github_repo_url
+        ? ` — repo: ${p.github_repo_url.replace(/^https?:\/\/(www\.)?github\.com\//i, "").replace(/\.git$/i, "")}`
+        : "";
+      return `  • [${p.status}] ${p.name} (${p.task_pct}% tasks · ${p.milestone_done}/${p.milestone_total} milestones)${repo}${next}`;
     })
     .join("\n");
   const tail = more > 0 ? `\n  …and ${more} more project${more === 1 ? "" : "s"}.` : "";
@@ -369,7 +342,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     now.getTime() + EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [shifts, tasks, habits, events, projects, agents, memories] =
+  const [shifts, tasks, events, projects, agents, memories] =
     await Promise.all([
       listUpcomingWifeShifts(21).catch((e) => {
         console.warn("[chat] could not load wife shifts:", e);
@@ -378,10 +351,6 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
       listTasks().catch((e) => {
         console.warn("[chat] could not load tasks:", e);
         return [] as Awaited<ReturnType<typeof listTasks>>;
-      }),
-      listHabitsWithToday().catch((e) => {
-        console.warn("[chat] could not load habits:", e);
-        return [] as Awaited<ReturnType<typeof listHabitsWithToday>>;
       }),
       listEventsInRangeCore(eventsFrom, eventsTo).catch((e) => {
         console.warn("[chat] could not load events:", e);
@@ -435,13 +404,6 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not render tasks for context prefix:", e);
   }
 
-  let habitsPart = "";
-  try {
-    habitsPart = renderHabitsBlock(habits);
-  } catch (e) {
-    console.warn("[chat] could not render habits for context prefix:", e);
-  }
-
   let projectsPart = "";
   try {
     projectsPart = renderProjectsBlock(projects);
@@ -489,7 +451,6 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     memoryPart +
     eventsPart +
     tasksPart +
-    habitsPart +
     projectsPart +
     shiftsPart +
     agentsPart +

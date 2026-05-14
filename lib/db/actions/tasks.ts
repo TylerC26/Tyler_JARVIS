@@ -6,6 +6,8 @@ import {
   cycleTaskStatusCore,
   deleteTaskCore,
   setTaskStatusCore,
+  updateTaskCore,
+  type UpdateTaskInput,
 } from "@/lib/db/core/tasks";
 import type { TaskStatus } from "@/lib/db/types";
 
@@ -61,6 +63,14 @@ export async function setTaskStatus(id: string, status: TaskStatus) {
   bumpRevalidations();
   return result.ok
     ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function updateTask(id: string, patch: UpdateTaskInput) {
+  const result = await updateTaskCore(id, patch);
+  bumpRevalidations();
+  return result.ok
+    ? { ok: true as const, task: result.data }
     : { ok: false as const, error: result.error };
 }
 

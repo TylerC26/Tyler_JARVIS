@@ -30,13 +30,13 @@ export function ChatThread({ messages, pending, activeModel }: Props) {
             ◢◤<span className="cursor-blink ml-2">_</span>
           </div>
           <p className="font-mono text-sm text-fg leading-relaxed max-w-md">
-            jarvis online. ask for a brief, log a transaction, add a task,
-            check your data, or just chat.
+            jarvis online. ask for a brief, add a task, check your data, or
+            just chat.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-2 max-w-md mx-auto text-left">
-            <Suggestion text="log $42 dinner at saigon last night, debit" />
-            <Suggestion text="add a habit called read 30min" />
-            <Suggestion text="what's my mtd spend?" />
+            <Suggestion text="add a task: file taxes by friday" />
+            <Suggestion text="what's on my calendar tomorrow?" />
+            <Suggestion text="how's lemon lab going?" />
             <Suggestion text="generate my morning brief" />
           </div>
         </div>

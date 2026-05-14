@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { cycleTaskStatus, deleteTask } from "@/lib/db/actions/tasks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fmtRelativeDay } from "@/lib/date";
 import type { Task } from "@/lib/db/types";
+import { TaskDetailModal } from "./TaskDetailModal";
 
 const PRIORITY_COLOR: Record<number, string> = {
   1: "bg-danger",
@@ -28,86 +29,109 @@ export function TaskRow({
   onDragEnd?: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [showDetail, setShowDetail] = useState(false);
 
   return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        // Setting dataTransfer is required for Firefox to recognize the drag.
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", task.id);
-        onDragStart?.();
-      }}
-      onDragEnd={() => onDragEnd?.()}
-      className={[
-        "group flex items-center gap-3 rounded-sm border border-edge bg-surface-2/30 px-3 py-2 cursor-grab active:cursor-grabbing",
-        task.status === "done" ? "opacity-60" : "",
-        isDragging ? "opacity-40 ring-1 ring-accent/50" : "",
-      ].join(" ")}
-    >
-      <button
-        type="button"
-        aria-label={`Cycle status (currently ${task.status})`}
-        disabled={pending}
-        onClick={() =>
-          startTransition(() => void cycleTaskStatus(task.id, task.status))
-        }
-        className="size-6 shrink-0"
+    <>
+      <div
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", task.id);
+          onDragStart?.();
+        }}
+        onDragEnd={() => onDragEnd?.()}
+        className={[
+          "group flex items-start gap-3 rounded-sm border border-edge bg-surface-2/30 px-3 py-2 cursor-grab active:cursor-grabbing transition-colors hover:border-accent/60",
+          task.status === "done" ? "opacity-60" : "",
+          isDragging ? "opacity-40 ring-1 ring-accent/50" : "",
+        ].join(" ")}
       >
-        <span
-          className={[
-            "block size-3 rounded-full",
-            PRIORITY_COLOR[task.priority] ?? "bg-fg-dim",
-          ].join(" ")}
-          aria-hidden
-        />
-      </button>
-
-      <div className="flex flex-1 min-w-0 flex-col leading-tight">
-        <span
-          className={[
-            "font-mono text-sm truncate",
-            task.status === "done" ? "line-through text-fg-muted" : "text-fg",
-          ].join(" ")}
+        <button
+          type="button"
+          aria-label={`Cycle status (currently ${task.status})`}
+          disabled={pending}
+          onClick={(e) => {
+            e.stopPropagation();
+            startTransition(() => void cycleTaskStatus(task.id, task.status));
+          }}
+          className="mt-1 size-6 shrink-0 grid place-items-center"
+          title={`P${task.priority} · click to cycle status`}
         >
-          {task.title}
-        </span>
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-          <span>P{task.priority}</span>
-          {task.due_at && (
-            <>
-              <span className="text-edge-strong">·</span>
-              <span>{fmtRelativeDay(task.due_at)}</span>
-            </>
+          <span
+            className={[
+              "block size-3 rounded-full",
+              PRIORITY_COLOR[task.priority] ?? "bg-fg-dim",
+            ].join(" ")}
+            aria-hidden
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowDetail(true)}
+          className="flex flex-1 min-w-0 flex-col gap-0.5 text-left leading-tight"
+        >
+          <span
+            className={[
+              "font-mono text-sm truncate",
+              task.status === "done" ? "line-through text-fg-muted" : "text-fg",
+            ].join(" ")}
+          >
+            {task.title}
+          </span>
+          {task.description && (
+            <span className="font-mono text-[11px] text-fg-muted line-clamp-2">
+              {task.description}
+            </span>
           )}
-          {project && (
-            <>
-              <span className="text-edge-strong">·</span>
-              <Link
-                href={`/projects/${project.slug}`}
-                onClick={(e) => e.stopPropagation()}
-                className="rounded-sm border border-edge px-1.5 py-0.5 normal-case tracking-normal text-fg-muted hover:border-accent hover:text-accent"
-              >
-                {project.name}
-              </Link>
-            </>
-          )}
-        </span>
+          <span className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+            <span>P{task.priority}</span>
+            {task.due_at && (
+              <>
+                <span className="text-edge-strong">·</span>
+                <span>{fmtRelativeDay(task.due_at)}</span>
+              </>
+            )}
+            {project && (
+              <>
+                <span className="text-edge-strong">·</span>
+                <Link
+                  href={`/projects/${project.slug}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-sm border border-edge px-1.5 py-0.5 normal-case tracking-normal text-fg-muted hover:border-accent hover:text-accent"
+                >
+                  {project.name}
+                </Link>
+              </>
+            )}
+          </span>
+        </button>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusBadge status={task.status} />
+          <button
+            type="button"
+            aria-label="Delete task"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("Delete task?"))
+                startTransition(() => void deleteTask(task.id));
+            }}
+            className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-fg-dim hover:text-danger transition-opacity"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <StatusBadge status={task.status} />
-
-      <button
-        type="button"
-        aria-label="Delete task"
-        onClick={() => {
-          if (confirm("Delete task?"))
-            startTransition(() => void deleteTask(task.id));
-        }}
-        className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-fg-dim hover:text-danger transition-opacity"
-      >
-        ✕
-      </button>
-    </div>
+      {showDetail && (
+        <TaskDetailModal
+          task={task}
+          project={project ?? null}
+          onClose={() => setShowDetail(false)}
+        />
+      )}
+    </>
   );
 }

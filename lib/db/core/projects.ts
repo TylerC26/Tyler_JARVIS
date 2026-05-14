@@ -11,6 +11,8 @@ export type CreateProjectInput = {
   started_at?: string | null;
   target_date?: string | null;
   notes?: string | null;
+  github_repo_url?: string | null;
+  github_default_branch?: string | null;
 };
 
 export type UpdateProjectInput = Partial<
@@ -23,6 +25,8 @@ export type UpdateProjectInput = Partial<
     | "started_at"
     | "target_date"
     | "notes"
+    | "github_repo_url"
+    | "github_default_branch"
   >
 >;
 
@@ -160,6 +164,8 @@ export async function createProjectCore(
       started_at: input.started_at ?? null,
       target_date: input.target_date ?? null,
       notes: input.notes ?? null,
+      github_repo_url: input.github_repo_url ?? null,
+      github_default_branch: input.github_default_branch ?? null,
     })
     .select()
     .single();
@@ -188,6 +194,10 @@ export async function updateProjectCore(
   if (patch.started_at !== undefined) updates.started_at = patch.started_at;
   if (patch.target_date !== undefined) updates.target_date = patch.target_date;
   if (patch.notes !== undefined) updates.notes = patch.notes;
+  if (patch.github_repo_url !== undefined)
+    updates.github_repo_url = patch.github_repo_url;
+  if (patch.github_default_branch !== undefined)
+    updates.github_default_branch = patch.github_default_branch;
 
   const { data, error } = await supabase
     .from("projects")

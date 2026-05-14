@@ -21,8 +21,6 @@ const SUGGESTION_GROUPS: {
   glyph: string;
 }[] = [
   { kind: "productivity", label: "Productivity", code: "PRD", glyph: "▤" },
-  { kind: "spending", label: "Spending", code: "SPD", glyph: "⌗" },
-  { kind: "habit", label: "Habits", code: "HBT", glyph: "◉" },
 ];
 
 export function AssistantView({
@@ -69,7 +67,7 @@ export function AssistantView({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4">
           {SUGGESTION_GROUPS.map((g) => {
             const items = suggestions.filter((s) => s.kind === g.kind);
             return (

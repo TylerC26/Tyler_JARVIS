@@ -27,8 +27,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "life",
     items: [
       { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
-      { href: "/habits", label: "Habits", code: "HBT", glyph: "◉", status: "live" },
-      { href: "/health", label: "Health", code: "HLT", glyph: "✚", status: "offline" },
     ],
   },
   {
@@ -38,12 +36,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/projects", label: "Projects", code: "PRJ", glyph: "⌬", status: "live" },
     ],
   },
-  {
-    label: "track",
-    items: [
-      { href: "/money", label: "Finance", code: "FIN", glyph: "⌗", status: "live" },
-    ],
-  },
+
   {
     label: "ai",
     items: [
