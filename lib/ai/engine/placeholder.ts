@@ -7,6 +7,8 @@ import {
   parseISO,
   startOfDay,
 } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+import { getOwnerTz } from "@/lib/auth/currentUser";
 import type {
   AIContext,
   AiBriefBullet,
@@ -14,6 +16,16 @@ import type {
   SuggestionDraft,
 } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
+
+// Shift an instant (or ISO/date string) into the owner's wall-clock frame so
+// date-fns calendar ops (isSameDay, differenceInDays, …) compare owner-local
+// days rather than the server's UTC days.
+function z(input: string | Date): Date {
+  return toZonedTime(
+    typeof input === "string" ? parseISO(input) : input,
+    getOwnerTz(),
+  );
+}
 
 const MAX_BULLETS = 5;
 
@@ -59,11 +71,11 @@ function morningBullets(ctx: AIContext): AiBriefBullet[] {
   }
 
   // Upcoming priority load (P1/P2 due in the next 3 days)
-  const today = parseISO(ctx.forDate);
+  const today = z(ctx.forDate);
   const horizon = addDays(startOfDay(today), 3);
   const soon = ctx.tasks.upcoming.filter((t) => {
     if (t.priority > 2 || !t.due_at) return false;
-    const due = parseISO(t.due_at);
+    const due = z(t.due_at);
     return !isBefore(due, startOfDay(today)) && isBefore(due, horizon);
   });
   if (soon.length > 0) {
@@ -83,7 +95,7 @@ function morningSummary(bullets: AiBriefBullet[], ctx: AIContext): string {
   if (bullets.length === 0) {
     return "Quiet morning. No signals on the task front.";
   }
-  const day = format(parseISO(ctx.forDate), "EEEE");
+  const day = format(z(ctx.forDate), "EEEE");
   const openTasks = ctx.tasks.today.length + ctx.tasks.overdue.length;
   const crit = bullets.filter((b) => b.severity === "crit").length;
   const tone =
@@ -95,14 +107,14 @@ function morningSummary(bullets: AiBriefBullet[], ctx: AIContext): string {
 
 function eveningBullets(ctx: AIContext): AiBriefBullet[] {
   const out: AiBriefBullet[] = [];
-  const today = parseISO(ctx.forDate);
+  const today = z(ctx.forDate);
   const tomorrow = addDays(today, 1);
 
   // Tasks shipped today
   const shipped = ctx.tasks.all.filter(
     (t) =>
       t.completed_at &&
-      isSameDay(parseISO(t.completed_at), today),
+      isSameDay(z(t.completed_at), today),
   );
   if (shipped.length > 0) {
     out.push(
@@ -120,7 +132,7 @@ function eveningBullets(ctx: AIContext): AiBriefBullet[] {
       t.status !== "done" &&
       t.priority <= 2 &&
       t.due_at &&
-      isSameDay(parseISO(t.due_at), tomorrow),
+      isSameDay(z(t.due_at), tomorrow),
   );
   if (tomorrowsLoad.length > 0) {
     out.push(
@@ -150,11 +162,11 @@ function eveningSummary(bullets: AiBriefBullet[], ctx: AIContext): string {
   if (bullets.length === 0) {
     return "Quiet evening. Nothing logged, nothing closed.";
   }
-  const day = format(parseISO(ctx.forDate), "EEEE");
+  const day = format(z(ctx.forDate), "EEEE");
   const shippedCount = ctx.tasks.all.filter(
     (t) =>
       t.completed_at &&
-      isSameDay(parseISO(t.completed_at), parseISO(ctx.forDate)),
+      isSameDay(z(t.completed_at), z(ctx.forDate)),
   ).length;
   const tone = shippedCount >= 3 ? "Shipped day" : shippedCount >= 1 ? "Forward motion" : "Reflective close";
   return `${tone}. ${day} review: ${shippedCount} shipped.`;
@@ -164,23 +176,23 @@ function eveningSummary(bullets: AiBriefBullet[], ctx: AIContext): string {
 
 function productivitySuggestions(ctx: AIContext): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
-  const today = parseISO(ctx.forDate);
+  const today = z(ctx.forDate);
 
   // 1. Stale doing task
   const stale = ctx.tasks.all.filter((t) => {
     if (t.status !== "doing") return false;
-    const updated = parseISO(t.updated_at ?? t.created_at);
+    const updated = z(t.updated_at ?? t.created_at);
     return differenceInDays(today, updated) > 3;
   });
   if (stale.length > 0) {
     const t = stale.sort(
       (a, b) =>
-        differenceInDays(today, parseISO(b.updated_at ?? b.created_at)) -
-        differenceInDays(today, parseISO(a.updated_at ?? a.created_at)),
+        differenceInDays(today, z(b.updated_at ?? b.created_at)) -
+        differenceInDays(today, z(a.updated_at ?? a.created_at)),
     )[0]!;
     const days = differenceInDays(
       today,
-      parseISO(t.updated_at ?? t.created_at),
+      z(t.updated_at ?? t.created_at),
     );
     out.push({
       kind: "productivity",
@@ -207,7 +219,7 @@ function productivitySuggestions(ctx: AIContext): SuggestionDraft[] {
 
   // 3. Long-overdue with no movement
   const stuck = ctx.tasks.overdue.filter((t) => {
-    const updated = parseISO(t.updated_at ?? t.created_at);
+    const updated = z(t.updated_at ?? t.created_at);
     return differenceInDays(today, updated) > 2;
   });
   if (stuck.length > 0) {

@@ -5,7 +5,6 @@
 
 import { convertToModelMessages, type UIMessage } from "ai";
 import { after } from "next/server";
-import { getOwnerTz } from "@/lib/auth/currentUser";
 import { listMessages } from "@/lib/chat/persist";
 import { runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
@@ -75,9 +74,6 @@ export async function POST(req: Request) {
       const { assistantText } = await runChatTurn({
         modelMessages,
         latestUserText: text,
-        // No browser to read the timezone from — use the owner's configured tz
-        // so relative scheduling ("7pm tomorrow") resolves correctly.
-        tz: getOwnerTz(),
       });
 
       await sendMessage(chatId, assistantText || "(no text response)");

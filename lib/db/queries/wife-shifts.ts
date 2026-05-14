@@ -1,4 +1,4 @@
-import { addDays, format } from "date-fns";
+import { daysFromTodayISO, todayISO } from "@/lib/date";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import type { WifeShift } from "@/lib/db/types";
 
@@ -10,8 +10,6 @@ export async function listWifeShifts(opts: {
 }
 
 export async function listUpcomingWifeShifts(days = 21): Promise<WifeShift[]> {
-  const today = new Date();
-  const from = format(today, "yyyy-MM-dd");
-  const to = format(addDays(today, days - 1), "yyyy-MM-dd");
-  return listWifeShiftsInRangeCore(from, to);
+  // Range anchored to the owner's "today", not the server's UTC date.
+  return listWifeShiftsInRangeCore(todayISO(), daysFromTodayISO(days - 1));
 }

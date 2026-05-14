@@ -111,7 +111,6 @@ export type RunChatTurnInput = {
   // The new user turn's text — persisted as the user row, fed to memory extraction.
   latestUserText: string;
   forceRoute?: ForceRoute;
-  tz?: string;
 };
 
 export type RunChatTurnResult = {
@@ -125,7 +124,7 @@ export type RunChatTurnResult = {
 export async function runChatTurn(
   input: RunChatTurnInput,
 ): Promise<RunChatTurnResult> {
-  const { modelMessages, latestUserText, forceRoute, tz } = input;
+  const { modelMessages, latestUserText, forceRoute } = input;
 
   await appendMessage({ role: "user", content: latestUserText });
 
@@ -142,8 +141,8 @@ export async function runChatTurn(
 
   const result =
     route === "claude"
-      ? await streamClaudeResponse(modelMessages, { tz })
-      : await streamDeepseekResponse(modelMessages, { tz });
+      ? await streamClaudeResponse(modelMessages)
+      : await streamDeepseekResponse(modelMessages);
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
   // `.steps` / `.text` settle.

@@ -1,9 +1,14 @@
-import { endOfDay, format } from "date-fns";
 import Link from "next/link";
 import { WifeShiftBadge } from "@/components/modules/calendar/WifeShiftBadge";
 import { DashboardCard } from "@/components/ui/DashboardCard";
 import { getCategory } from "@/lib/calendar/categories";
-import { fmtRelativeDay } from "@/lib/date";
+import {
+  daysFromTodayISO,
+  endOfOwnerDay,
+  fmtDate,
+  fmtRelativeDay,
+  todayISO,
+} from "@/lib/date";
 import { listUpcomingEventsCore } from "@/lib/db/core/events";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import type { WifeShiftCode } from "@/lib/db/types";
@@ -12,14 +17,11 @@ const PEEK_LIMIT = 5;
 const SHIFT_RANGE_DAYS = 14;
 
 export async function AgendaTile() {
-  const todayEnd = endOfDay(new Date()).toISOString();
+  const todayEnd = endOfOwnerDay().toISOString();
 
   const [eventsRaw, shifts] = await Promise.all([
     listUpcomingEventsCore(20),
-    listWifeShiftsInRangeCore(
-      format(new Date(), "yyyy-MM-dd"),
-      format(new Date(Date.now() + SHIFT_RANGE_DAYS * 86400_000), "yyyy-MM-dd"),
-    ),
+    listWifeShiftsInRangeCore(todayISO(), daysFromTodayISO(SHIFT_RANGE_DAYS)),
   ]);
 
   const events = eventsRaw
@@ -53,7 +55,7 @@ export async function AgendaTile() {
       <ul className="flex flex-col gap-1.5">
         {events.map((e) => {
           const start = new Date(e.starts_at);
-          const dateKey = format(start, "yyyy-MM-dd");
+          const dateKey = fmtDate(start, "yyyy-MM-dd");
           const shift = shiftByDate.get(dateKey);
           const cat = getCategory(e.category);
           return (
@@ -70,7 +72,7 @@ export async function AgendaTile() {
                 {fmtRelativeDay(start)}
               </span>
               <span className="w-10 shrink-0 font-mono text-[10px] tabular-nums text-fg-muted">
-                {e.all_day ? "ALL" : format(start, "HH:mm")}
+                {e.all_day ? "ALL" : fmtDate(start, "HH:mm")}
               </span>
               <span className="flex-1 truncate text-fg">{e.title}</span>
               {shift && <WifeShiftBadge code={shift} />}

@@ -1,13 +1,16 @@
 import { CalendarView } from "@/components/modules/calendar/CalendarView";
+import { todayISO } from "@/lib/date";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { monthRange } from "@/lib/calendar/grid";
-import { addDays, format } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-  const cursor = new Date();
+  // Anchor the initial month grid to the owner's calendar date, not the
+  // server's UTC date (they can differ near midnight).
+  const cursor = parseISO(todayISO());
   const { start } = monthRange(cursor);
   const end = addDays(start, 42); // 6 weeks of buffer covers month + week views
 

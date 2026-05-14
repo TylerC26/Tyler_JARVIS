@@ -29,12 +29,9 @@ export function ChatPanel({
 
   const transport = new DefaultChatTransport({
     api: "/api/chat",
-    body: () => ({
-      forceRoute,
-      // Browser IANA timezone so the server can anchor relative-date reasoning
-      // ("tomorrow 7pm") to the user's local clock instead of UTC.
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }),
+    // Timezone is resolved server-side from the owner's configured tz
+    // (getOwnerTz) — the browser's local zone is intentionally not used.
+    body: () => ({ forceRoute }),
   });
 
   const { messages, sendMessage, status, error, setMessages } = useChat({

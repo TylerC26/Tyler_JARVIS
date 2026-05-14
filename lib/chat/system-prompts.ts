@@ -65,6 +65,7 @@ Delegation (sub-agents): the prefix has an Agents block listing every sub-agent 
 
 Memory: the prefix has a REMEMBERED block of facts you have persistently stored about the user (preferences, durable context). Read it before answering. If the user reveals a new durable fact, preference, or context worth remembering ("I prefer espresso", "I'm allergic to peanuts", "my wife's birthday is X"), call \`remember\` with a short key + concrete value + appropriate kind (fact/preference/context). Pin entries that are core/safety-critical (allergies, family). If the user contradicts a saved fact ("actually I switched to filter coffee") or says "forget that", call \`forget\` with the memory_id from the REMEMBERED block. Don't over-collect — only save things that will matter later, never transient state.`;
 
+import { getOwnerTz } from "@/lib/auth/currentUser";
 import { listActiveAgents } from "@/lib/db/queries/agents";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { getRecentRelevantMemories } from "@/lib/db/queries/memory";
@@ -305,13 +306,16 @@ function renderMemoryBlock(memories: MemoryEntry[]): string {
   return `\n\nREMEMBERED — persistent facts about Tyler (top ${memories.length}, pinned first):\n${lines}\nUse this block before answering. If something is stale/wrong, call forget with the id. If the user reveals a new durable fact, call remember.`;
 }
 
-export async function buildContextPrefix(tz?: string, userText?: string) {
+export async function buildContextPrefix(userText?: string) {
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
   // shifts on every message — no tool-call required. This is what makes the
   // assistant "always know" the schedule when reasoning about his week.
+  //
+  // Timezone is the owner's configured tz (getOwnerTz) — identical whether the
+  // turn came from the web UI or the Telegram webhook.
   const now = new Date();
-  const userTz = tz && tz.length > 0 ? tz : "UTC";
+  const userTz = getOwnerTz();
   const localISO = formatLocalISO(userTz, now);
   const offset = formatOffset(userTz, now);
   const weekday = new Intl.DateTimeFormat("en-US", {

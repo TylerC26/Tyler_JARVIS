@@ -1,17 +1,20 @@
-import { endOfDay, format, startOfDay } from "date-fns";
 import Link from "next/link";
 import { WifeShiftBadge } from "@/components/modules/calendar/WifeShiftBadge";
 import { TodayTimelineGrid } from "@/components/modules/dashboard/TodayTimelineGrid";
 import { DashboardCard } from "@/components/ui/DashboardCard";
+import { endOfOwnerDay, startOfOwnerDay, todayISO } from "@/lib/date";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 
 export async function TodayTimelineTile() {
-  const now = new Date();
-  const todayDate = format(now, "yyyy-MM-dd");
+  // "Today" is the owner's calendar day, not the server's UTC day.
+  const todayDate = todayISO();
 
   const [events, shifts] = await Promise.all([
-    listEventsInRangeCore(startOfDay(now).toISOString(), endOfDay(now).toISOString()),
+    listEventsInRangeCore(
+      startOfOwnerDay().toISOString(),
+      endOfOwnerDay().toISOString(),
+    ),
     listWifeShiftsInRangeCore(todayDate, todayDate),
   ]);
 

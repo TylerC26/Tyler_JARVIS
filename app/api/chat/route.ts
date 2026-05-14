@@ -21,7 +21,6 @@ export const maxDuration = 60;
 type IncomingBody = {
   messages: UIMessage[];
   forceRoute?: ForceRoute;
-  tz?: string;
 };
 
 export async function POST(req: Request) {
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { messages, forceRoute, tz } = (await req.json()) as IncomingBody;
+  const { messages, forceRoute } = (await req.json()) as IncomingBody;
 
   const modelMessages = await convertToModelMessages(messages);
 
@@ -68,8 +67,8 @@ export async function POST(req: Request) {
 
   const result =
     route === "claude"
-      ? await streamClaudeResponse(modelMessages, { tz })
-      : await streamDeepseekResponse(modelMessages, { tz });
+      ? await streamClaudeResponse(modelMessages)
+      : await streamDeepseekResponse(modelMessages);
 
   return result.toUIMessageStreamResponse({
     onFinish: async () => {

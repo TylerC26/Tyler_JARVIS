@@ -1,7 +1,9 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getOwnerTz } from "@/lib/auth/currentUser";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
@@ -99,8 +101,9 @@ export async function POST(req: Request) {
     const buf = Buffer.from(await image.arrayBuffer());
     const mediaType = image.type || "image/png";
 
+    const tz = getOwnerTz();
     const now = new Date();
-    const contextLine = `Current local time: ${now.toString()}. Today's date: ${now.toISOString().slice(0, 10)} (${now.toLocaleDateString("en-US", { weekday: "long" })}). Timezone offset: ${now.getTimezoneOffset()} minutes from UTC.${wifeName ? ` Wife's name on the roster: "${wifeName}". Extract ONLY her row.` : " No wife-name hint provided — extract the primary subject's row."}`;
+    const contextLine = `Current local time: ${formatInTimeZone(now, tz, "yyyy-MM-dd HH:mm:ss")} (${tz}). Today's date: ${formatInTimeZone(now, tz, "yyyy-MM-dd")} (${formatInTimeZone(now, tz, "EEEE")}).${wifeName ? ` Wife's name on the roster: "${wifeName}". Extract ONLY her row.` : " No wife-name hint provided — extract the primary subject's row."}`;
 
     const { text, finishReason, usage } = await generateText({
       model: anthropic("claude-opus-4-7"),

@@ -7,9 +7,15 @@ export function getOwnerId(): string {
   return process.env.OWNER_ID ?? FALLBACK_OWNER_ID;
 }
 
-// The owner's IANA timezone. The web chat gets this from the browser, but
-// server-side entry points (the Telegram webhook, cron jobs) have no browser —
-// they read it here. Falls back to UTC if unset.
+// The owner's IANA timezone — the single source of truth for every date/time
+// computation in the app. Pinned via env so the result is identical on the
+// Vercel server (UTC box), the deployed site, and the Telegram webhook,
+// regardless of any browser's local timezone.
+//
+// OWNER_TZ is server-only; NEXT_PUBLIC_OWNER_TZ is inlined into the client
+// bundle. Set both to the same value. Falls back to UTC if neither is set.
 export function getOwnerTz(): string {
-  return process.env.OWNER_TZ ?? "UTC";
+  return (
+    process.env.OWNER_TZ ?? process.env.NEXT_PUBLIC_OWNER_TZ ?? "UTC"
+  );
 }

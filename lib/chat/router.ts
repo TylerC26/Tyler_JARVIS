@@ -58,8 +58,6 @@ export async function decideRoute(
   }
 }
 
-type StreamOpts = { tz?: string };
-
 // Pull the most recent user-authored text out of the ModelMessage list so the
 // skills resolver can keyword-match against it. Walks the messages from the
 // end and collects all text parts in that final user turn (multi-part content
@@ -85,12 +83,9 @@ function extractLatestUserText(messages: ModelMessage[]): string {
   return "";
 }
 
-export async function streamDeepseekResponse(
-  messages: ModelMessage[],
-  opts: StreamOpts = {},
-) {
+export async function streamDeepseekResponse(messages: ModelMessage[]) {
   const [prefixContent, system] = await Promise.all([
-    buildContextPrefix(opts.tz, extractLatestUserText(messages)),
+    buildContextPrefix(extractLatestUserText(messages)),
     getActiveResponderPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
@@ -101,12 +96,9 @@ export async function streamDeepseekResponse(
   });
 }
 
-export async function streamClaudeResponse(
-  messages: ModelMessage[],
-  opts: StreamOpts = {},
-) {
+export async function streamClaudeResponse(messages: ModelMessage[]) {
   const [prefixContent, system] = await Promise.all([
-    buildContextPrefix(opts.tz, extractLatestUserText(messages)),
+    buildContextPrefix(extractLatestUserText(messages)),
     getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };

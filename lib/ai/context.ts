@@ -1,13 +1,14 @@
-import { addDays, isBefore, parseISO, startOfDay } from "date-fns";
-import { todayISO } from "@/lib/date";
+import { isBefore, parseISO } from "date-fns";
+import { endOfOwnerDay, startOfOwnerDay, todayISO } from "@/lib/date";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 import type { Task } from "@/lib/db/types";
 import type { AIContext } from "./types";
 
 function partitionTasks(all: Task[], forDate: string) {
-  const todayStart = startOfDay(parseISO(forDate));
-  const todayEnd = startOfDay(addDays(parseISO(forDate), 1));
+  // Day boundaries anchored to the owner's timezone, not the server's.
+  const todayStart = startOfOwnerDay(forDate);
+  const todayEnd = endOfOwnerDay(forDate);
 
   const today: Task[] = [];
   const overdue: Task[] = [];
