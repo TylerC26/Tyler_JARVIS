@@ -5,6 +5,7 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
   type ForceRoute,
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  if (route === "claude" && !isAnthropicConfigured()) {
+  if (route !== "deepseek" && !isAnthropicConfigured()) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY not configured." },
       { status: 503 },
@@ -66,19 +67,21 @@ export async function POST(req: Request) {
   }
 
   const result =
-    route === "claude"
-      ? await streamClaudeResponse(modelMessages)
-      : await streamDeepseekResponse(modelMessages);
+    route === "deepseek"
+      ? await streamDeepseekResponse(modelMessages)
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "haiku" ? "claude-haiku-4-5" : "claude-opus-4-7",
+        );
 
   return result.toUIMessageStreamResponse({
     onFinish: async () => {
       // Persist the assistant turn (text + any tool calls/results) from the
       // settled streamText steps, revalidate caches, then extract memory.
       // Shared with the Telegram webhook via lib/chat/turn.ts.
-      const model = route === "claude" ? "claude-opus-4-7" : "deepseek-chat";
       const assistantText = await persistAssistantSteps(
         await result.steps,
-        model,
+        modelIdForRoute(route),
       );
       revalidateChatPaths();
       void runMemoryExtraction(latestUserText, assistantText);

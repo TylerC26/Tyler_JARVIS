@@ -12,18 +12,31 @@ import {
 import { ALL_TOOLS } from "./tools";
 
 const RouteSchema = z.object({
-  route: z.enum(["deepseek", "claude"]),
+  route: z.enum(["deepseek", "haiku", "claude"]),
 });
+
+// Resolved routing decision:
+// - deepseek → lightweight chitchat, no tools
+// - haiku    → lightweight Claude WITH tools (used for cheap web-lookup turns)
+// - claude   → heavyweight Claude orchestrator (Opus), full DB orchestration
+export type ChatRoute = "deepseek" | "haiku" | "claude";
+
+// Anthropic model ids the Claude routes can run on.
+export type ClaudeModelId = "claude-opus-4-7" | "claude-haiku-4-5";
+
+// Identifier persisted to chat_messages.model for a resolved route.
+export type ChatModelId = ClaudeModelId | "deepseek-chat";
+
+export function modelIdForRoute(route: ChatRoute): ChatModelId {
+  if (route === "deepseek") return "deepseek-chat";
+  if (route === "haiku") return "claude-haiku-4-5";
+  return "claude-opus-4-7";
+}
 
 export type ForceRoute = "auto" | "deepseek" | "claude";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
-};
-
-export type RouteResult = {
-  model: "deepseek-chat" | "claude-opus-4-7";
-  result: ReturnType<typeof streamText>;
 };
 
 export function isAnthropicConfigured(): boolean {
@@ -37,7 +50,7 @@ export function isDeepseekConfigured(): boolean {
 export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
-): Promise<"deepseek" | "claude"> {
+): Promise<ChatRoute> {
   if (opts.forceRoute === "claude") return "claude";
   if (opts.forceRoute === "deepseek") return "deepseek";
 
@@ -97,14 +110,17 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   });
 }
 
-export async function streamClaudeResponse(messages: ModelMessage[]) {
+export async function streamClaudeResponse(
+  messages: ModelMessage[],
+  model: ClaudeModelId = "claude-opus-4-7",
+) {
   const [prefixContent, system] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),
     getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   return streamText({
-    model: anthropic("claude-opus-4-7"),
+    model: anthropic(model),
     system,
     messages: [ctxPrefix, ...messages],
     tools: {

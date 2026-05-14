@@ -11,15 +11,17 @@ import { createMemoryCore } from "@/lib/db/core/memory";
 import type { ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
 import {
+  type ChatModelId,
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
   type ForceRoute,
 } from "./router";
 
-export type ChatModel = "claude-opus-4-7" | "deepseek-chat";
+export type ChatModel = ChatModelId;
 
 // Minimal shape of an AI SDK v6 step we read from. `streamText`'s StepResult
 // carries more, but we only need the text + tool activity.
@@ -129,20 +131,22 @@ export async function runChatTurn(
   await appendMessage({ role: "user", content: latestUserText });
 
   const route = await decideRoute(modelMessages, { forceRoute });
-  if (route === "claude" && !isAnthropicConfigured()) {
+  if (route !== "deepseek" && !isAnthropicConfigured()) {
     throw new Error("ANTHROPIC_API_KEY not configured.");
   }
   if (route === "deepseek" && !isDeepseekConfigured()) {
     throw new Error("DEEPSEEK_API_KEY not configured.");
   }
 
-  const model: ChatModel =
-    route === "claude" ? "claude-opus-4-7" : "deepseek-chat";
+  const model: ChatModel = modelIdForRoute(route);
 
   const result =
-    route === "claude"
-      ? await streamClaudeResponse(modelMessages)
-      : await streamDeepseekResponse(modelMessages);
+    route === "deepseek"
+      ? await streamDeepseekResponse(modelMessages)
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "haiku" ? "claude-haiku-4-5" : "claude-opus-4-7",
+        );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
   // `.steps` / `.text` settle.
