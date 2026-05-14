@@ -8,11 +8,12 @@ Route to "claude" when:
 - The user is asking you to add, log, create, update, complete, dismiss, or remove anything (tasks, calendar events, projects, skills, memory).
 - The user is asking a question that requires reading their actual data (e.g. "what tasks are due today", "what's on my calendar Friday", "how's Lemon Lab going").
 - The user wants a brief, summary, or analysis of their state.
+- The question needs current, real-world info — anything time-sensitive or look-it-up: news, weather, prices, scores, "search for…", "what's the latest…", or facts likely past a training cutoff. Only Claude has the web_search tool; deepseek would answer from stale memory.
 - You're unsure. Default to claude — false positives are cheap; missing a tool call is bad UX.
 
 Route to "deepseek" when:
 - Chitchat, greetings, single-word reactions ("lol", "thanks", "ok"), generic banter.
-- Generic factual or opinion questions not grounded in the user's own data ("what's a good morning routine?").
+- Timeless generic knowledge or opinion questions ("what's a good morning routine?", "explain X") — NOT anything time-sensitive or that benefits from a web lookup.
 - The user is just continuing a non-data conversation.
 
 Output strictly { route: "claude" | "deepseek" }. No prose.`;
