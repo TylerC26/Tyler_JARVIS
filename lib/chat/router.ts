@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
 import { generateObject, stepCountIs, streamText, type ModelMessage } from "ai";
 import { z } from "zod";
+import { getOwnerTz } from "@/lib/auth/currentUser";
 import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
@@ -106,7 +107,23 @@ export async function streamClaudeResponse(messages: ModelMessage[]) {
     model: anthropic("claude-opus-4-7"),
     system,
     messages: [ctxPrefix, ...messages],
-    tools: ALL_TOOLS,
-    stopWhen: stepCountIs(6),
+    tools: {
+      ...ALL_TOOLS,
+      // Anthropic provider-defined web search — Claude runs the search
+      // server-side (billed via ANTHROPIC_API_KEY, no separate search key).
+      // Kept here rather than in ALL_TOOLS because it's Anthropic-only and
+      // ALL_TOOLS is sliced for sub-agents that may run on DeepSeek.
+      // Using the stable search-only version (the 20260209 variant bundles
+      // server-side code execution, which we don't want here).
+      web_search: anthropic.tools.webSearch_20250305({
+        maxUses: 5,
+        userLocation: {
+          type: "approximate",
+          country: "HK",
+          timezone: getOwnerTz(),
+        },
+      }),
+    },
+    stopWhen: stepCountIs(8),
   });
 }
