@@ -38,8 +38,14 @@ export async function POST(req: Request) {
 
   // 3. Only handle plain text messages — ignore stickers, edits, joins, etc.
   const message = update.message;
-  const text = message?.text?.trim();
-  if (!message || !text) return OK;
+  const rawText = message?.text?.trim();
+  if (!message || !rawText) return OK;
+
+  // Prepend quoted context when the user replies to a specific message.
+  const replyQuote = message.reply_to_message?.text
+    ? `[Replying to: "${message.reply_to_message.text}"]\n\n`
+    : "";
+  const text = replyQuote + rawText;
 
   // 4. Single-user allowlist — silently ignore anyone but the owner.
   const allowedChatId = process.env.TELEGRAM_ALLOWED_CHAT_ID;
@@ -60,7 +66,7 @@ export async function POST(req: Request) {
     try {
       await sendChatAction(chatId, "typing");
 
-      const history = dbToUIMessages(await listMessages(40));
+      const history = dbToUIMessages(await listMessages(60));
       const newUserMessage: UIMessage = {
         id: crypto.randomUUID(),
         role: "user",
@@ -76,7 +82,7 @@ export async function POST(req: Request) {
         latestUserText: text,
       });
 
-      await sendMessage(chatId, assistantText || "(no text response)");
+      await sendMessage(chatId, assistantText || "(no text response)", message.message_id);
     } catch (e) {
       console.error("[telegram] turn failed:", e);
       await sendMessage(

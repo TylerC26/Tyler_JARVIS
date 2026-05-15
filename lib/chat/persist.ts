@@ -53,9 +53,10 @@ export async function listMessages(limit = 200): Promise<ChatMessage[]> {
     .from("chat_messages")
     .select("*")
     .eq("owner_id", getOwnerId())
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(limit);
-  return (data as ChatMessage[] | null) ?? [];
+  const rows = (data as ChatMessage[] | null) ?? [];
+  return rows.reverse();
 }
 
 export async function clearThread(): Promise<{ ok: boolean; error?: string }> {

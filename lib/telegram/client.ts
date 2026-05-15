@@ -77,14 +77,18 @@ function chunkText(text: string): string[] {
 export async function sendMessage(
   chatId: number | string,
   text: string,
+  replyToMessageId?: number,
 ): Promise<TelegramResult<void>> {
   const body = text.trim() || "(empty response)";
+  let isFirst = true;
   for (const chunk of chunkText(body)) {
-    const res = await tgFetch<unknown>("sendMessage", {
-      chat_id: chatId,
-      text: chunk,
-    });
+    const payload: Record<string, unknown> = { chat_id: chatId, text: chunk };
+    if (replyToMessageId && isFirst) {
+      payload.reply_parameters = { message_id: replyToMessageId };
+    }
+    const res = await tgFetch<unknown>("sendMessage", payload);
     if (!res.ok) return res;
+    isFirst = false;
   }
   return { ok: true, data: undefined };
 }

@@ -18,6 +18,7 @@ export type TelegramMessage = {
   from?: TelegramUser;
   text?: string;
   date: number;
+  reply_to_message?: TelegramMessage;
 };
 
 export type TelegramUpdate = {
