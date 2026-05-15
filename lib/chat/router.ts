@@ -7,6 +7,7 @@ import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
   getActiveOrchestratorPrompt,
+  getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
 
@@ -21,7 +22,7 @@ const RouteSchema = z.object({
 export type ChatRoute = "deepseek" | "haiku" | "claude";
 
 // Anthropic model ids the Claude routes can run on.
-export type ClaudeModelId = "claude-opus-4-7" | "claude-haiku-4-5";
+export type ClaudeModelId = "claude-opus-4-7" | "claude-sonnet-4-6" | "claude-haiku-4-5";
 
 // Identifier persisted to chat_messages.model for a resolved route.
 export type ChatModelId = ClaudeModelId | "deepseek-chat";
@@ -29,7 +30,7 @@ export type ChatModelId = ClaudeModelId | "deepseek-chat";
 export function modelIdForRoute(route: ChatRoute): ChatModelId {
   if (route === "deepseek") return "deepseek-chat";
   if (route === "haiku") return "claude-haiku-4-5";
-  return "claude-opus-4-7";
+  return "claude-sonnet-4-6";
 }
 
 export type ForceRoute = "auto" | "deepseek" | "claude";
@@ -99,21 +100,19 @@ function extractLatestUserText(messages: ModelMessage[]): string {
 export async function streamDeepseekResponse(messages: ModelMessage[]) {
   const [prefixContent, system] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),
-    getActiveOrchestratorPrompt(),
+    getActiveResponderPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   return streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
-    tools: ALL_TOOLS,
-    stopWhen: stepCountIs(8),
   });
 }
 
 export async function streamClaudeResponse(
   messages: ModelMessage[],
-  model: ClaudeModelId = "claude-opus-4-7",
+  model: ClaudeModelId = "claude-sonnet-4-6",
 ) {
   const [prefixContent, system] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),

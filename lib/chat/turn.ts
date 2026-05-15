@@ -145,7 +145,7 @@ export async function runChatTurn(
       ? await streamDeepseekResponse(modelMessages)
       : await streamClaudeResponse(
           modelMessages,
-          route === "haiku" ? "claude-haiku-4-5" : "claude-opus-4-7",
+          route === "haiku" ? "claude-haiku-4-5" : "claude-sonnet-4-6",
         );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
