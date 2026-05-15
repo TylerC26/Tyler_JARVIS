@@ -7,7 +7,6 @@ import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
   getActiveOrchestratorPrompt,
-  getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
 
@@ -100,13 +99,15 @@ function extractLatestUserText(messages: ModelMessage[]): string {
 export async function streamDeepseekResponse(messages: ModelMessage[]) {
   const [prefixContent, system] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),
-    getActiveResponderPrompt(),
+    getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   return streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
+    tools: ALL_TOOLS,
+    stopWhen: stepCountIs(8),
   });
 }
 
