@@ -12,13 +12,19 @@ type Props = {
 
 export function ChatThread({ messages, pending, activeModel }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const initialScrollDone = useRef(false);
 
   useEffect(() => {
     const c = containerRef.current;
     if (!c) return;
-    // Autoscroll if user is already near bottom
-    const nearBottom =
-      c.scrollHeight - c.scrollTop - c.clientHeight < 120;
+    if (!initialScrollDone.current) {
+      // On first render, always jump to the bottom so latest messages are visible.
+      c.scrollTop = c.scrollHeight;
+      initialScrollDone.current = true;
+      return;
+    }
+    // On subsequent updates, only autoscroll if already near the bottom.
+    const nearBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 120;
     if (nearBottom) c.scrollTop = c.scrollHeight;
   }, [messages]);
 
