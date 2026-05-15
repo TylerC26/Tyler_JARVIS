@@ -823,6 +823,99 @@ export const forgetTool = tool({
   },
 });
 
+// ---------- cron jobs ----------
+
+import {
+  createCronJobCore,
+  deleteCronJobCore,
+  listCronJobsCore,
+  updateCronJobCore,
+  validateSchedule,
+} from "@/lib/db/core/cron-jobs";
+
+export const createCronJobTool = tool({
+  description:
+    "Schedule a recurring automation that runs a Jarvis prompt on a cron schedule. Use when the user says 'every morning…', 'remind me every…', 'run X daily at…', etc. Schedule is a standard 5-field UTC cron expression (e.g. '0 8 * * *' = 8am UTC daily). The prompt is sent to Jarvis as a chat turn when the job fires — results go to Telegram and the chat thread.",
+  inputSchema: z.object({
+    name: z.string().describe("Short display name for the automation (e.g. 'Morning Brief')."),
+    description: z.string().optional().describe("One-line description of what it does."),
+    schedule: z
+      .string()
+      .describe(
+        "5-field UTC cron expression. Examples: '0 8 * * *' = 8am daily, '0 9 * * 1' = Monday 9am, '*/30 * * * *' = every 30 min.",
+      ),
+    prompt: z
+      .string()
+      .describe(
+        "What Jarvis should do when the job fires. Write it as a direct instruction, e.g. 'Generate my morning brief' or 'Add a task: review weekly goals'.",
+      ),
+  }),
+  execute: async (input) => {
+    if (!validateSchedule(input.schedule)) {
+      return { ok: false, error: `Invalid cron expression: "${input.schedule}". Use 5-field UTC syntax.` };
+    }
+    const result = await createCronJobCore({
+      name: input.name,
+      description: input.description ?? null,
+      schedule: input.schedule,
+      prompt: input.prompt,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Cron job scheduled: "${result.data.name}" — ${input.schedule}. Next run: ${result.data.next_run_at}.`,
+      job: result.data,
+    };
+  },
+});
+
+export const listCronJobsTool = tool({
+  description: "List all scheduled cron automations.",
+  inputSchema: z.object({}),
+  execute: async () => {
+    const jobs = await listCronJobsCore();
+    return {
+      ok: true,
+      count: jobs.length,
+      jobs: jobs.map((j) => ({
+        id: j.id,
+        name: j.name,
+        schedule: j.schedule,
+        prompt: j.prompt,
+        active: j.active,
+        last_run_at: j.last_run_at,
+        next_run_at: j.next_run_at,
+      })),
+    };
+  },
+});
+
+export const toggleCronJobTool = tool({
+  description: "Enable or disable a cron job by id.",
+  inputSchema: z.object({
+    job_id: z.string(),
+    active: z.boolean().describe("true to enable, false to disable."),
+  }),
+  execute: async ({ job_id, active }) => {
+    const result = await updateCronJobCore(job_id, { active });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `"${result.data.name}" ${active ? "enabled" : "disabled"}.`,
+    };
+  },
+});
+
+export const deleteCronJobTool = tool({
+  description: "Permanently delete a cron job by id.",
+  inputSchema: z.object({ job_id: z.string() }),
+  execute: async ({ job_id }) => {
+    const result = await deleteCronJobCore(job_id);
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, message: "Cron job deleted." };
+  },
+});
+
 // ---------- vision ----------
 
 export const visionAnalyzeTool = tool({
@@ -898,6 +991,10 @@ export const ALL_TOOLS = {
   remember: rememberTool,
   forget: forgetTool,
   vision_analyze: visionAnalyzeTool,
+  create_cron_job: createCronJobTool,
+  list_cron_jobs: listCronJobsTool,
+  toggle_cron_job: toggleCronJobTool,
+  delete_cron_job: deleteCronJobTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

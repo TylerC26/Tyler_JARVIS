@@ -189,6 +189,20 @@ export type TelegramUpdateRow = {
   created_at: string;
 };
 
+export type CronJob = {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  schedule: string;
+  prompt: string;
+  active: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AiBriefKind = "morning" | "evening";
 export type AiSuggestionKind = "productivity";
 export type AiSuggestionStatus = "open" | "dismissed" | "acted";
@@ -468,6 +482,23 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<TelegramUpdateRow>;
+        Relationships: [];
+      };
+      cron_jobs: {
+        Row: CronJob;
+        Insert: {
+          owner_id: string;
+          name: string;
+          description?: string | null;
+          schedule: string;
+          prompt: string;
+          active?: boolean;
+          last_run_at?: string | null;
+          next_run_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<CronJob>;
         Relationships: [];
       };
     };

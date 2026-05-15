@@ -36,6 +36,10 @@ const CATEGORY_MAP: Record<string, string> = {
   remember: "Memory",
   forget: "Memory",
   vision_analyze: "Vision",
+  create_cron_job: "Automation",
+  list_cron_jobs: "Automation",
+  toggle_cron_job: "Automation",
+  delete_cron_job: "Automation",
 };
 
 const CATEGORY_GLYPHS: Record<string, string> = {
@@ -47,6 +51,7 @@ const CATEGORY_GLYPHS: Record<string, string> = {
   Agents: "◔",
   Memory: "◐",
   Vision: "◈",
+  Automation: "⏲",
   "Web Search": "◎",
 };
 
@@ -87,7 +92,7 @@ export default function ToolsPage() {
     },
   ]);
 
-  const ORDER = ["Tasks", "Calendar", "Projects", "Skills", "Query", "Agents", "Memory", "Vision", "Web Search"];
+  const ORDER = ["Tasks", "Calendar", "Projects", "Skills", "Query", "Agents", "Memory", "Vision", "Automation", "Web Search"];
   const categories: Category[] = ORDER.map((label) => ({
     label,
     glyph: CATEGORY_GLYPHS[label] ?? "◈",
