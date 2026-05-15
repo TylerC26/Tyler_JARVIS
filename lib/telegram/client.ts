@@ -120,3 +120,26 @@ export async function setWebhook(
 export async function deleteWebhook(): Promise<TelegramResult<unknown>> {
   return tgFetch<unknown>("deleteWebhook", {});
 }
+
+// Resolve a file_id to a file_path that can be used to download it.
+export async function getFile(
+  fileId: string,
+): Promise<TelegramResult<{ file_path: string }>> {
+  return tgFetch<{ file_path: string }>("getFile", { file_id: fileId });
+}
+
+// Download a file by its file_path and return raw bytes as a Buffer.
+// Returns null on any network or auth failure.
+export async function downloadFile(filePath: string): Promise<Buffer | null> {
+  const token = botToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${API}/file/bot${token}/${filePath}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+}

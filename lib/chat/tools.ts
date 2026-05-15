@@ -1,4 +1,5 @@
-import { tool } from "ai";
+import { generateText, tool } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
@@ -822,6 +823,57 @@ export const forgetTool = tool({
   },
 });
 
+// ---------- vision ----------
+
+export const visionAnalyzeTool = tool({
+  description:
+    "Analyze an image using Claude Sonnet vision. Use this when the user shares an image URL and asks what's in it, wants a description, needs text extracted from a screenshot, or asks any question about an image.",
+  inputSchema: z.object({
+    image_url: z
+      .string()
+      .describe(
+        "Publicly accessible image URL (https://…) or a base64 data URI (data:image/…;base64,…).",
+      ),
+    prompt: z
+      .string()
+      .optional()
+      .describe(
+        "What to look for or analyze. Defaults to a general description including text, objects, people, colors, and context.",
+      ),
+  }),
+  execute: async ({ image_url, prompt }) => {
+    try {
+      const image = image_url.startsWith("http")
+        ? new URL(image_url)
+        : image_url; // data URI or raw base64
+      const { text } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", image },
+              {
+                type: "text",
+                text:
+                  prompt ??
+                  "Describe this image in detail. Note any text, objects, people, colors, and overall context.",
+              },
+            ],
+          },
+        ],
+        maxOutputTokens: 1024,
+      });
+      return { ok: true, analysis: text };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Vision analysis failed.",
+      };
+    }
+  },
+});
+
 // ---------- registry ----------
 
 export const ALL_TOOLS = {
@@ -845,6 +897,7 @@ export const ALL_TOOLS = {
   delegate_to_agent: delegateToAgentTool,
   remember: rememberTool,
   forget: forgetTool,
+  vision_analyze: visionAnalyzeTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;
