@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       ? await streamDeepseekResponse(modelMessages)
       : await streamClaudeResponse(
           modelMessages,
-          route === "haiku" ? "claude-haiku-4-5" : "claude-sonnet-4-6",
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
         );
 
   return result.toUIMessageStreamResponse({

@@ -160,7 +160,7 @@ async function runChatTurnInner(
       ? await streamDeepseekResponse(modelMessages)
       : await streamClaudeResponse(
           modelMessages,
-          route === "haiku" ? "claude-haiku-4-5" : "claude-sonnet-4-6",
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
         );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so

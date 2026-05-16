@@ -15,7 +15,7 @@ type Props = {
   onClose?: () => void;
 };
 
-type ForceRoute = "auto" | "deepseek" | "claude";
+type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
 
 export function ChatPanel({
   initialMessages,
@@ -45,11 +45,13 @@ export function ChatPanel({
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const activeModel = pending
-    ? forceRoute === "claude"
+    ? forceRoute === "opus"
       ? "claude-opus-4-7"
-      : forceRoute === "deepseek"
-        ? "deepseek-chat"
-        : "routing…"
+      : forceRoute === "sonnet"
+        ? "claude-sonnet-4-6"
+        : forceRoute === "deepseek"
+          ? "deepseek-chat"
+          : "routing…"
     : null;
   void lastAssistant;
 
@@ -111,8 +113,11 @@ export function ChatPanel({
             <option value="deepseek" disabled={!configured.deepseek}>
               DEEPSEEK
             </option>
-            <option value="claude" disabled={!configured.anthropic}>
-              CLAUDE
+            <option value="sonnet" disabled={!configured.anthropic}>
+              SONNET
+            </option>
+            <option value="opus" disabled={!configured.anthropic}>
+              OPUS
             </option>
           </select>
           <ClearThreadButton

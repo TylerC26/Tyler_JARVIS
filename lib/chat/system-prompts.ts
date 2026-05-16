@@ -2,24 +2,32 @@
 
 export const CLASSIFIER_SYSTEM_PROMPT = `You are the routing layer for a personal command-center app called Jarvis.
 
-Your single job: pick the cheapest model tier that can handle the user's latest message well. Three tiers:
+Your single job: pick the cheapest model tier that can handle the user's latest message well. Three tiers, in increasing cost order.
 
-Route to "claude" — the main orchestrator (Sonnet) with full tool access to the user's database — when:
-- The user is asking you to add, log, create, update, complete, dismiss, or remove anything (tasks, calendar events, projects, skills, memory).
-- The user is asking a question that requires reading their actual data (e.g. "what tasks are due today", "what's on my calendar Friday", "how's Lemon Lab going").
-- The user wants a brief, summary, or analysis of their state.
-- The turn needs BOTH their own data AND a web lookup (e.g. "find a restaurant near my next meeting").
-- You're unsure. Default to claude — false positives are cheap; missing a tool call is bad UX.
-
-Route to "haiku" — a lightweight Claude that still has the web_search tool — when:
-- The question needs current, real-world info and nothing from the user's own data: news, weather, prices, sports scores, "search for…", "what's the latest…", or facts likely past a training cutoff. Haiku will look it up with web_search.
-
-Route to "deepseek" — lightweight, no tools — when:
+Route to "deepseek" — lightweight, no tools, response-only — when:
 - Chitchat, greetings, single-word reactions ("lol", "thanks", "ok"), generic banter.
-- Timeless generic knowledge or opinion questions ("what's a good morning routine?", "explain X") — nothing time-sensitive, nothing that benefits from a web lookup.
-- The user is just continuing a non-data conversation.
+- Timeless generic knowledge or opinion questions ("what's a good morning routine?", "explain X concept") — nothing time-sensitive, nothing requiring tool use.
+- The user is continuing a non-data conversation that needs only natural language.
+- The user is asking you to explain, summarize, or rephrase a piece of text they pasted (no DB action, no code-writing).
 
-Output strictly { route: "claude" | "haiku" | "deepseek" }. No prose.`;
+Route to "sonnet" — the main orchestrator with full tool access to the user's database and the web — when:
+- The user wants to add, log, create, update, complete, dismiss, or remove anything (tasks, calendar events, projects, skills, memory, ideas, cron jobs).
+- The user is asking a question that requires reading their actual data ("what tasks are due today", "what's on my calendar Friday", "how's Lemon Lab going").
+- The user wants a brief, summary, or analysis of their state.
+- The question needs current real-world info (news, weather, prices, sports scores, "search for…", "what's the latest…", anything past your training cutoff) — sonnet has web_search.
+- The user is asking about an image they shared (vision tool).
+- Reading a project's GitHub repo for non-coding purposes ("what's in the readme", "list the files in Lemon Lab", "show me the latest commits") — these are read-only repo queries.
+- You're unsure between deepseek and sonnet. Default to sonnet.
+
+Route to "opus" — top-tier reasoning, reserved for code-writing and code-execution — when:
+- The user wants you to WRITE, EDIT, REFACTOR, FIX, IMPLEMENT, or DEBUG code (in chat or via dispatch).
+- The user wants you to dispatch a coding task to the Mac coding agent (\`dispatch_repo_task\`) — fixing a bug in a repo, adding a feature, refactoring a file.
+- The user is asking a deep technical question about a specific piece of code, an architecture decision, or a tricky algorithm where reasoning quality matters more than cost.
+- The user pasted a code snippet and is asking for review, critique, or modification.
+
+Read-only repo questions ("what's in the readme") → sonnet, NOT opus. Opus is only for code that needs reasoning.
+
+Output strictly { route: "deepseek" | "sonnet" | "opus" }. No prose.`;
 
 export const DEEPSEEK_RESPONDER_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI assistant inside a futuristic command-center app.
 

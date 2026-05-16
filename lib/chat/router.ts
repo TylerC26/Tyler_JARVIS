@@ -44,28 +44,30 @@ export function recordModelUsage(
 }
 
 const RouteSchema = z.object({
-  route: z.enum(["deepseek", "haiku", "claude"]),
+  route: z.enum(["deepseek", "sonnet", "opus"]),
 });
 
 // Resolved routing decision:
 // - deepseek → lightweight chitchat, no tools
-// - haiku    → lightweight Claude WITH tools (used for cheap web-lookup turns)
-// - claude   → heavyweight Claude orchestrator (Opus), full DB orchestration
-export type ChatRoute = "deepseek" | "haiku" | "claude";
+// - sonnet   → orchestrator with full tool access — handles DB CRUD, queries,
+//              skills, web search, vision, etc. Default for any action turn.
+// - opus     → reserved for coding-execution turns — writing/editing/refactoring
+//              code, repo questions, dispatching remote code tasks.
+export type ChatRoute = "deepseek" | "sonnet" | "opus";
 
 // Anthropic model ids the Claude routes can run on.
-export type ClaudeModelId = "claude-opus-4-7" | "claude-sonnet-4-6" | "claude-haiku-4-5";
+export type ClaudeModelId = "claude-opus-4-7" | "claude-sonnet-4-6";
 
 // Identifier persisted to chat_messages.model for a resolved route.
 export type ChatModelId = ClaudeModelId | "deepseek-chat";
 
 export function modelIdForRoute(route: ChatRoute): ChatModelId {
   if (route === "deepseek") return "deepseek-chat";
-  if (route === "haiku") return "claude-haiku-4-5";
+  if (route === "opus") return "claude-opus-4-7";
   return "claude-sonnet-4-6";
 }
 
-export type ForceRoute = "auto" | "deepseek" | "claude";
+export type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
@@ -83,11 +85,12 @@ export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
 ): Promise<ChatRoute> {
-  if (opts.forceRoute === "claude") return "claude";
+  if (opts.forceRoute === "opus") return "opus";
+  if (opts.forceRoute === "sonnet") return "sonnet";
   if (opts.forceRoute === "deepseek") return "deepseek";
 
-  // No DeepSeek key → fall back to Claude if available, else fail upstream.
-  if (!isDeepseekConfigured()) return "claude";
+  // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
+  if (!isDeepseekConfigured()) return "sonnet";
 
   try {
     const result = await generateObject({
@@ -100,8 +103,8 @@ export async function decideRoute(
     recordModelUsage("deepseek-chat", "classifier", result.usage);
     return result.object.route;
   } catch (e) {
-    console.warn("[chat] classifier failed, defaulting to claude:", e);
-    return "claude";
+    console.warn("[chat] classifier failed, defaulting to sonnet:", e);
+    return "sonnet";
   }
 }
 
