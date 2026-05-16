@@ -170,7 +170,6 @@ export type ChatToolCall = {
 export type ChatMessage = {
   id: string;
   owner_id: string;
-  thread_id: string;
   created_at: string;
   role: ChatRole;
   content: string | null;
@@ -462,7 +461,6 @@ export type Database = {
         Insert: {
           id?: string;
           owner_id: string;
-          thread_id?: string;
           role: ChatRole;
           content?: string | null;
           tool_calls?: ChatToolCall[] | null;

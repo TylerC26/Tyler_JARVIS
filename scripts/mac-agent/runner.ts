@@ -176,7 +176,6 @@ export async function runTask(
       cwd,
       timeout: cfg.daemon.agent_timeout_seconds * 1000,
       reject: false,
-      env: process.env as Record<string, string>,
     });
     child.stdout?.on("data", (chunk: Buffer) => {
       logsBuf += chunk.toString("utf8");

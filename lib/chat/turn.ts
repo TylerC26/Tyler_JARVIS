@@ -29,7 +29,7 @@ export type ChatModel = ChatModelId;
 
 // Minimal shape of an AI SDK v6 step we read from. `streamText`'s StepResult
 // carries more, but we only need the text + tool activity.
-export type StepLike = {
+type StepLike = {
   text?: string;
   toolCalls?: { toolCallId: string; toolName: string; input?: unknown }[];
   toolResults?: { toolCallId: string; toolName: string; output?: unknown }[];
@@ -41,7 +41,6 @@ export type StepLike = {
 export async function persistAssistantSteps(
   steps: StepLike[],
   model: ChatModel,
-  threadId = "main",
 ): Promise<string> {
   const toolCalls: ChatToolCall[] = [];
   const toolResults: { id: string; name: string; result: unknown }[] = [];
@@ -70,7 +69,7 @@ export async function persistAssistantSteps(
     content: text || null,
     tool_calls: toolCalls.length > 0 ? toolCalls : null,
     model,
-  }, threadId);
+  });
 
   for (const r of toolResults) {
     await appendMessage({
@@ -78,7 +77,7 @@ export async function persistAssistantSteps(
       tool_call_id: r.id,
       tool_name: r.name,
       tool_result: r.result as Record<string, unknown>,
-    }, threadId);
+    });
   }
 
   return text;
