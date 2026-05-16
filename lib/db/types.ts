@@ -180,6 +180,8 @@ export type ChatMessage = {
   model: string | null;
   tokens_in: number | null;
   tokens_out: number | null;
+  // null = main Jarvis tab; otherwise scopes the row to one sub-agent thread.
+  agent_slug: string | null;
 };
 
 // Dedupe ledger for the Telegram webhook — one row per processed update_id so
@@ -235,6 +237,9 @@ export type RepoTask = {
   claimed_at: string | null;
   started_at: string | null;
   finished_at: string | null;
+  cleanup_requested_at: string | null;
+  cleanup_done_at: string | null;
+  cleanup_error: string | null;
 };
 
 export type AiBriefKind = "morning" | "evening";
@@ -470,6 +475,7 @@ export type Database = {
           model?: string | null;
           tokens_in?: number | null;
           tokens_out?: number | null;
+          agent_slug?: string | null;
           created_at?: string;
         };
         Update: Partial<ChatMessage>;
@@ -559,6 +565,9 @@ export type Database = {
           claimed_at?: string | null;
           started_at?: string | null;
           finished_at?: string | null;
+          cleanup_requested_at?: string | null;
+          cleanup_done_at?: string | null;
+          cleanup_error?: string | null;
         };
         Update: Partial<RepoTask>;
         Relationships: [];

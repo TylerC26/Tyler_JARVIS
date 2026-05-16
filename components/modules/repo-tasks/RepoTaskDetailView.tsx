@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   cancelRepoTaskAction,
+  requestCleanupAction,
   retryRepoTaskAction,
 } from "@/app/(app)/repo-tasks/actions";
 import { Button } from "@/components/ui/Button";
@@ -91,6 +92,17 @@ export function RepoTaskDetailView({ initialTask }: Props) {
     window.location.href = `/repo-tasks/${result.data.id}`;
   }
 
+  async function handleCleanup() {
+    if (!confirm(`Discard branch "${task.branch}" and clear any leftover changes on the Mac?`)) return;
+    const result = await requestCleanupAction(task.id);
+    if (!result.ok) alert(result.error);
+  }
+
+  const showCleanupButton =
+    task.status === "failed" && task.branch && !task.cleanup_done_at;
+  const cleanupPending =
+    !!task.cleanup_requested_at && !task.cleanup_done_at;
+
   const TERMINAL = task.status === "succeeded" || task.status === "failed" || task.status === "cancelled";
 
   return (
@@ -110,6 +122,16 @@ export function RepoTaskDetailView({ initialTask }: Props) {
             {task.status === "queued" && (
               <Button size="sm" variant="danger" onClick={handleCancel}>
                 cancel
+              </Button>
+            )}
+            {showCleanupButton && (
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={cleanupPending}
+                onClick={handleCleanup}
+              >
+                {cleanupPending ? "cleaning…" : "cancel"}
               </Button>
             )}
             {TERMINAL && (
@@ -194,6 +216,69 @@ export function RepoTaskDetailView({ initialTask }: Props) {
             <p className="font-mono text-sm text-fg-muted whitespace-pre-wrap leading-relaxed">
               {task.result}
             </p>
+          </div>
+        )}
+
+        {/* Cleanup status — visible whenever a cleanup has been requested */}
+        {task.cleanup_requested_at && (
+          <div
+            className={[
+              "rounded-sm border p-4",
+              task.cleanup_error
+                ? "border-danger/40 bg-danger/5"
+                : task.cleanup_done_at
+                  ? "border-success/30 bg-success/5"
+                  : "border-accent/30 bg-accent/5",
+            ].join(" ")}
+          >
+            <p
+              className={[
+                "font-mono text-[10px] uppercase tracking-widest mb-2",
+                task.cleanup_error
+                  ? "text-danger"
+                  : task.cleanup_done_at
+                    ? "text-success"
+                    : "text-accent",
+              ].join(" ")}
+            >
+              // cleanup{" "}
+              {task.cleanup_error
+                ? "failed"
+                : task.cleanup_done_at
+                  ? "complete"
+                  : "in progress"}
+            </p>
+            <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 font-mono text-[11px]">
+              <dt className="text-fg-dim">requested</dt>
+              <dd className="text-fg-muted">{fmtDateTime(task.cleanup_requested_at)}</dd>
+              {task.cleanup_done_at && (
+                <>
+                  <dt className="text-fg-dim">finished</dt>
+                  <dd className="text-fg-muted">{fmtDateTime(task.cleanup_done_at)}</dd>
+                </>
+              )}
+              {task.cleanup_error && (
+                <>
+                  <dt className="text-fg-dim">error</dt>
+                  <dd className="text-danger whitespace-pre-wrap">{task.cleanup_error}</dd>
+                </>
+              )}
+              {task.cleanup_done_at && !task.cleanup_error && (
+                <>
+                  <dt className="text-fg-dim">stash</dt>
+                  <dd className="text-fg-muted">
+                    pre-reset state saved as{" "}
+                    <code className="bg-surface-2 px-1 rounded-sm">
+                      mac-agent cleanup pre-reset (task {task.id.slice(0, 8)})
+                    </code>
+                    {" "}— recover with{" "}
+                    <code className="bg-surface-2 px-1 rounded-sm">git stash list</code>{" "}
+                    /{" "}
+                    <code className="bg-surface-2 px-1 rounded-sm">git stash pop</code>
+                  </dd>
+                </>
+              )}
+            </dl>
           </div>
         )}
 

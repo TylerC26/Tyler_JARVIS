@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   cancelRepoTaskAction,
   createRepoTaskAction,
+  requestCleanupAction,
   retryRepoTaskAction,
 } from "@/app/(app)/repo-tasks/actions";
 import { Button } from "@/components/ui/Button";
@@ -117,6 +118,12 @@ export function RepoTasksView({ initialTasks, allowedSlugs }: Props) {
 
   async function handleRetry(t: RepoTask) {
     const result = await retryRepoTaskAction(t.id);
+    if (!result.ok) alert(result.error);
+  }
+
+  async function handleCleanup(t: RepoTask) {
+    if (!confirm(`Discard branch "${t.branch}" and clear any leftover changes on the Mac?`)) return;
+    const result = await requestCleanupAction(t.id);
     if (!result.ok) alert(result.error);
   }
 
@@ -261,6 +268,19 @@ export function RepoTasksView({ initialTasks, allowedSlugs }: Props) {
                         }}
                       >
                         cancel
+                      </Button>
+                    )}
+                    {t.status === "failed" && t.branch && !t.cleanup_done_at && (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={!!t.cleanup_requested_at}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void handleCleanup(t);
+                        }}
+                      >
+                        {t.cleanup_requested_at ? "cleaning…" : "cancel"}
                       </Button>
                     )}
                     {TERMINAL_STATUSES.includes(t.status) && (

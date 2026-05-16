@@ -96,6 +96,43 @@ export async function cancelRepoTaskCore(
   return { ok: true, data: data as RepoTask };
 }
 
+// Mark a failed task for cleanup. The Mac daemon picks this up via Realtime,
+// stashes any dirty work as a safety net, hard-resets the working tree,
+// deletes the leftover jarvis/* branch, and stamps cleanup_done_at.
+export async function requestCleanupCore(
+  id: string,
+): Promise<CoreResult<RepoTask>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+
+  const src = await getRepoTaskCore(id);
+  if (!src) return { ok: false, error: "Task not found." };
+  if (src.status !== "failed") {
+    return { ok: false, error: `Cleanup is only for failed tasks (this one is ${src.status}).` };
+  }
+  if (!src.branch) {
+    return { ok: false, error: "This task didn't create a branch — nothing to clean up." };
+  }
+  if (src.cleanup_requested_at && !src.cleanup_done_at && !src.cleanup_error) {
+    return { ok: false, error: "Cleanup already in progress." };
+  }
+
+  const { data, error } = await supabase
+    .from("repo_tasks")
+    .update({
+      cleanup_requested_at: new Date().toISOString(),
+      cleanup_done_at: null,
+      cleanup_error: null,
+    })
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as RepoTask };
+}
+
 // Re-enqueue a fresh task using the source row's instruction + repo + agent.
 // The original row is left intact for history; a new row is created with
 // status='queued'.

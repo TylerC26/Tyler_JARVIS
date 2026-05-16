@@ -106,6 +106,44 @@ export async function commit(cwd: string, message: string): Promise<string> {
   return stdout.trim();
 }
 
+export async function branchExists(cwd: string, branch: string): Promise<boolean> {
+  try {
+    await execa("git", ["rev-parse", "--verify", `refs/heads/${branch}`], { cwd });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function stashAll(cwd: string, message: string): Promise<boolean> {
+  // -u captures untracked files. Returns true if anything was stashed.
+  const { stdout } = await execa(
+    "git",
+    ["stash", "push", "-u", "-m", message],
+    { cwd, reject: false },
+  );
+  return !stdout.includes("No local changes to save");
+}
+
+export async function hardReset(cwd: string): Promise<void> {
+  await execa("git", ["reset", "--hard", "HEAD"], { cwd });
+}
+
+export async function cleanUntracked(cwd: string): Promise<void> {
+  // -f force, -d include dirs. Does NOT touch .gitignored files (no -x).
+  await execa("git", ["clean", "-fd"], { cwd });
+}
+
+export async function checkout(cwd: string, branch: string): Promise<void> {
+  await execa("git", ["checkout", branch], { cwd });
+}
+
+export async function deleteBranch(cwd: string, branch: string): Promise<void> {
+  // -D = force delete (the branch may be ahead of base; for failed tasks it's
+  // usually equal to base since no commit happened, but be defensive).
+  await execa("git", ["branch", "-D", branch], { cwd });
+}
+
 export async function diffStat(cwd: string, baseBranch: string): Promise<GitDiffStat> {
   const { stdout } = await execa("git", ["diff", "--stat", `${baseBranch}...HEAD`], { cwd });
   // Last non-empty line typically: " 3 files changed, 12 insertions(+), 1 deletion(-)"

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   cancelRepoTaskCore,
   createRepoTaskCore,
+  requestCleanupCore,
   retryRepoTaskCore,
 } from "@/lib/db/core/repo-tasks";
 import { resolveRepoFuzzy } from "@/lib/repo-tasks/allowlist";
@@ -47,6 +48,15 @@ export async function retryRepoTaskAction(id: string) {
   if (result.ok) {
     revalidatePath("/repo-tasks");
     revalidatePath(`/repo-tasks/${result.data.id}`);
+  }
+  return result;
+}
+
+export async function requestCleanupAction(id: string) {
+  const result = await requestCleanupCore(id);
+  if (result.ok) {
+    revalidatePath("/repo-tasks");
+    revalidatePath(`/repo-tasks/${id}`);
   }
   return result;
 }

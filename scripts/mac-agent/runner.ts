@@ -9,15 +9,21 @@ import type { RepoTask } from "../../lib/db/types";
 import { validateRepoPath } from "./allowlist";
 import type { DaemonConfig } from "./config";
 import {
+  branchExists,
+  checkout,
   checkoutNewBranch,
+  cleanUntracked,
   commit,
   currentBranch,
+  deleteBranch,
   diffStat,
+  hardReset,
   isDangerousPath,
   isInsideWorkTree,
   stageAll,
   stagedDiffLineCount,
   stagedFiles,
+  stashAll,
   workTreeIsClean,
 } from "./git";
 import { log } from "./log";
@@ -307,6 +313,80 @@ function extractFinalAgentText(logs: string): string | null {
   // Fallback: last 600 chars of raw output.
   const tail = logs.slice(-600).trim();
   return tail || null;
+}
+
+// Discard any uncommitted state in the repo and delete the failed jarvis/*
+// branch. Safety net: anything actually dirty gets stashed first so the user
+// can recover via `git stash list` / `git stash pop`.
+export async function runCleanup(
+  supabase: SupabaseClient,
+  cfg: DaemonConfig,
+  task: RepoTask,
+): Promise<void> {
+  if (!task.branch) {
+    await stampCleanupError(supabase, task.id, "Task has no branch to clean up.");
+    return;
+  }
+  const allow = validateRepoPath(task.repo_path, task.agent, cfg);
+  if (!allow.ok) {
+    await stampCleanupError(supabase, task.id, allow.error);
+    return;
+  }
+  const cwd = allow.repo.path;
+
+  try {
+    if (!(await isInsideWorkTree(cwd))) {
+      throw new Error(`${cwd} is not a git work tree.`);
+    }
+
+    // 1. Stash anything dirty as a safety net. The user can `git stash pop`.
+    const stashed = await stashAll(
+      cwd,
+      `mac-agent cleanup pre-reset (task ${task.id.slice(0, 8)})`,
+    );
+
+    // 2. If we're sitting on the failed branch, switch off it first — can't
+    //    delete the branch you're on. Fall back to main if base_branch missing.
+    const here = await currentBranch(cwd);
+    const target = task.base_branch || "main";
+    if (here === task.branch) {
+      await checkout(cwd, target);
+    }
+
+    // 3. Now hard reset + clean on the target branch — the stash already saved
+    //    anything worth saving. This wipes residual untracked from the agent.
+    await hardReset(cwd);
+    await cleanUntracked(cwd);
+
+    // 4. Delete the failed branch if it still exists.
+    if (await branchExists(cwd, task.branch)) {
+      await deleteBranch(cwd, task.branch);
+    }
+
+    const note = stashed
+      ? `Cleaned. Pre-reset state saved to git stash (label "mac-agent cleanup pre-reset (task ${task.id.slice(0, 8)})").`
+      : "Cleaned. Nothing to stash.";
+
+    await patch(supabase, task.id, {
+      cleanup_done_at: new Date().toISOString(),
+      cleanup_error: null,
+    });
+    log.info("cleanup done", { id: task.id, note });
+  } catch (e) {
+    await stampCleanupError(supabase, task.id, String(e));
+  }
+}
+
+async function stampCleanupError(
+  supabase: SupabaseClient,
+  taskId: string,
+  message: string,
+): Promise<void> {
+  await patch(supabase, taskId, {
+    cleanup_done_at: new Date().toISOString(),
+    cleanup_error: message,
+  });
+  log.warn("cleanup failed", { id: taskId, error: message });
 }
 
 // Backfill helper exposed for the subscriber's startup sweep.
