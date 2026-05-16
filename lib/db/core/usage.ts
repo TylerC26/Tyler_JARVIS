@@ -45,12 +45,21 @@ export async function recordUsageCore(input: RecordUsageInput): Promise<void> {
   if (error) console.warn("[usage] insert failed:", error.message);
 }
 
+export type UsageByModel = {
+  model: string;
+  cost_usd: number;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+};
+
 export type UsageByProvider = {
   provider: UsageProvider;
   cost_usd: number;
   calls: number;
   input_tokens: number;
   output_tokens: number;
+  models: UsageByModel[];
 };
 
 export type SpendSummary = {
@@ -59,7 +68,7 @@ export type SpendSummary = {
   rangeStart: string; // ISO
 };
 
-// Sum spend since the given ISO timestamp, grouped by provider.
+// Sum spend since the given ISO timestamp, grouped by provider then model.
 export async function getSpendSummaryCore(
   rangeStart: string,
 ): Promise<SpendSummary> {
@@ -68,7 +77,7 @@ export async function getSpendSummaryCore(
 
   const { data, error } = await supabase
     .from("usage_events")
-    .select("provider, cost_usd, input_tokens, output_tokens")
+    .select("provider, model, cost_usd, input_tokens, output_tokens")
     .eq("owner_id", getOwnerId())
     .gte("created_at", rangeStart);
 
@@ -77,32 +86,58 @@ export async function getSpendSummaryCore(
     return { total_usd: 0, byProvider: [], rangeStart };
   }
 
-  const buckets = new Map<UsageProvider, UsageByProvider>();
+  type Acc = Omit<UsageByProvider, "models"> & {
+    modelMap: Map<string, UsageByModel>;
+  };
+  const buckets = new Map<UsageProvider, Acc>();
   let total = 0;
 
   for (const row of data as Pick<
     UsageEvent,
-    "provider" | "cost_usd" | "input_tokens" | "output_tokens"
+    "provider" | "model" | "cost_usd" | "input_tokens" | "output_tokens"
   >[]) {
-    total += Number(row.cost_usd);
+    const cost = Number(row.cost_usd);
+    total += cost;
+
     const bucket = buckets.get(row.provider) ?? {
       provider: row.provider,
       cost_usd: 0,
       calls: 0,
       input_tokens: 0,
       output_tokens: 0,
+      modelMap: new Map<string, UsageByModel>(),
     };
-    bucket.cost_usd += Number(row.cost_usd);
+    bucket.cost_usd += cost;
     bucket.calls += 1;
     bucket.input_tokens += row.input_tokens;
     bucket.output_tokens += row.output_tokens;
+
+    const modelBucket = bucket.modelMap.get(row.model) ?? {
+      model: row.model,
+      cost_usd: 0,
+      calls: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+    };
+    modelBucket.cost_usd += cost;
+    modelBucket.calls += 1;
+    modelBucket.input_tokens += row.input_tokens;
+    modelBucket.output_tokens += row.output_tokens;
+    bucket.modelMap.set(row.model, modelBucket);
+
     buckets.set(row.provider, bucket);
   }
 
   return {
     total_usd: Number(total.toFixed(4)),
     byProvider: Array.from(buckets.values())
-      .map((b) => ({ ...b, cost_usd: Number(b.cost_usd.toFixed(4)) }))
+      .map(({ modelMap, ...rest }) => ({
+        ...rest,
+        cost_usd: Number(rest.cost_usd.toFixed(4)),
+        models: Array.from(modelMap.values())
+          .map((m) => ({ ...m, cost_usd: Number(m.cost_usd.toFixed(4)) }))
+          .sort((a, b) => b.cost_usd - a.cost_usd),
+      }))
       .sort((a, b) => b.cost_usd - a.cost_usd),
     rangeStart,
   };
