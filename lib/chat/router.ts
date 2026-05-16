@@ -73,7 +73,14 @@ export type RouteOptions = {
   forceRoute?: ForceRoute;
 };
 
+// TEMP: hard-disable every Anthropic call across the site. Flip this back to
+// `false` to restore three-tier routing, sub-agent Opus runs, Claude briefs,
+// and the vision tool. Single-source-of-truth kill switch — `isAnthropicConfigured`
+// gates every Claude call site.
+const CLAUDE_DISABLED = true;
+
 export function isAnthropicConfigured(): boolean {
+  if (CLAUDE_DISABLED) return false;
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
@@ -85,6 +92,10 @@ export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
 ): Promise<ChatRoute> {
+  // Claude unavailable → everything goes to DeepSeek (no tools, no classifier
+  // needed). This is the temp-kill path; remove once CLAUDE_DISABLED is false.
+  if (!isAnthropicConfigured()) return "deepseek";
+
   if (opts.forceRoute === "opus") return "opus";
   if (opts.forceRoute === "sonnet") return "sonnet";
   if (opts.forceRoute === "deepseek") return "deepseek";

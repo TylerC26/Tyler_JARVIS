@@ -4,6 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
+import { isAnthropicConfigured } from "@/lib/chat/router";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
@@ -54,9 +55,12 @@ Rules:
 - Pick category from {work, personal, health, social, travel, other}. Office meetings → work. Doctor/dentist/gym → health. Friends/family → social or personal. Flights/trips → travel.`;
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isAnthropicConfigured()) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured." },
+      {
+        error:
+          "Calendar OCR is temporarily disabled (Claude API kill switch on).",
+      },
       { status: 503 },
     );
   }

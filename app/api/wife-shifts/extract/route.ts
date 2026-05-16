@@ -4,6 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
+import { isAnthropicConfigured } from "@/lib/chat/router";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
@@ -74,9 +75,12 @@ Output only the schema above. If you cannot read the roster at all, output
 {"shifts": []}.`;
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isAnthropicConfigured()) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured." },
+      {
+        error:
+          "Shift-roster OCR is temporarily disabled (Claude API kill switch on).",
+      },
       { status: 503 },
     );
   }

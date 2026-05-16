@@ -1056,6 +1056,14 @@ export const visionAnalyzeTool = tool({
       ),
   }),
   execute: async ({ image_url, prompt }) => {
+    const { isAnthropicConfigured } = await import("@/lib/chat/router");
+    if (!isAnthropicConfigured()) {
+      return {
+        ok: false,
+        error:
+          "Vision analysis is temporarily disabled (Claude API kill switch on). Re-enable Claude in lib/chat/router.ts.",
+      };
+    }
     try {
       const image = image_url.startsWith("http")
         ? new URL(image_url)

@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
+import { isAnthropicConfigured } from "@/lib/chat/router";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,9 +24,12 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isAnthropicConfigured()) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured." },
+      {
+        error:
+          "Skill generator is temporarily disabled (Claude API kill switch on).",
+      },
       { status: 503 },
     );
   }
