@@ -1,9 +1,12 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { recordModelUsage } from "@/lib/chat/router";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
+
+const BRIEF_MODEL = "claude-opus-4-7";
 
 const SeveritySchema = z.enum(["info", "warn", "crit"]);
 
@@ -106,14 +109,15 @@ async function generateBriefViaClaude(
   systemPrompt: string,
 ): Promise<BriefDraft | null> {
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-opus-4-7"),
+    const result = await generateObject({
+      model: anthropic(BRIEF_MODEL),
       schema: BriefSchema,
       system: systemPrompt,
       prompt: ctxToPrompt(ctx),
       maxOutputTokens: 800,
     });
-    return { summary: object.summary, bullets: object.bullets };
+    recordModelUsage(BRIEF_MODEL, "brief", result.usage);
+    return { summary: result.object.summary, bullets: result.object.bullets };
   } catch (e) {
     console.warn("[ai] Claude brief failed, falling back to placeholder:", e);
     return null;
@@ -137,14 +141,15 @@ export const claudeEngine: AIEngine = {
 
   async generateSuggestions(ctx) {
     try {
-      const { object } = await generateObject({
-        model: anthropic("claude-opus-4-7"),
+      const result = await generateObject({
+        model: anthropic(BRIEF_MODEL),
         schema: SuggestionsSchema,
         system: SUGGESTIONS_SYSTEM,
         prompt: ctxToPrompt(ctx),
         maxOutputTokens: 1200,
       });
-      return object.suggestions.map<SuggestionDraft>((s) => ({
+      recordModelUsage(BRIEF_MODEL, "suggestion", result.usage);
+      return result.object.suggestions.map<SuggestionDraft>((s) => ({
         kind: s.kind,
         title: s.title,
         body: s.body,

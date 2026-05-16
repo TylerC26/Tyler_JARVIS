@@ -3,6 +3,7 @@ import { DateHeroTile } from "@/components/modules/dashboard/DateHeroTile";
 import { FocusTile } from "@/components/modules/dashboard/FocusTile";
 import { ProjectsPulseTile } from "@/components/modules/dashboard/ProjectsPulseTile";
 import { SignalsTile } from "@/components/modules/dashboard/SignalsTile";
+import { SpendTile } from "@/components/modules/dashboard/SpendTile";
 import { TodayTimelineTile } from "@/components/modules/dashboard/TodayTimelineTile";
 import { getLatestBrief } from "@/lib/ai/store";
 import { todayISO } from "@/lib/date";
@@ -38,8 +39,11 @@ export default async function DashboardPage() {
         <SignalsTile />
       </div>
 
-      <div className="md:col-span-12">
+      <div className="md:col-span-8">
         <AgendaTile />
+      </div>
+      <div className="md:col-span-4">
+        <SpendTile />
       </div>
     </div>
   );

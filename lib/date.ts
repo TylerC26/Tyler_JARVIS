@@ -44,6 +44,14 @@ export function startOfOwnerDay(input?: string | Date): Date {
   return fromZonedTime(`${day}T00:00:00`, tz);
 }
 
+// The instant of the first owner-local day of the current month — used for
+// month-to-date aggregates.
+export function startOfOwnerMonth(): Date {
+  const tz = getOwnerTz();
+  const ym = formatInTimeZone(new Date(), tz, "yyyy-MM");
+  return fromZonedTime(`${ym}-01T00:00:00`, tz);
+}
+
 // The last instant of the owner-local day for the given day (default: today).
 export function endOfOwnerDay(input?: string | Date): Date {
   const tz = getOwnerTz();

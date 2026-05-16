@@ -1,8 +1,16 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
-import { generateObject, stepCountIs, streamText, type ModelMessage } from "ai";
+import {
+  generateObject,
+  stepCountIs,
+  streamText,
+  type LanguageModelUsage,
+  type ModelMessage,
+} from "ai";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
+import { recordUsageCore } from "@/lib/db/core/usage";
+import type { UsageSource } from "@/lib/db/types";
 import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
@@ -10,6 +18,30 @@ import {
   getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
+
+// Pull out the cache/raw token split the SDK exposes. Fields are number|undefined;
+// fall back to 0 so the ledger row is always well-formed.
+export function pickUsage(u: LanguageModelUsage) {
+  return {
+    inputTokens: u.inputTokens ?? 0,
+    outputTokens: u.outputTokens ?? 0,
+    cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
+    cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
+  };
+}
+
+// Fire-and-forget usage record. Settles once the streamText/generateObject
+// usage promise resolves; never blocks the caller.
+export function recordModelUsage(
+  model: string,
+  source: UsageSource,
+  usage: LanguageModelUsage | PromiseLike<LanguageModelUsage>,
+): void {
+  Promise.resolve(usage).then(
+    (u) => recordUsageCore({ model, source, usage: pickUsage(u) }),
+    (e) => console.warn("[usage] settle failed:", e),
+  );
+}
 
 const RouteSchema = z.object({
   route: z.enum(["deepseek", "haiku", "claude"]),
@@ -58,14 +90,15 @@ export async function decideRoute(
   if (!isDeepseekConfigured()) return "claude";
 
   try {
-    const { object } = await generateObject({
+    const result = await generateObject({
       model: deepseek("deepseek-chat"),
       schema: RouteSchema,
       system: CLASSIFIER_SYSTEM_PROMPT,
       messages,
       maxOutputTokens: 30,
     });
-    return object.route;
+    recordModelUsage("deepseek-chat", "classifier", result.usage);
+    return result.object.route;
   } catch (e) {
     console.warn("[chat] classifier failed, defaulting to claude:", e);
     return "claude";
@@ -103,11 +136,13 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
     getActiveResponderPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
-  return streamText({
+  const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
   });
+  recordModelUsage("deepseek-chat", "chat", result.totalUsage);
+  return result;
 }
 
 export async function streamClaudeResponse(
@@ -119,7 +154,7 @@ export async function streamClaudeResponse(
     getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
-  return streamText({
+  const result = streamText({
     model: anthropic(model),
     system,
     messages: [ctxPrefix, ...messages],
@@ -142,4 +177,6 @@ export async function streamClaudeResponse(
     },
     stopWhen: stepCountIs(8),
   });
+  recordModelUsage(model, "chat", result.totalUsage);
+  return result;
 }

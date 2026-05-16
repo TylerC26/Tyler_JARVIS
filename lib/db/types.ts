@@ -242,6 +242,23 @@ export type RepoTask = {
   cleanup_error: string | null;
 };
 
+export type UsageProvider = "anthropic" | "deepseek";
+export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
+
+export type UsageEvent = {
+  id: string;
+  owner_id: string;
+  provider: UsageProvider;
+  model: string;
+  source: UsageSource;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_usd: number;
+  created_at: string;
+};
+
 export type Idea = {
   id: string;
   owner_id: string;
@@ -583,6 +600,24 @@ export type Database = {
           cleanup_error?: string | null;
         };
         Update: Partial<RepoTask>;
+        Relationships: [];
+      };
+      usage_events: {
+        Row: UsageEvent;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          provider: UsageProvider;
+          model: string;
+          source: UsageSource;
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          cost_usd?: number;
+          created_at?: string;
+        };
+        Update: Partial<UsageEvent>;
         Relationships: [];
       };
       ideas: {
