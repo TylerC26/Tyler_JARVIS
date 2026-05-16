@@ -47,6 +47,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
       { href: "/tools", label: "Tools", code: "TLS", glyph: "◎", status: "live" },
       { href: "/cron", label: "Cron Jobs", code: "CRN", glyph: "⏲", status: "live" },
+      { href: "/repo-tasks", label: "Repo Tasks", code: "RTK", glyph: "◬", status: "live" },
     ],
   },
   {

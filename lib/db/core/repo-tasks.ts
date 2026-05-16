@@ -58,7 +58,7 @@ export async function getRepoTaskCore(id: string): Promise<RepoTask | null> {
   return (data as RepoTask | null) ?? null;
 }
 
-export async function listRecentRepoTasksCore(limit = 20): Promise<RepoTask[]> {
+export async function listRecentRepoTasksCore(limit = 50): Promise<RepoTask[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
   const { data } = await supabase
@@ -68,4 +68,49 @@ export async function listRecentRepoTasksCore(limit = 20): Promise<RepoTask[]> {
     .order("queued_at", { ascending: false })
     .limit(limit);
   return (data as RepoTask[] | null) ?? [];
+}
+
+// Cancel a queued task. Only allowed if still 'queued' — once the daemon flips
+// it to 'claimed' or beyond, cancellation has no clean meaning (we'd have to
+// SIGTERM the spawned agent, which is out of scope for v1).
+export async function cancelRepoTaskCore(
+  id: string,
+): Promise<CoreResult<RepoTask>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+
+  const { data, error } = await supabase
+    .from("repo_tasks")
+    .update({
+      status: "cancelled",
+      finished_at: new Date().toISOString(),
+    })
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .eq("status", "queued")
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Task is not in 'queued' state — cannot cancel." };
+  return { ok: true, data: data as RepoTask };
+}
+
+// Re-enqueue a fresh task using the source row's instruction + repo + agent.
+// The original row is left intact for history; a new row is created with
+// status='queued'.
+export async function retryRepoTaskCore(
+  id: string,
+): Promise<CoreResult<RepoTask>> {
+  const src = await getRepoTaskCore(id);
+  if (!src) return { ok: false, error: "Source task not found." };
+
+  return createRepoTaskCore({
+    repo_path: src.repo_path,
+    instruction: src.instruction,
+    agent: src.agent,
+    telegram_chat_id: src.telegram_chat_id,
+    telegram_message_id: src.telegram_message_id,
+    chat_message_id: src.chat_message_id,
+  });
 }
