@@ -116,6 +116,7 @@ export async function POST(req: Request) {
       const { assistantText } = await runChatTurn({
         modelMessages,
         latestUserText,
+        telegramContext: { chat_id: chatId, message_id: message.message_id },
       });
 
       await sendMessage(

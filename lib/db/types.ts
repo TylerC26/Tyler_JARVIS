@@ -170,6 +170,7 @@ export type ChatToolCall = {
 export type ChatMessage = {
   id: string;
   owner_id: string;
+  thread_id: string;
   created_at: string;
   role: ChatRole;
   content: string | null;
@@ -201,6 +202,40 @@ export type CronJob = {
   next_run_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type RepoTaskStatus =
+  | "queued"
+  | "claimed"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type RepoTaskAgent = "claude-code" | "opencode";
+
+export type RepoTask = {
+  id: string;
+  owner_id: string;
+  status: RepoTaskStatus;
+  repo_path: string;
+  instruction: string;
+  branch: string | null;
+  base_branch: string | null;
+  agent: RepoTaskAgent;
+  logs: string | null;
+  result: string | null;
+  diff_summary: string | null;
+  diff_files_changed: number | null;
+  commit_sha: string | null;
+  error: string | null;
+  chat_message_id: string | null;
+  telegram_chat_id: number | null;
+  telegram_message_id: number | null;
+  queued_at: string;
+  claimed_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 };
 
 export type AiBriefKind = "morning" | "evening";
@@ -427,6 +462,7 @@ export type Database = {
         Insert: {
           id?: string;
           owner_id: string;
+          thread_id?: string;
           role: ChatRole;
           content?: string | null;
           tool_calls?: ChatToolCall[] | null;
@@ -499,6 +535,34 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<CronJob>;
+        Relationships: [];
+      };
+      repo_tasks: {
+        Row: RepoTask;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          status?: RepoTaskStatus;
+          repo_path: string;
+          instruction: string;
+          branch?: string | null;
+          base_branch?: string | null;
+          agent?: RepoTaskAgent;
+          logs?: string | null;
+          result?: string | null;
+          diff_summary?: string | null;
+          diff_files_changed?: number | null;
+          commit_sha?: string | null;
+          error?: string | null;
+          chat_message_id?: string | null;
+          telegram_chat_id?: number | null;
+          telegram_message_id?: number | null;
+          queued_at?: string;
+          claimed_at?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+        };
+        Update: Partial<RepoTask>;
         Relationships: [];
       };
     };

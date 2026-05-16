@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "telegram:setup": "tsx scripts/setup-telegram-webhook.ts"
+    "telegram:setup": "tsx scripts/setup-telegram-webhook.ts",
+    "agent:start": "tsx scripts/mac-agent/index.ts",
+    "agent:install": "tsx scripts/mac-agent/install.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.76",
@@ -18,9 +20,11 @@
     "croner": "^10.0.1",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
+    "execa": "^8.0.1",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "toml": "^3.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
