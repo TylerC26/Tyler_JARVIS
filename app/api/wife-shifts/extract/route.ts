@@ -4,7 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
-import { isAnthropicConfigured } from "@/lib/chat/router";
+import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
@@ -75,11 +75,11 @@ Output only the schema above. If you cannot read the roster at all, output
 {"shifts": []}.`;
 
 export async function POST(req: Request) {
-  if (!isAnthropicConfigured()) {
+  if (!(await isClaudeEnabled())) {
     return NextResponse.json(
       {
         error:
-          "Shift-roster OCR is temporarily disabled (Claude API kill switch on).",
+          "Shift-roster OCR is temporarily disabled — re-enable Claude from the dashboard StatusRail.",
       },
       { status: 503 },
     );

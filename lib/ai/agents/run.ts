@@ -2,7 +2,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
 import { generateText, stepCountIs } from "ai";
 import { getToolsForAgent } from "@/lib/ai/agents/tools";
-import { isAnthropicConfigured, isDeepseekConfigured } from "@/lib/chat/router";
+import { isDeepseekConfigured } from "@/lib/chat/router";
+import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import type { Agent } from "@/lib/db/types";
 
 export type AgentToolCallSummary = {
@@ -19,13 +20,14 @@ export type AgentRunResult = {
 
 const AGENT_STEP_BUDGET = 4;
 
-function pickModel(agent: Agent) {
+async function pickModel(agent: Agent) {
+  const claudeOn = await isClaudeEnabled();
   if (agent.model_pref === "deepseek" && isDeepseekConfigured())
     return deepseek("deepseek-chat");
-  if (agent.model_pref === "claude" && isAnthropicConfigured())
+  if (agent.model_pref === "claude" && claudeOn)
     return anthropic("claude-opus-4-7");
   // auto / fallback
-  if (isAnthropicConfigured()) return anthropic("claude-opus-4-7");
+  if (claudeOn) return anthropic("claude-opus-4-7");
   if (isDeepseekConfigured()) return deepseek("deepseek-chat");
   return null;
 }
@@ -35,7 +37,7 @@ export async function runAgent(
   task: string,
   contextSummary?: string,
 ): Promise<AgentRunResult> {
-  const model = pickModel(agent);
+  const model = await pickModel(agent);
   if (!model) {
     return {
       ok: false,

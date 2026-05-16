@@ -14,7 +14,7 @@ export type RunBriefResult =
 export async function runBrief(kind: AiBriefKind): Promise<RunBriefResult> {
   try {
     const ctx = await gatherContext();
-    const engine = getEngine();
+    const engine = await getEngine();
 
     const draft =
       kind === "morning"

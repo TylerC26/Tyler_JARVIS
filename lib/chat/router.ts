@@ -9,6 +9,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
+import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { recordUsageCore } from "@/lib/db/core/usage";
 import type { UsageSource } from "@/lib/db/types";
 import {
@@ -73,14 +74,10 @@ export type RouteOptions = {
   forceRoute?: ForceRoute;
 };
 
-// TEMP: hard-disable every Anthropic call across the site. Flip this back to
-// `false` to restore three-tier routing, sub-agent Opus runs, Claude briefs,
-// and the vision tool. Single-source-of-truth kill switch — `isAnthropicConfigured`
-// gates every Claude call site.
-const CLAUDE_DISABLED = true;
-
+// Sync env-key check. Used for UI capability gating ("is the key present at
+// all"). The runtime kill switch lives in `site_settings.claude_enabled` and is
+// surfaced via async `isClaudeEnabled()` in lib/db/core/site-settings.ts.
 export function isAnthropicConfigured(): boolean {
-  if (CLAUDE_DISABLED) return false;
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
@@ -92,9 +89,11 @@ export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
 ): Promise<ChatRoute> {
-  // Claude unavailable → everything goes to DeepSeek (no tools, no classifier
-  // needed). This is the temp-kill path; remove once CLAUDE_DISABLED is false.
-  if (!isAnthropicConfigured()) return "deepseek";
+  // Claude disabled (via dashboard StatusRail toggle or missing key) → every
+  // turn goes to DeepSeek. No classifier needed since DeepSeek is the only
+  // option, and the classifier itself would just waste a call.
+  const claudeOn = await isClaudeEnabled();
+  if (!claudeOn) return "deepseek";
 
   if (opts.forceRoute === "opus") return "opus";
   if (opts.forceRoute === "sonnet") return "sonnet";

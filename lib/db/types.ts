@@ -242,6 +242,13 @@ export type RepoTask = {
   cleanup_error: string | null;
 };
 
+export type SiteSettings = {
+  owner_id: string;
+  claude_enabled: boolean;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type UsageProvider = "anthropic" | "deepseek";
 export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
 
@@ -600,6 +607,17 @@ export type Database = {
           cleanup_error?: string | null;
         };
         Update: Partial<RepoTask>;
+        Relationships: [];
+      };
+      site_settings: {
+        Row: SiteSettings;
+        Insert: {
+          owner_id: string;
+          claude_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<SiteSettings>;
         Relationships: [];
       };
       usage_events: {

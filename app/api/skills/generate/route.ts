@@ -1,7 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
-import { isAnthropicConfigured } from "@/lib/chat/router";
+import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,11 +24,11 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  if (!isAnthropicConfigured()) {
+  if (!(await isClaudeEnabled())) {
     return NextResponse.json(
       {
         error:
-          "Skill generator is temporarily disabled (Claude API kill switch on).",
+          "Skill generator is temporarily disabled — re-enable Claude from the dashboard StatusRail.",
       },
       { status: 503 },
     );
