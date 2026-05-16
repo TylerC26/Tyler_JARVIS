@@ -242,6 +242,19 @@ export type RepoTask = {
   cleanup_error: string | null;
 };
 
+export type Idea = {
+  id: string;
+  owner_id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  archived_at: string | null;
+  promoted_to_task_id: string | null;
+  promoted_to_project_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type AiBriefKind = "morning" | "evening";
 export type AiSuggestionKind = "productivity";
 export type AiSuggestionStatus = "open" | "dismissed" | "acted";
@@ -570,6 +583,23 @@ export type Database = {
           cleanup_error?: string | null;
         };
         Update: Partial<RepoTask>;
+        Relationships: [];
+      };
+      ideas: {
+        Row: Idea;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title: string;
+          body?: string;
+          pinned?: boolean;
+          archived_at?: string | null;
+          promoted_to_task_id?: string | null;
+          promoted_to_project_id?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Idea>;
         Relationships: [];
       };
     };

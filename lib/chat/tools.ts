@@ -4,6 +4,7 @@ import { z } from "zod";
 import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
+import { createIdeaCore } from "@/lib/db/core/ideas";
 import { createMemoryCore, deleteMemoryCore } from "@/lib/db/core/memory";
 import {
   createEventCore,
@@ -898,6 +899,38 @@ export const rememberTool = tool({
   },
 });
 
+export const saveIdeaTool = tool({
+  description:
+    "Capture a fleeting idea or thought so Tyler can revisit it on /ideas. Use this when he says 'save this idea', 'idea:', 'here's a thought', 'remember this thought', or sketches an unrefined concept he wants to keep ('what if we…', 'an idea: …'). NOT for committed work (use add_task), durable facts about him (use remember), or anything time-sensitive. Pick a short headline for `title` (3-8 words) and put the detail in `body`.",
+  inputSchema: z.object({
+    title: z
+      .string()
+      .min(1)
+      .describe("Short headline for the idea (3-8 words)."),
+    body: z
+      .string()
+      .optional()
+      .describe("Detail or sketch of the idea. 1-3 sentences typically."),
+    pinned: z
+      .boolean()
+      .optional()
+      .describe("Pin if this is high-priority and should float to the top."),
+  }),
+  execute: async (input) => {
+    const result = await createIdeaCore({
+      title: input.title,
+      body: input.body,
+      pinned: input.pinned ?? false,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      idea_id: result.data.id,
+      message: `Saved: "${result.data.title}"`,
+    };
+  },
+});
+
 export const forgetTool = tool({
   description:
     "Delete a stored memory by id. Use when the user says 'forget that', 'remove that note', or contradicts a previously-saved fact. The memory_id is visible in the REMEMBERED section of your system prefix.",
@@ -1079,6 +1112,7 @@ export const ALL_TOOLS = {
   delegate_to_agent: delegateToAgentTool,
   remember: rememberTool,
   forget: forgetTool,
+  save_idea: saveIdeaTool,
   vision_analyze: visionAnalyzeTool,
   create_cron_job: createCronJobTool,
   list_cron_jobs: listCronJobsTool,
