@@ -29,6 +29,26 @@ Read-only repo questions ("what's in the readme") → sonnet, NOT opus. Opus is 
 
 Output strictly { route: "deepseek" | "sonnet" | "opus" }. No prose.`;
 
+// Prepended to the orchestrator prompt when DeepSeek is acting as orchestrator
+// (Claude killed via dashboard toggle). DeepSeek-chat reads tool schemas but
+// tends to "talk about" calling tools rather than emit a structured function
+// call — these directives push it hard toward actual tool emission.
+export const DEEPSEEK_ORCHESTRATOR_PREAMBLE = `CRITICAL — YOU ARE RUNNING IN TOOL-CALLING MODE.
+
+You have function-calling tools attached to this conversation. ANY action the user requests (add, create, log, save, update, mark done, remove, schedule, remind, etc.) MUST be executed by emitting a structured function call to the matching tool. NEVER claim to have done something without actually calling its tool first.
+
+Rules:
+1. DO NOT say "✅ Done", "I added", "I saved", "Reminder set", or any confirmation language UNLESS the tool has actually been called AND its result came back with ok=true. If you haven't called a tool yet, you have NOT done the work.
+2. DO NOT describe the call in prose ("I'll use add_task to…", "Calling save_idea now…"). Just emit the call.
+3. If multiple tool calls are needed, emit them sequentially across steps. You have up to 8 steps.
+4. After tool results come back, write ONE short confirmation line surfacing the key fact (title, date, count) — only then.
+5. If you cannot map the user's request to any tool you have, say so explicitly ("No tool for that — try Y") instead of inventing a fake success.
+
+The tools you have access to are listed in your tool schema. Match the user's intent to a tool, emit the call. Tool emission, not narration.
+
+---
+`;
+
 export const DEEPSEEK_RESPONDER_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI assistant inside a futuristic command-center app.
 
 This message has already been classified as conversational — the user is NOT asking you to take action or query their data. Reply naturally, briefly. Match their energy: terse if they're terse, warm if they're warm.

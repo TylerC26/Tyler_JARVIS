@@ -15,6 +15,7 @@ import type { UsageSource } from "@/lib/db/types";
 import {
   buildContextPrefix,
   CLASSIFIER_SYSTEM_PROMPT,
+  DEEPSEEK_ORCHESTRATOR_PREAMBLE,
   getActiveOrchestratorPrompt,
   getActiveResponderPrompt,
 } from "./system-prompts";
@@ -151,10 +152,16 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   // access + the orchestrator prompt so tasks/calendar/skills/etc still work.
   // web_search is dropped (Anthropic-only provider tool).
   const claudeOn = await isClaudeEnabled();
-  const [prefixContent, system] = await Promise.all([
+  const [prefixContent, baseSystem] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),
     claudeOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
   ]);
+  // In orchestrator mode, prepend the DeepSeek-specific tool-calling preamble
+  // to push the model toward emitting structured tool calls rather than
+  // hallucinating success in prose.
+  const system = claudeOn
+    ? baseSystem
+    : `${DEEPSEEK_ORCHESTRATOR_PREAMBLE}${baseSystem}`;
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   const result = streamText({
     model: deepseek("deepseek-chat"),
@@ -162,7 +169,7 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
     messages: [ctxPrefix, ...messages],
     ...(claudeOn
       ? {}
-      : { tools: ALL_TOOLS, stopWhen: stepCountIs(8) }),
+      : { tools: ALL_TOOLS, stopWhen: stepCountIs(8), toolChoice: "auto" }),
   });
   recordModelUsage("deepseek-chat", "chat", result.totalUsage);
   return result;
