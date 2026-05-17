@@ -144,6 +144,18 @@ function extractLatestUserText(messages: ModelMessage[]): string {
   return "";
 }
 
+// Verb heuristic used in DeepSeek-orchestrator mode to detect action-shaped
+// user messages. When the user starts with one of these, force toolChoice
+// "required" so DeepSeek MUST emit a tool call instead of hallucinating
+// success in prose. Tuned to be high-recall for write actions and common
+// read commands without catching obvious chitchat.
+const ACTION_VERB_REGEX =
+  /^\s*(add|save|create|log|remind|schedule|delete|remove|complete|mark|finish|set|update|change|edit|move|cancel|dismiss|forget|pin|unpin|archive|dispatch|run|generate|brief|list|show|find|search|what'?s|what\s+are|when\s+is|how\s+many|how\s+is|how'?s|how\s+are)\b/i;
+
+function looksLikeAction(text: string): boolean {
+  return ACTION_VERB_REGEX.test(text);
+}
+
 export async function streamDeepseekResponse(messages: ModelMessage[]) {
   // When Claude is the orchestrator (the default), DeepSeek runs as the cheap
   // chitchat tier — no tools, "responder" prompt that explicitly disclaims
@@ -152,8 +164,9 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   // access + the orchestrator prompt so tasks/calendar/skills/etc still work.
   // web_search is dropped (Anthropic-only provider tool).
   const claudeOn = await isClaudeEnabled();
+  const userText = extractLatestUserText(messages);
   const [prefixContent, baseSystem] = await Promise.all([
-    buildContextPrefix(extractLatestUserText(messages)),
+    buildContextPrefix(userText),
     claudeOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
   ]);
   // In orchestrator mode, prepend the DeepSeek-specific tool-calling preamble
@@ -163,14 +176,46 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
     ? baseSystem
     : `${DEEPSEEK_ORCHESTRATOR_PREAMBLE}${baseSystem}`;
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
+
+  // Force a structured tool call when the user message looks like a write or
+  // read command. Without this, deepseek-chat tends to acknowledge in prose
+  // ("✅ Done") without actually invoking the tool. "auto" stays for
+  // chitchat-shaped messages so "lol" / "thanks" don't get forced into a
+  // pointless tool call.
+  const forceTool = !claudeOn && looksLikeAction(userText);
+
   const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
     ...(claudeOn
       ? {}
-      : { tools: ALL_TOOLS, stopWhen: stepCountIs(8), toolChoice: "auto" }),
+      : {
+          tools: ALL_TOOLS,
+          stopWhen: stepCountIs(8),
+          toolChoice: forceTool ? "required" : "auto",
+        }),
+    onError: ({ error }) => {
+      console.warn("[chat] deepseek stream error:", error);
+    },
   });
+
+  if (!claudeOn) {
+    // Diagnostic: confirm whether DeepSeek emitted structured tool calls.
+    // Until DeepSeek tool-use settles, this gives us a fast signal when the
+    // model hallucinates "✅ Done" without calling anything.
+    void result.steps.then((steps) => {
+      const tcCount = steps.reduce(
+        (n, s) => n + (s.toolCalls?.length ?? 0),
+        0,
+      );
+      const forced = forceTool ? "forced" : "auto";
+      console.warn(
+        `[chat] deepseek-orchestrator finished: tool_calls=${tcCount} (toolChoice=${forced}) for: ${JSON.stringify(userText.slice(0, 80))}`,
+      );
+    });
+  }
+
   recordModelUsage("deepseek-chat", "chat", result.totalUsage);
   return result;
 }
