@@ -144,15 +144,25 @@ function extractLatestUserText(messages: ModelMessage[]): string {
 }
 
 export async function streamDeepseekResponse(messages: ModelMessage[]) {
+  // When Claude is the orchestrator (the default), DeepSeek runs as the cheap
+  // chitchat tier — no tools, "responder" prompt that explicitly disclaims
+  // taking actions. When Claude is killed via the StatusRail toggle, every
+  // turn lands here, so DeepSeek picks up orchestrator duties: full tool
+  // access + the orchestrator prompt so tasks/calendar/skills/etc still work.
+  // web_search is dropped (Anthropic-only provider tool).
+  const claudeOn = await isClaudeEnabled();
   const [prefixContent, system] = await Promise.all([
     buildContextPrefix(extractLatestUserText(messages)),
-    getActiveResponderPrompt(),
+    claudeOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
   const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
+    ...(claudeOn
+      ? {}
+      : { tools: ALL_TOOLS, stopWhen: stepCountIs(8) }),
   });
   recordModelUsage("deepseek-chat", "chat", result.totalUsage);
   return result;
