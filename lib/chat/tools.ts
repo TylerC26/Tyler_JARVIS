@@ -47,6 +47,7 @@ import {
   resolveRepoFuzzy,
 } from "@/lib/repo-tasks/allowlist";
 import { getTelegramContext } from "@/lib/chat/request-context";
+import { webSearch } from "@/lib/web-search/openrouter";
 
 // ---------- task tools ----------
 
@@ -1037,6 +1038,47 @@ export const deleteCronJobTool = tool({
   },
 });
 
+// ---------- web search ----------
+
+export const webSearchTool = tool({
+  description:
+    "Search the live web via OpenRouter's web plugin and return a synthesized answer with source citations. Use for any question whose answer depends on real-world facts that change over time: flight schedules and prices, hotel availability, news, weather, sports scores, current product specs, visa rules, exchange rates, store hours, who-just-won-X, what-just-happened. Do NOT use for things in the user's own data (tasks/events/projects — use query_state) or for code questions (use read_project_repo or dispatch_repo_task). Quote prices/dates exactly as the answer reports them; never round or paraphrase numbers.",
+  inputSchema: z.object({
+    query: z
+      .string()
+      .min(3)
+      .describe(
+        "Natural-language search query. Be specific — include dates, cities, brand names, model numbers when relevant. Example: 'cheapest one-way economy SFO to NRT departing 2026-06-01, max 1 stop'.",
+      ),
+    max_results: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .optional()
+      .describe(
+        "How many web hits OpenRouter should scrape and feed into the answer. Defaults to 5. Bump to 8-10 for broad research questions, drop to 2-3 for tightly-scoped fact lookups.",
+      ),
+    recency: z
+      .enum(["day", "week", "month", "year"])
+      .optional()
+      .describe(
+        "Bias results toward sources published within this window. Use 'day' or 'week' for breaking news / live status, 'month' for recent reviews, 'year' for general up-to-date info. Omit for evergreen queries.",
+      ),
+  }),
+  execute: async ({ query, max_results, recency }) => {
+    const result = await webSearch({ query, max_results, recency });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      query: result.query,
+      answer: result.answer,
+      citations: result.citations,
+      cost_usd: result.cost_usd,
+    };
+  },
+});
+
 // ---------- vision ----------
 
 export const visionAnalyzeTool = tool({
@@ -1124,6 +1166,7 @@ export const ALL_TOOLS = {
   forget: forgetTool,
   save_idea: saveIdeaTool,
   vision_analyze: visionAnalyzeTool,
+  web_search: webSearchTool,
   create_cron_job: createCronJobTool,
   list_cron_jobs: listCronJobsTool,
   toggle_cron_job: toggleCronJobTool,
