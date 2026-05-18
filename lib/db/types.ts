@@ -96,6 +96,19 @@ export type WifeShift = {
 
 export type SkillSource = "manual" | "seeded" | "jarvis";
 
+export type SkillUsageOutcome = "useful" | "neutral" | "harmful";
+
+export type SkillUsage = {
+  id: string;
+  owner_id: string;
+  skill_id: string;
+  outcome: SkillUsageOutcome;
+  critique: string | null;
+  user_text: string | null;
+  assistant_text: string | null;
+  created_at: string;
+};
+
 export type Skill = {
   id: string;
   owner_id: string;
@@ -148,6 +161,7 @@ export type MemoryEntry = {
   last_used_at: string | null;
   created_at: string;
   updated_at: string | null;
+  embedding: number[] | null;
 };
 
 export type PromptSettings = {
@@ -455,6 +469,7 @@ export type Database = {
           last_used_at?: string | null;
           created_at?: string;
           updated_at?: string | null;
+          embedding?: number[] | null;
         };
         Update: Partial<MemoryEntry>;
         Relationships: [];
@@ -650,6 +665,21 @@ export type Database = {
         Update: Partial<UsageEvent>;
         Relationships: [];
       };
+      skill_usages: {
+        Row: SkillUsage;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          skill_id: string;
+          outcome: SkillUsageOutcome;
+          critique?: string | null;
+          user_text?: string | null;
+          assistant_text?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<SkillUsage>;
+        Relationships: [];
+      };
       ideas: {
         Row: Idea;
         Insert: {
@@ -669,7 +699,16 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      match_memories: {
+        Args: {
+          query_embedding: number[];
+          owner: string;
+          match_count: number;
+        };
+        Returns: Array<MemoryEntry & { similarity: number }>;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

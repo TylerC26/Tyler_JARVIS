@@ -7,6 +7,8 @@ import {
   persistAssistantSteps,
   revalidateChatPaths,
   runMemoryExtraction,
+  runSkillDrafter,
+  runSkillJudge,
 } from "@/lib/chat/turn";
 import type { JarvisMessageMetadata } from "@/lib/chat/ui";
 
@@ -59,18 +61,21 @@ export async function POST(req: Request) {
     },
     onFinish: async () => {
       // Persist the assistant turn (text + any tool calls/results) from the
-      // settled streamText steps, revalidate caches, then extract memory.
-      // Shared with the Telegram webhook via lib/chat/turn.ts.
+      // settled streamText steps, revalidate caches, then run fire-and-forget
+      // memory extraction + skill drafting. Shared with the Telegram webhook
+      // via lib/chat/turn.ts.
       const [steps, response] = await Promise.all([
         result.steps,
         result.response,
       ]);
-      const assistantText = await persistAssistantSteps(
+      const { text: assistantText, toolCalls } = await persistAssistantSteps(
         steps,
         modelIdForResponse(response?.modelId),
       );
       revalidateChatPaths();
       void runMemoryExtraction(latestUserText, assistantText);
+      void runSkillDrafter(latestUserText, assistantText, toolCalls);
+      void runSkillJudge(latestUserText, assistantText);
     },
   });
 }

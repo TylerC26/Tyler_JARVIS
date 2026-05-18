@@ -61,8 +61,29 @@ const QUICK_START_TEMPLATES: Array<{
   },
 ];
 
-export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
-  const [skills, setSkills] = useState<Skill[]>(initialSkills);
+function isDraft(s: Skill): boolean {
+  return s.source === "jarvis" && !s.active;
+}
+
+// Drafts float to the top of the list so newly-proposed skills are easy to
+// spot. Within each group we sort alphabetically.
+function sortForView(skills: Skill[]): Skill[] {
+  return [...skills].sort((a, b) => {
+    const ad = isDraft(a) ? 0 : 1;
+    const bd = isDraft(b) ? 0 : 1;
+    if (ad !== bd) return ad - bd;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+export function SkillsView({
+  initialSkills,
+  refinementCritiques = {},
+}: {
+  initialSkills: Skill[];
+  refinementCritiques?: Record<string, string>;
+}) {
+  const [skills, setSkills] = useState<Skill[]>(() => sortForView(initialSkills));
   const [editing, setEditing] = useState<Editing>({ kind: "closed" });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +92,7 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    setSkills(initialSkills);
+    setSkills(sortForView(initialSkills));
   }, [initialSkills]);
 
   function openCreate(prefill?: FormState) {
@@ -129,7 +150,7 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
           setError(result.error);
           return;
         }
-        setSkills((prev) => [...prev, result.skill].sort((a, b) => a.name.localeCompare(b.name)));
+        setSkills((prev) => sortForView([...prev, result.skill]));
       } else if (editing.kind === "edit") {
         const result = await updateSkillAction(editing.skill.id, {
           name: form.name,
@@ -142,9 +163,7 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
           return;
         }
         setSkills((prev) =>
-          prev
-            .map((s) => (s.id === result.skill.id ? result.skill : s))
-            .sort((a, b) => a.name.localeCompare(b.name)),
+          sortForView(prev.map((s) => (s.id === result.skill.id ? result.skill : s))),
         );
       }
       close();
@@ -191,7 +210,9 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
       alert(`Toggle failed: ${result.error}`);
       return;
     }
-    setSkills((prev) => prev.map((s) => (s.id === result.skill.id ? result.skill : s)));
+    setSkills((prev) =>
+      sortForView(prev.map((s) => (s.id === result.skill.id ? result.skill : s))),
+    );
   }
 
   async function onDelete(skill: Skill) {
@@ -214,10 +235,14 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
       render: (s) => (
         <div className="flex items-center gap-2">
           <span className="text-fg">{s.name}</span>
+          {isDraft(s) && <StatusBadge tone="warn">draft</StatusBadge>}
+          {refinementCritiques[s.id] && (
+            <StatusBadge tone="danger">refine</StatusBadge>
+          )}
           {s.source === "seeded" && (
             <StatusBadge tone="neutral">seed</StatusBadge>
           )}
-          {s.source === "jarvis" && (
+          {s.source === "jarvis" && !isDraft(s) && (
             <StatusBadge tone="neutral">jarvis</StatusBadge>
           )}
         </div>
@@ -291,13 +316,38 @@ export function SkillsView({ initialSkills }: { initialSkills: Skill[] }) {
       <PageHeader
         code="SKL"
         title="Skills"
-        subtitle="behavior bundles · keyword-triggered · authored manually or via Jarvis"
+        subtitle="behavior bundles · keyword-triggered · drafts proposed by Jarvis after successful multi-tool turns"
         actions={
           <Button variant="primary" onClick={() => openCreate()}>
             + NEW SKILL
           </Button>
         }
       />
+
+      {Object.keys(refinementCritiques).length > 0 && (
+        <div className="mb-4 rounded-md border border-danger/40 bg-danger/5 p-3">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-danger">
+            // refinement needed — last 3 uses judged unhelpful
+          </div>
+          <ul className="flex flex-col gap-1.5 font-mono text-[11px] text-fg-muted">
+            {skills
+              .filter((s) => refinementCritiques[s.id])
+              .map((s) => (
+                <li key={s.id} className="flex gap-2">
+                  <span className="text-fg">{s.name}:</span>
+                  <span className="flex-1">{refinementCritiques[s.id]}</span>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(s)}
+                    className="rounded-sm border border-edge px-2 py-0.5 text-fg-muted hover:border-accent hover:text-accent"
+                  >
+                    EDIT
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-9">

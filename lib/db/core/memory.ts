@@ -1,4 +1,5 @@
 import { getOwnerId } from "@/lib/auth/currentUser";
+import { embedText } from "@/lib/ai/embeddings";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type {
   MemoryConfidence,
@@ -8,6 +9,23 @@ import type {
   MemorySource,
 } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
+
+// Embed a freshly-written memory and store the vector. Fire-and-forget.
+async function backfillEmbedding(id: string, text: string): Promise<void> {
+  const vec = await embedText(text);
+  if (!vec) return;
+  const supabase = await getSupabaseServer();
+  if (!supabase) return;
+  await supabase
+    .from("memory_entries")
+    .update({ embedding: vec as unknown as number[] })
+    .eq("owner_id", getOwnerId())
+    .eq("id", id);
+}
+
+function embedTextForMemory(key: string, value: string): string {
+  return `${key.trim()}: ${value.trim()}`;
+}
 
 export type CreateMemoryInput = {
   scope?: MemoryScope;
@@ -67,7 +85,9 @@ export async function createMemoryCore(
     .single();
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, data: data as MemoryEntry };
+  const row = data as MemoryEntry;
+  void backfillEmbedding(row.id, embedTextForMemory(row.key, row.value));
+  return { ok: true, data: row };
 }
 
 export async function updateMemoryCore(
@@ -103,7 +123,11 @@ export async function updateMemoryCore(
     .single();
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, data: data as MemoryEntry };
+  const row = data as MemoryEntry;
+  if (patch.key !== undefined || patch.value !== undefined) {
+    void backfillEmbedding(row.id, embedTextForMemory(row.key, row.value));
+  }
+  return { ok: true, data: row };
 }
 
 export async function deleteMemoryCore(
@@ -123,26 +147,70 @@ export async function deleteMemoryCore(
   return { ok: true, data: { id } };
 }
 
-// Top-N entries for prefix injection: pinned first, then most recently used.
-// Also bumps used_count + last_used_at so the next round naturally rotates
-// fresh facts in. Safe to call on every chat turn.
+// Entries for prefix injection. When `userText` is provided and an embedding
+// can be computed, blends two sources: (a) all pinned entries, (b) top
+// cosine-similarity neighbours of the user message. Falls back to the
+// recency-only ordering when embedding is unavailable or no userText is
+// passed. Bumps last_used_at on whatever rows it returns so the next round
+// rotates the recency window forward.
 export async function getTopMemoriesForPrefix(
   limit = 8,
+  userText?: string,
 ): Promise<MemoryEntry[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
 
-  const { data } = await supabase
-    .from("memory_entries")
-    .select("*")
-    .eq("owner_id", getOwnerId())
-    .eq("scope", "global")
-    .order("pinned", { ascending: false })
-    .order("last_used_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  let rows: MemoryEntry[] = [];
 
-  const rows = (data as MemoryEntry[] | null) ?? [];
+  const trimmed = userText?.trim() ?? "";
+  if (trimmed) {
+    const vec = await embedText(trimmed);
+    if (vec) {
+      const [pinned, matches] = await Promise.all([
+        supabase
+          .from("memory_entries")
+          .select("*")
+          .eq("owner_id", getOwnerId())
+          .eq("scope", "global")
+          .eq("pinned", true),
+        supabase.rpc("match_memories", {
+          query_embedding: vec as unknown as number[],
+          owner: getOwnerId(),
+          match_count: limit,
+        }),
+      ]);
+      const pinnedRows = (pinned.data as MemoryEntry[] | null) ?? [];
+      const matchRows = (matches.data as MemoryEntry[] | null) ?? [];
+      const seen = new Set<string>();
+      const merged: MemoryEntry[] = [];
+      for (const r of pinnedRows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        merged.push(r);
+      }
+      for (const r of matchRows) {
+        if (merged.length >= limit) break;
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        merged.push(r);
+      }
+      rows = merged;
+    }
+  }
+
+  if (rows.length === 0) {
+    const { data } = await supabase
+      .from("memory_entries")
+      .select("*")
+      .eq("owner_id", getOwnerId())
+      .eq("scope", "global")
+      .order("pinned", { ascending: false })
+      .order("last_used_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    rows = (data as MemoryEntry[] | null) ?? [];
+  }
+
   if (rows.length === 0) return [];
 
   // Fire-and-forget usage bump. Don't await — we don't want to delay the chat.

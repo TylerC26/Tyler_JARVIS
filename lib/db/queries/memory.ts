@@ -9,6 +9,7 @@ export async function listMemories(
 
 export async function getRecentRelevantMemories(
   limit = 8,
+  userText?: string,
 ): Promise<MemoryEntry[]> {
-  return getTopMemoriesForPrefix(limit);
+  return getTopMemoriesForPrefix(limit, userText);
 }

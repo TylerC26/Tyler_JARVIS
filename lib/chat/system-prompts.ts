@@ -337,7 +337,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
         console.warn("[chat] could not load agents:", e);
         return [] as Awaited<ReturnType<typeof listActiveAgents>>;
       }),
-      getRecentRelevantMemories(MAX_MEMORIES_IN_PREFIX).catch((e) => {
+      getRecentRelevantMemories(MAX_MEMORIES_IN_PREFIX, userText).catch((e) => {
         console.warn("[chat] could not load memories:", e);
         return [] as Awaited<ReturnType<typeof getRecentRelevantMemories>>;
       }),

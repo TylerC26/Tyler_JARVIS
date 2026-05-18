@@ -7,6 +7,8 @@
 import { revalidatePath } from "next/cache";
 import type { ModelMessage } from "ai";
 import { extractMemoriesFromTurn } from "@/lib/ai/memory/extract";
+import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
+import { runSkillProposer } from "@/lib/ai/skills/propose";
 import { createMemoryCore } from "@/lib/db/core/memory";
 import type { ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
@@ -30,13 +32,20 @@ type StepLike = {
   toolResults?: { toolCallId: string; toolName: string; output?: unknown }[];
 };
 
+export type PersistedTurn = {
+  text: string;
+  toolCalls: ChatToolCall[];
+};
+
 // Walk the steps of a completed streamText run and persist them the same way
 // the web route does: one assistant row (text + all tool_calls) followed by one
-// `tool` row per tool result. Returns the aggregated assistant text.
+// `tool` row per tool result. Returns the aggregated assistant text and the
+// accumulated tool_calls so callers can feed downstream side-effects (memory
+// extraction, skill proposer) without re-walking the step array.
 export async function persistAssistantSteps(
   steps: StepLike[],
   model: ChatModel,
-): Promise<string> {
+): Promise<PersistedTurn> {
   const toolCalls: ChatToolCall[] = [];
   const toolResults: { id: string; name: string; result: unknown }[] = [];
   let text = "";
@@ -75,7 +84,7 @@ export async function persistAssistantSteps(
     });
   }
 
-  return text;
+  return { text, toolCalls };
 }
 
 // Tool actions may have mutated state — invalidate dashboard + module caches.
@@ -91,7 +100,7 @@ export function revalidateChatPaths(): void {
   revalidatePath("/memory");
 }
 
-// Auto-memory extraction (v1 placeholder — returns []). Safe to fire-and-forget.
+// Auto-memory extraction. Safe to fire-and-forget.
 export async function runMemoryExtraction(
   userText: string,
   assistantText: string,
@@ -103,6 +112,35 @@ export async function runMemoryExtraction(
     }
   } catch (e) {
     console.warn("[chat] memory extraction failed:", e);
+  }
+}
+
+// Skill drafting from successful trajectories. Fire-and-forget; the proposer
+// itself decides whether the turn is reusable and persists an inactive draft
+// when so.
+export async function runSkillDrafter(
+  userText: string,
+  assistantText: string,
+  toolCalls: ChatToolCall[],
+): Promise<void> {
+  try {
+    await runSkillProposer({ userText, assistantText, toolCalls });
+  } catch (e) {
+    console.warn("[chat] skill proposer failed:", e);
+  }
+}
+
+// Skill outcome judge. For every skill that matched this turn's user message,
+// score how well the reply followed the skill instructions and persist the
+// verdict. Powers the refinement banner in the skills UI.
+export async function runSkillJudge(
+  userText: string,
+  assistantText: string,
+): Promise<void> {
+  try {
+    await runSkillJudgeForTurn(userText, assistantText);
+  } catch (e) {
+    console.warn("[chat] skill judge failed:", e);
   }
 }
 
@@ -151,13 +189,15 @@ async function runChatTurnInner(
   ]);
 
   const model = modelIdForResponse(response?.modelId);
-  const assistantText = await persistAssistantSteps(
+  const { text: assistantText, toolCalls } = await persistAssistantSteps(
     steps as unknown as StepLike[],
     model,
   );
 
   revalidateChatPaths();
   void runMemoryExtraction(latestUserText, assistantText);
+  void runSkillDrafter(latestUserText, assistantText, toolCalls);
+  void runSkillJudge(latestUserText, assistantText);
 
   return { assistantText, model };
 }

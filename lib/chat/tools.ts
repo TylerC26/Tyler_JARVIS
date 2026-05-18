@@ -36,6 +36,7 @@ import {
   parseRepoUrl,
 } from "@/lib/github/client";
 import { createSkillCore } from "@/lib/db/core/skills";
+import { searchChatMessagesCore } from "@/lib/db/core/chat-search";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { createRepoTaskCore } from "@/lib/db/core/repo-tasks";
 import { listProjectSummaries } from "@/lib/db/queries/projects";
@@ -778,6 +779,61 @@ export const queryStateTool = tool({
   },
 });
 
+export const searchPastConversationsTool = tool({
+  description:
+    "Search the full history of past chat messages by keyword. Use this when the user references a prior conversation — 'what did I say about X', 'last time we talked about Y', 'when did I mention Z'. Do NOT use for current-state questions about tasks/events/projects (use query_state instead). Returns up to 25 recent matches with short snippets. Quote the snippet back when surfacing the answer so Tyler can see exactly what was said.",
+  inputSchema: z.object({
+    query: z
+      .string()
+      .min(2)
+      .describe(
+        "Plain-language keyword query. Multi-word phrases are AND-ed (Postgres plainto_tsquery, English stemmer). Example: 'coffee preference' matches messages containing both 'coffee' and 'prefer*'.",
+      ),
+    since: z
+      .string()
+      .optional()
+      .describe("ISO 8601 timestamp — only return messages created on/after this instant."),
+    until: z
+      .string()
+      .optional()
+      .describe("ISO 8601 timestamp — only return messages created strictly before this instant."),
+    agent_slug: z
+      .string()
+      .optional()
+      .describe(
+        "Filter to messages from one sub-agent thread. Omit to include the main Jarvis thread; pass 'main' to restrict to the main thread only (agent_slug IS NULL).",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(25)
+      .optional()
+      .describe("Max matches to return (default 10, capped at 25)."),
+  }),
+  execute: async ({ query, since, until, agent_slug, limit }) => {
+    const slugArg =
+      agent_slug === undefined
+        ? undefined
+        : agent_slug === "main"
+          ? null
+          : agent_slug;
+    const hits = await searchChatMessagesCore({
+      query,
+      since,
+      until,
+      agent_slug: slugArg,
+      limit,
+    });
+    return {
+      ok: true,
+      query,
+      count: hits.length,
+      hits,
+    };
+  },
+});
+
 export const generateBriefTool = tool({
   description:
     "Run the brief generator (rule-based or Claude depending on env) and persist the result. Returns the generated brief.",
@@ -1160,6 +1216,7 @@ export const ALL_TOOLS = {
   dispatch_repo_task: dispatchRepoTaskTool,
   create_skill: createSkillTool,
   query_state: queryStateTool,
+  search_past_conversations: searchPastConversationsTool,
   generate_brief: generateBriefTool,
   delegate_to_agent: delegateToAgentTool,
   remember: rememberTool,
