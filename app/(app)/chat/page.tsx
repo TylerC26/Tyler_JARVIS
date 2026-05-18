@@ -7,10 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function ChatPage() {
   const dbMessages = await listMessages();
   const initialMessages = dbToUIMessages(dbMessages);
-  const configured = {
-    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
-  };
+  const configured = Boolean(process.env.OPENROUTER_API_KEY);
 
   return (
     <div className="h-[calc(100vh-3.5rem-2.5rem)] md:h-[calc(100vh-3.5rem-3rem)]">

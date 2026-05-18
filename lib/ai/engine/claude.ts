@@ -1,12 +1,12 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { llmAuto, MODEL_AUTO } from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
 
-const BRIEF_MODEL = "claude-opus-4-7";
+const BRIEF_MODEL_LABEL = MODEL_AUTO;
 
 const SeveritySchema = z.enum(["info", "warn", "crit"]);
 
@@ -110,22 +110,22 @@ async function generateBriefViaClaude(
 ): Promise<BriefDraft | null> {
   try {
     const result = await generateObject({
-      model: anthropic(BRIEF_MODEL),
+      model: llmAuto(),
       schema: BriefSchema,
       system: systemPrompt,
       prompt: ctxToPrompt(ctx),
       maxOutputTokens: 800,
     });
-    recordModelUsage(BRIEF_MODEL, "brief", result.usage);
+    recordModelUsage(BRIEF_MODEL_LABEL, "brief", result.usage);
     return { summary: result.object.summary, bullets: result.object.bullets };
   } catch (e) {
-    console.warn("[ai] Claude brief failed, falling back to placeholder:", e);
+    console.warn("[ai] brief generation failed, falling back to placeholder:", e);
     return null;
   }
 }
 
 export const claudeEngine: AIEngine = {
-  name: "claude-opus-4-7",
+  name: BRIEF_MODEL_LABEL,
 
   async generateMorning(ctx) {
     const result = await generateBriefViaClaude(ctx, MORNING_SYSTEM);
@@ -142,13 +142,13 @@ export const claudeEngine: AIEngine = {
   async generateSuggestions(ctx) {
     try {
       const result = await generateObject({
-        model: anthropic(BRIEF_MODEL),
+        model: llmAuto(),
         schema: SuggestionsSchema,
         system: SUGGESTIONS_SYSTEM,
         prompt: ctxToPrompt(ctx),
         maxOutputTokens: 1200,
       });
-      recordModelUsage(BRIEF_MODEL, "suggestion", result.usage);
+      recordModelUsage(BRIEF_MODEL_LABEL, "suggestion", result.usage);
       return result.object.suggestions.map<SuggestionDraft>((s) => ({
         kind: s.kind,
         title: s.title,
@@ -158,7 +158,7 @@ export const claudeEngine: AIEngine = {
       }));
     } catch (e) {
       console.warn(
-        "[ai] Claude suggestions failed, falling back to placeholder:",
+        "[ai] suggestions generation failed, falling back to placeholder:",
         e,
       );
       return placeholderEngine.generateSuggestions(ctx);

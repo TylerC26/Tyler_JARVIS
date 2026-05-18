@@ -173,7 +173,7 @@ export function ScreenshotUploader({
     >
       {!visionEnabled && (
         <div className="rounded-sm border border-warn/40 bg-warn/10 px-3 py-2 font-mono text-[11px] text-warn">
-          ANTHROPIC_API_KEY not set — vision OCR disabled. Fill in
+          OPENROUTER_API_KEY not set — vision OCR disabled. Fill in
           .env.local to enable.
         </div>
       )}

@@ -12,11 +12,10 @@ type Props = {
   initialSettings: PromptSettings;
   defaults: {
     orchestrator: string;
-    responder: string;
   };
 };
 
-type FieldKey = "orchestrator_prompt" | "responder_prompt" | "prefix_addendum";
+type FieldKey = "orchestrator_prompt" | "prefix_addendum";
 
 type FieldSpec = {
   key: FieldKey;
@@ -32,9 +31,6 @@ export function SettingsView({ initialSettings, defaults }: Props) {
   const [orchestrator, setOrchestrator] = useState(
     initialSettings.orchestrator_prompt ?? "",
   );
-  const [responder, setResponder] = useState(
-    initialSettings.responder_prompt ?? "",
-  );
   const [addendum, setAddendum] = useState(initialSettings.prefix_addendum ?? "");
   const [pendingField, setPendingField] = useState<FieldKey | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,23 +40,19 @@ export function SettingsView({ initialSettings, defaults }: Props) {
   // (e.g. after this page's own action fires).
   useEffect(() => {
     setOrchestrator(initialSettings.orchestrator_prompt ?? "");
-    setResponder(initialSettings.responder_prompt ?? "");
     setAddendum(initialSettings.prefix_addendum ?? "");
   }, [
     initialSettings.orchestrator_prompt,
-    initialSettings.responder_prompt,
     initialSettings.prefix_addendum,
   ]);
 
   function valueFor(key: FieldKey): string {
     if (key === "orchestrator_prompt") return orchestrator;
-    if (key === "responder_prompt") return responder;
     return addendum;
   }
 
   function setValueFor(key: FieldKey, v: string) {
     if (key === "orchestrator_prompt") setOrchestrator(v);
-    else if (key === "responder_prompt") setResponder(v);
     else setAddendum(v);
   }
 
@@ -97,19 +89,11 @@ export function SettingsView({ initialSettings, defaults }: Props) {
   const fields: FieldSpec[] = [
     {
       key: "orchestrator_prompt",
-      label: "Orchestrator (Claude) System Prompt",
+      label: "Orchestrator System Prompt",
       hint: "The main behavior prompt — identity, scheduling rules, tool guidance. Leave blank to use the default.",
       rows: 16,
       hasDefault: true,
       defaultValue: defaults.orchestrator,
-    },
-    {
-      key: "responder_prompt",
-      label: "Responder (DeepSeek) System Prompt",
-      hint: "Used for casual/chitchat turns. Tune voice for non-data conversation. Leave blank to use the default.",
-      rows: 10,
-      hasDefault: true,
-      defaultValue: defaults.responder,
     },
     {
       key: "prefix_addendum",
@@ -149,9 +133,7 @@ export function SettingsView({ initialSettings, defaults }: Props) {
           const initial =
             f.key === "orchestrator_prompt"
               ? initialSettings.orchestrator_prompt ?? ""
-              : f.key === "responder_prompt"
-                ? initialSettings.responder_prompt ?? ""
-                : initialSettings.prefix_addendum ?? "";
+              : initialSettings.prefix_addendum ?? "";
           const dirty = current !== initial;
 
           return (

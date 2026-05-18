@@ -1,9 +1,9 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
+import { llmAuto } from "@/lib/ai/providers";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Shift-roster OCR is temporarily disabled — re-enable Claude from the dashboard StatusRail.",
+          "Shift-roster OCR is temporarily disabled — re-enable the auto router from the dashboard StatusRail.",
       },
       { status: 503 },
     );
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     const contextLine = `Current local time: ${formatInTimeZone(now, tz, "yyyy-MM-dd HH:mm:ss")} (${tz}). Today's date: ${formatInTimeZone(now, tz, "yyyy-MM-dd")} (${formatInTimeZone(now, tz, "EEEE")}).${wifeName ? ` Wife's name on the roster: "${wifeName}". Extract ONLY her row.` : " No wife-name hint provided — extract the primary subject's row."}`;
 
     const { text, finishReason, usage } = await generateText({
-      model: anthropic("claude-opus-4-7"),
+      model: llmAuto(),
       system: SYSTEM_PROMPT,
       messages: [
         {

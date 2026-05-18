@@ -27,7 +27,7 @@ export default async function CalendarPage() {
       initialEvents={events}
       initialWifeShifts={wifeShifts}
       initialCursor={cursor.toISOString()}
-      visionEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+      visionEnabled={Boolean(process.env.OPENROUTER_API_KEY)}
     />
   );
 }

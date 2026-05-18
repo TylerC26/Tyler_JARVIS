@@ -1,21 +1,20 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { ChatInput } from "./ChatInput";
 import { ChatThread } from "./ChatThread";
 import { ClearThreadButton } from "./ClearThreadButton";
 
 type Props = {
-  initialMessages?: UIMessage[];
-  configured: { anthropic: boolean; deepseek: boolean };
+  initialMessages?: JarvisUIMessage[];
+  configured: boolean;
   variant?: "drawer" | "page";
   onClose?: () => void;
 };
-
-type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
 
 export function ChatPanel({
   initialMessages,
@@ -24,35 +23,25 @@ export function ChatPanel({
   onClose,
 }: Props) {
   const router = useRouter();
-  const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
   const [version, setVersion] = useState(0); // bump on clear to reset useChat state
 
   const transport = new DefaultChatTransport({
     api: "/api/chat",
     // Timezone is resolved server-side from the owner's configured tz
     // (getOwnerTz) — the browser's local zone is intentionally not used.
-    body: () => ({ forceRoute }),
   });
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat<JarvisUIMessage>({
     id: `jarvis-thread-${version}`,
     messages: initialMessages,
     transport,
   });
 
   const pending = status === "submitted" || status === "streaming";
-  const noKeys = !configured.anthropic && !configured.deepseek;
+  const noKeys = !configured;
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const activeModel = pending
-    ? forceRoute === "opus"
-      ? "claude-opus-4-7"
-      : forceRoute === "sonnet"
-        ? "claude-sonnet-4-6"
-        : forceRoute === "deepseek"
-          ? "deepseek-chat"
-          : "routing…"
-    : null;
+  const activeModel = pending ? "routing…" : null;
   void lastAssistant;
 
   useEffect(() => {
@@ -103,23 +92,6 @@ export function ChatPanel({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <select
-            value={forceRoute}
-            onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
-            className="rounded-sm border border-edge bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
-            title="Routing override"
-          >
-            <option value="auto">AUTO</option>
-            <option value="deepseek" disabled={!configured.deepseek}>
-              DEEPSEEK
-            </option>
-            <option value="sonnet" disabled={!configured.anthropic}>
-              SONNET
-            </option>
-            <option value="opus" disabled={!configured.anthropic}>
-              OPUS
-            </option>
-          </select>
           <ClearThreadButton
             onCleared={() => {
               setMessages([]);
@@ -141,8 +113,7 @@ export function ChatPanel({
 
       {noKeys && (
         <div className="border-b border-warn/40 bg-warn/5 px-4 py-2 font-mono text-[11px] text-warn">
-          // model keys not configured — set ANTHROPIC_API_KEY and/or
-          DEEPSEEK_API_KEY in .env.local
+          // OPENROUTER_API_KEY not configured — set it in .env.local
         </div>
       )}
 

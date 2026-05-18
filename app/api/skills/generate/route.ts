@@ -1,6 +1,6 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
+import { llmAuto } from "@/lib/ai/providers";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Skill generator is temporarily disabled — re-enable Claude from the dashboard StatusRail.",
+          "Skill generator is temporarily disabled — re-enable the auto router from the dashboard StatusRail.",
       },
       { status: 503 },
     );
@@ -54,7 +54,7 @@ Write the instruction body.`;
 
   try {
     const { text } = await generateText({
-      model: anthropic("claude-opus-4-7"),
+      model: llmAuto(),
       system: SYSTEM,
       prompt: userPrompt,
       maxOutputTokens: 800,

@@ -7,7 +7,7 @@ import { ChatPanel } from "@/components/modules/chat/ChatPanel";
 export function ChatLauncher({
   configured,
 }: {
-  configured: { anthropic: boolean; deepseek: boolean };
+  configured: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -26,7 +26,7 @@ export function ChatLauncher({
   // Hide on /chat where the page IS the chat surface
   if (pathname === "/chat") return null;
 
-  const live = configured.anthropic || configured.deepseek;
+  const live = configured;
 
   return (
     <>
