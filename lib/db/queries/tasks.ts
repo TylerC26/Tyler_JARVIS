@@ -3,7 +3,7 @@ import { listTasksByProjectCore } from "@/lib/db/core/tasks";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { Task, TaskStatus } from "@/lib/db/types";
 
-const STATUS_ORDER: TaskStatus[] = ["todo", "doing", "blocked", "done"];
+const STATUS_ORDER: TaskStatus[] = ["todo", "done"];
 
 export async function listProjectTasks(projectId: string): Promise<Task[]> {
   return listTasksByProjectCore(projectId);

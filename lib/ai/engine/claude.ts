@@ -61,9 +61,9 @@ Output strictly the JSON shape requested.`;
 const SUGGESTIONS_SYSTEM = `You generate up to 6 actionable productivity suggestions, grounded in the user's actual task data.
 
 Focus areas:
-- Stale tasks: in "doing" for >3 days with no update
 - P1 inflation: too many open critical tasks dilute prioritization
 - Stuck overdue: long-overdue items with no recent movement
+- Today's load vs capacity: if too many P1/P2 items land on the same day, surface it
 
 Each suggestion: { kind: "productivity", title (terse imperative), body (one-line rationale with numbers), severity, evidence: any structured payload tying it to specific rows }.
 

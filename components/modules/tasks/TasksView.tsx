@@ -11,9 +11,7 @@ import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
 
 const STATUS_GROUPS: { key: TaskStatus; label: string; code: string }[] = [
-  { key: "doing", label: "In Progress", code: "DOING" },
-  { key: "todo", label: "Todo", code: "TODO" },
-  { key: "blocked", label: "Blocked", code: "BLK" },
+  { key: "todo", label: "Open", code: "OPEN" },
   { key: "done", label: "Done", code: "DONE" },
 ];
 
@@ -218,24 +216,14 @@ export function TasksView({
           <Field label="Description">
             <Textarea name="description" placeholder="optional" />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
-              <Select name="status" defaultValue="todo">
-                <option value="todo">Todo</option>
-                <option value="doing">Doing</option>
-                <option value="blocked">Blocked</option>
-                <option value="done">Done</option>
-              </Select>
-            </Field>
-            <Field label="Priority">
-              <Select name="priority" defaultValue="3">
-                <option value="1">P1 — critical</option>
-                <option value="2">P2 — high</option>
-                <option value="3">P3 — normal</option>
-                <option value="4">P4 — low</option>
-              </Select>
-            </Field>
-          </div>
+          <Field label="Priority">
+            <Select name="priority" defaultValue="3">
+              <option value="1">P1 — critical</option>
+              <option value="2">P2 — high</option>
+              <option value="3">P3 — normal</option>
+              <option value="4">P4 — low</option>
+            </Select>
+          </Field>
           <Field label="Due Date">
             <Input name="due_at" type="datetime-local" />
           </Field>

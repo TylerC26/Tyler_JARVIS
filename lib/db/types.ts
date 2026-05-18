@@ -1,7 +1,7 @@
 // Hand-written types for v1 — regenerate with `supabase gen types typescript`
 // once a Supabase project is connected and the migrations have been applied.
 
-export type TaskStatus = "todo" | "doing" | "blocked" | "done";
+export type TaskStatus = "todo" | "done";
 
 export type Task = {
   id: string;

@@ -8,9 +8,7 @@ import { quickAddTask, setTaskStatus } from "@/lib/db/actions/tasks";
 import type { Task, TaskStatus } from "@/lib/db/types";
 
 const STATUS_GROUPS: { key: TaskStatus; label: string; code: string }[] = [
-  { key: "doing", label: "In Progress", code: "DOING" },
-  { key: "todo", label: "Todo", code: "TODO" },
-  { key: "blocked", label: "Blocked", code: "BLK" },
+  { key: "todo", label: "Open", code: "OPEN" },
   { key: "done", label: "Done", code: "DONE" },
 ];
 

@@ -15,7 +15,7 @@ export type CreateTaskInput = {
   project_id?: string | null;
 };
 
-const STATUS_CYCLE: TaskStatus[] = ["todo", "doing", "blocked", "done"];
+const STATUS_CYCLE: TaskStatus[] = ["todo", "done"];
 
 export async function createTaskCore(
   input: CreateTaskInput,

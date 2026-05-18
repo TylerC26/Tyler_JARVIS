@@ -11,8 +11,6 @@ const TONES: Record<Tone, string> = {
 
 const STATUS_TONE: Record<string, Tone> = {
   todo: "neutral",
-  doing: "accent",
-  blocked: "danger",
   done: "success",
   in: "success",
   out: "warn",

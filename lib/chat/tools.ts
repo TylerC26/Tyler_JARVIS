@@ -56,7 +56,7 @@ export const addTaskTool = tool({
   inputSchema: z.object({
     title: z.string().describe("Short imperative title of the task."),
     description: z.string().optional(),
-    status: z.enum(["todo", "doing", "blocked", "done"]).optional(),
+    status: z.enum(["todo", "done"]).optional(),
     priority: z
       .number()
       .int()

@@ -178,32 +178,7 @@ function productivitySuggestions(ctx: AIContext): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   const today = z(ctx.forDate);
 
-  // 1. Stale doing task
-  const stale = ctx.tasks.all.filter((t) => {
-    if (t.status !== "doing") return false;
-    const updated = z(t.updated_at ?? t.created_at);
-    return differenceInDays(today, updated) > 3;
-  });
-  if (stale.length > 0) {
-    const t = stale.sort(
-      (a, b) =>
-        differenceInDays(today, z(b.updated_at ?? b.created_at)) -
-        differenceInDays(today, z(a.updated_at ?? a.created_at)),
-    )[0]!;
-    const days = differenceInDays(
-      today,
-      z(t.updated_at ?? t.created_at),
-    );
-    out.push({
-      kind: "productivity",
-      title: `Move or split: ${t.title}`,
-      body: `In progress for ${days}d with no update. Either break it down or push it back to todo.`,
-      severity: days > 7 ? "warn" : "info",
-      evidence: { task_id: t.id, days_stale: days },
-    });
-  }
-
-  // 2. P1 inflation
+  // 1. P1 inflation
   const openP1 = ctx.tasks.all.filter(
     (t) => t.status !== "done" && t.priority === 1,
   );
@@ -217,7 +192,7 @@ function productivitySuggestions(ctx: AIContext): SuggestionDraft[] {
     });
   }
 
-  // 3. Long-overdue with no movement
+  // 2. Long-overdue with no movement
   const stuck = ctx.tasks.overdue.filter((t) => {
     const updated = z(t.updated_at ?? t.created_at);
     return differenceInDays(today, updated) > 2;

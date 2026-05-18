@@ -106,9 +106,7 @@ export function TaskDetailModal({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Status">
             <Select name="status" defaultValue={task.status}>
-              <option value="todo">Todo</option>
-              <option value="doing">Doing</option>
-              <option value="blocked">Blocked</option>
+              <option value="todo">Open</option>
               <option value="done">Done</option>
             </Select>
           </Field>

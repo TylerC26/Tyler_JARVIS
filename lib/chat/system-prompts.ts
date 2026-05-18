@@ -160,10 +160,9 @@ const EVENTS_WINDOW_DAYS = 28;
 // Pretty-print a Task line. Examples:
 //   • [P3] Email landlord (due Mon May 12)
 //   • [P1!] File taxes (OVERDUE: May 5)
-//   • [doing] Refactor calendar grid
 function formatTaskLine(t: Task, now: Date): string {
   const prio = `P${t.priority ?? 0}`;
-  const statusTag = t.status === "doing" || t.status === "blocked" ? `[${t.status}]` : `[${prio}]`;
+  const statusTag = `[${prio}]`;
   let dueTag = "";
   if (t.due_at) {
     const due = new Date(t.due_at);
