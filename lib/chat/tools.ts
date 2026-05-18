@@ -1,6 +1,6 @@
 import { generateText, tool } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { llmAuto } from "@/lib/ai/providers";
 import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
@@ -1161,7 +1161,7 @@ export const visionAnalyzeTool = tool({
       return {
         ok: false,
         error:
-          "Vision analysis is temporarily disabled. Re-enable the auto router from the StatusRail toggle on the dashboard.",
+          "Vision analysis is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
       };
     }
     try {
@@ -1169,7 +1169,7 @@ export const visionAnalyzeTool = tool({
         ? new URL(image_url)
         : image_url; // data URI or raw base64
       const { text } = await generateText({
-        model: llmAuto(),
+        model: anthropic("claude-sonnet-4-6"),
         messages: [
           {
             role: "user",

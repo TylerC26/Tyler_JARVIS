@@ -1,6 +1,10 @@
+import { anthropic } from "@ai-sdk/anthropic";
+import { deepseek } from "@ai-sdk/deepseek";
 import { generateText, stepCountIs } from "ai";
 import { getToolsForAgent } from "@/lib/ai/agents/tools";
 import { hasLLM, llmAuto } from "@/lib/ai/providers";
+import { isDeepseekConfigured } from "@/lib/chat/router";
+import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import type { Agent } from "@/lib/db/types";
 
 export type AgentToolCallSummary = {
@@ -17,17 +21,39 @@ export type AgentRunResult = {
 
 const AGENT_STEP_BUDGET = 4;
 
+async function pickModel(agent: Agent) {
+  // 'auto' is the explicit opt-in to OpenRouter's auto-router (lib/ai/providers).
+  // Use it when you want the model picked dynamically per call rather than
+  // pinning to a single Claude or DeepSeek SDK path.
+  if (agent.model_pref === "auto" && hasLLM()) return llmAuto();
+
+  const claudeOn = await isClaudeEnabled();
+  if (agent.model_pref === "deepseek" && isDeepseekConfigured())
+    return deepseek("deepseek-chat");
+  if (agent.model_pref === "claude" && claudeOn)
+    return anthropic("claude-opus-4-7");
+
+  // Fallback chain when the agent's preferred provider isn't configured:
+  // direct Claude → direct DeepSeek → OpenRouter (if any key is set).
+  if (claudeOn) return anthropic("claude-opus-4-7");
+  if (isDeepseekConfigured()) return deepseek("deepseek-chat");
+  if (hasLLM()) return llmAuto();
+  return null;
+}
+
 export async function runAgent(
   agent: Agent,
   task: string,
   contextSummary?: string,
 ): Promise<AgentRunResult> {
-  if (!hasLLM()) {
+  const model = await pickModel(agent);
+  if (!model) {
     return {
       ok: false,
       text: "",
       tool_calls: [],
-      error: "No model configured. Set OPENROUTER_API_KEY in env.",
+      error:
+        "No model configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or OPENROUTER_API_KEY in env.",
     };
   }
 
@@ -40,7 +66,7 @@ export async function runAgent(
 
   try {
     const result = await generateText({
-      model: llmAuto(),
+      model,
       system: agent.system_prompt,
       messages: [{ role: "user", content: userBlock }],
       ...(hasTools && {

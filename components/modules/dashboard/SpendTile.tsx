@@ -6,43 +6,20 @@ import type { UsageProvider } from "@/lib/db/types";
 const PROVIDER_LABEL: Record<UsageProvider, string> = {
   anthropic: "Claude",
   deepseek: "DeepSeek",
-  openai: "OpenAI",
-  google: "Google",
-  meta: "Meta",
-  mistral: "Mistral",
-  xai: "xAI",
-  other: "Other",
 };
 
 const PROVIDER_BAR: Record<UsageProvider, string> = {
   anthropic: "bg-accent",
   deepseek: "bg-info",
-  openai: "bg-success",
-  google: "bg-warn",
-  meta: "bg-info",
-  mistral: "bg-accent",
-  xai: "bg-info",
-  other: "bg-fg-dim",
 };
 
-// Pretty-print model ids (OpenRouter slugs + legacy bare ids) without leaking
-// the full slug. New slugs picked by the auto-router fall through to the raw
-// string.
+// Pretty-print Anthropic/DeepSeek model ids without leaking the full slug.
 function modelLabel(model: string): string {
-  // Legacy bare ids (pre-OpenRouter ledger rows)
   if (model === "claude-opus-4-7") return "Opus 4.7";
   if (model === "claude-sonnet-4-6") return "Sonnet 4.6";
   if (model === "claude-haiku-4-5") return "Haiku 4.5";
   if (model === "deepseek-chat") return "Chat";
-  // OpenRouter slugs
-  if (model === "anthropic/claude-opus-4.7") return "Opus 4.7";
-  if (model === "anthropic/claude-sonnet-4.6") return "Sonnet 4.6";
-  if (model === "anthropic/claude-haiku-4.5") return "Haiku 4.5";
-  if (model === "deepseek/deepseek-chat") return "Chat";
-  if (model === "openrouter/auto") return "Auto";
-  // Generic fallback: strip the provider prefix for display.
-  const slash = model.indexOf("/");
-  return slash >= 0 ? model.slice(slash + 1) : model;
+  return model;
 }
 
 function fmtUSD(n: number): string {

@@ -46,7 +46,7 @@ export function ChatInput({ onSend, disabled, pending }: Props) {
           rows={1}
           placeholder={
             disabled
-              ? "// key not configured — set OPENROUTER_API_KEY in .env.local"
+              ? "// keys not configured — set ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY"
               : "talk to jarvis…"
           }
           disabled={disabled}

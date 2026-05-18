@@ -15,22 +15,20 @@ export type RecordUsageInput = {
   model: string;
   source: UsageSource;
   usage: TokenUsageInput;
-  // Optional: actual USD cost as reported by the upstream (OpenRouter surfaces
-  // this in providerMetadata.openrouter.usage.cost). When provided, used as-is
-  // instead of computing from the local price table.
-  costUsd?: number;
 };
 
 export async function recordUsageCore(input: RecordUsageInput): Promise<void> {
   const provider = providerForModel(input.model);
+  if (!provider) {
+    // Unknown model — don't pollute the ledger with rows we can't price.
+    console.warn(`[usage] no pricing for model ${input.model}; skipping`);
+    return;
+  }
 
   const supabase = await getSupabaseServer();
   if (!supabase) return;
 
-  const cost =
-    typeof input.costUsd === "number"
-      ? Number(input.costUsd.toFixed(6))
-      : computeCostUSD(input.model, input.usage);
+  const cost = computeCostUSD(input.model, input.usage);
 
   const { error } = await supabase.from("usage_events").insert({
     owner_id: getOwnerId(),

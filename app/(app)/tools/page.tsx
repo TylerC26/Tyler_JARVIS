@@ -81,14 +81,25 @@ export default function ToolsPage() {
     });
   }
 
-  const ORDER = ["Tasks", "Calendar", "Projects", "Skills", "Query", "Agents", "Memory", "Vision", "Automation"];
+  // Web search is Anthropic-provided (not in ALL_TOOLS) — add manually.
+  categoryMap.set("Web Search", [
+    {
+      name: "web_search",
+      label: "web search",
+      description:
+        "Anthropic server-side web search. Used by Claude (Sonnet/Haiku) to look up current events, prices, weather, or any real-time information past the model's training cutoff. Billed via ANTHROPIC_API_KEY — no separate search key needed. Max 5 uses per turn.",
+      params: ["query"],
+    },
+  ]);
+
+  const ORDER = ["Tasks", "Calendar", "Projects", "Skills", "Query", "Agents", "Memory", "Vision", "Automation", "Web Search"];
   const categories: Category[] = ORDER.map((label) => ({
     label,
     glyph: CATEGORY_GLYPHS[label] ?? "◈",
     tools: categoryMap.get(label) ?? [],
   })).filter((c) => c.tools.length > 0);
 
-  const total = Object.keys(ALL_TOOLS).length;
+  const total = Object.keys(ALL_TOOLS).length + 1; // +1 for web_search
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

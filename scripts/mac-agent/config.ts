@@ -1,6 +1,5 @@
 // Loads two things on daemon startup:
-//   1. ~/.jarvis/mac-agent.env  — secrets (Supabase, Telegram, Anthropic for the
-//                                 spawned `claude` CLI, OWNER_ID)
+//   1. ~/.jarvis/mac-agent.env  — secrets (Supabase, Telegram, Anthropic, OWNER_ID)
 //   2. ~/.jarvis/mac-agent.toml — daemon settings + repo allowlist
 //
 // Env file format mirrors `.env.local` so it's familiar; TOML parser is a tiny

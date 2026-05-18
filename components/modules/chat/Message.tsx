@@ -1,6 +1,6 @@
 "use client";
 
-import type { JarvisUIMessage } from "@/lib/chat/ui";
+import type { UIMessage } from "ai";
 import { ToolCallCard } from "./ToolCallCard";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -9,35 +9,15 @@ const ROLE_LABEL: Record<string, string> = {
   system: "system",
 };
 
-// Pretty-print the OpenRouter-served model id under each assistant turn.
-// Falls back to the raw slug for anything new the auto-router picks up.
-function modelLabel(model: string): string {
-  if (model === "anthropic/claude-opus-4.7") return "opus 4.7";
-  if (model === "anthropic/claude-sonnet-4.6") return "sonnet 4.6";
-  if (model === "anthropic/claude-haiku-4.5") return "haiku 4.5";
-  if (model === "deepseek/deepseek-chat") return "deepseek";
-  if (model === "openrouter/auto") return "auto";
-  // Legacy bare ids (pre-OpenRouter history)
-  if (model === "claude-opus-4-7") return "opus 4.7";
-  if (model === "claude-sonnet-4-6") return "sonnet 4.6";
-  if (model === "claude-haiku-4-5") return "haiku 4.5";
-  if (model === "deepseek-chat") return "deepseek";
-  return model;
-}
-
-export function Message({ message }: { message: JarvisUIMessage }) {
+export function Message({ message }: { message: UIMessage }) {
   const role = message.role;
   const isUser = role === "user";
-  const model = !isUser ? message.metadata?.model : undefined;
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
         <span className={isUser ? "" : "text-accent"}>›</span>
         <span>{ROLE_LABEL[role] ?? role}</span>
-        {model && (
-          <span className="text-fg-dim/70">· {modelLabel(model)}</span>
-        )}
       </div>
       <div
         className={[

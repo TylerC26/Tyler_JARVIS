@@ -17,9 +17,14 @@ import {
   type TelegramTurnContext,
 } from "./request-context";
 import {
-  modelIdForResponse,
-  streamChatResponse,
   type ChatModelId,
+  decideRoute,
+  isAnthropicConfigured,
+  isDeepseekConfigured,
+  modelIdForRoute,
+  streamClaudeResponse,
+  streamDeepseekResponse,
+  type ForceRoute,
 } from "./router";
 
 export type ChatModel = ChatModelId;
@@ -149,19 +154,19 @@ export type RunChatTurnInput = {
   modelMessages: ModelMessage[];
   // The new user turn's text — persisted as the user row, fed to memory extraction.
   latestUserText: string;
+  forceRoute?: ForceRoute;
   // Optional per-turn metadata exposed to tools via lib/chat/request-context.
   telegramContext?: TelegramTurnContext;
 };
 
 export type RunChatTurnResult = {
   assistantText: string;
-  model: ChatModel;
+  route: ChatModel;
 };
 
-// End-to-end non-streaming turn: persist the user message, route through
-// OpenRouter, run the model to completion, persist the assistant + tool rows,
-// revalidate, extract memory. Used by callers (e.g. the Telegram webhook)
-// that need the finished reply text.
+// End-to-end non-streaming turn: persist the user message, route, run the model
+// to completion, persist the assistant + tool rows, revalidate, extract memory.
+// Used by callers (e.g. the Telegram webhook) that need the finished reply text.
 export async function runChatTurn(
   input: RunChatTurnInput,
 ): Promise<RunChatTurnResult> {
@@ -174,23 +179,35 @@ export async function runChatTurn(
 async function runChatTurnInner(
   input: RunChatTurnInput,
 ): Promise<RunChatTurnResult> {
-  const { modelMessages, latestUserText } = input;
+  const { modelMessages, latestUserText, forceRoute } = input;
 
   await appendMessage({ role: "user", content: latestUserText });
 
-  const result = await streamChatResponse(modelMessages);
+  const route = await decideRoute(modelMessages, { forceRoute });
+  if (route !== "deepseek" && !isAnthropicConfigured()) {
+    throw new Error("ANTHROPIC_API_KEY not configured.");
+  }
+  if (route === "deepseek" && !isDeepseekConfigured()) {
+    throw new Error("DEEPSEEK_API_KEY not configured.");
+  }
+
+  const model: ChatModel = modelIdForRoute(route);
+
+  const result =
+    route === "deepseek"
+      ? await streamDeepseekResponse(modelMessages)
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+        );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
-  // `.steps` / `.response` settle.
+  // `.steps` / `.text` settle.
   await result.consumeStream();
-  const [steps, response] = await Promise.all([
-    result.steps,
-    result.response,
-  ]);
+  const steps = (await result.steps) as StepLike[];
 
-  const model = modelIdForResponse(response?.modelId);
   const { text: assistantText, toolCalls } = await persistAssistantSteps(
-    steps as unknown as StepLike[],
+    steps,
     model,
   );
 
@@ -199,5 +216,5 @@ async function runChatTurnInner(
   void runSkillDrafter(latestUserText, assistantText, toolCalls);
   void runSkillJudge(latestUserText, assistantText);
 
-  return { assistantText, model };
+  return { assistantText, route: model };
 }

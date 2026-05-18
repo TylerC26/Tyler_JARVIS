@@ -7,7 +7,10 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const configured = Boolean(process.env.OPENROUTER_API_KEY);
+  const configured = {
+    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+  };
 
   return (
     <div className="flex min-h-screen">

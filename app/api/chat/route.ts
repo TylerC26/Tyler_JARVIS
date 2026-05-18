@@ -1,8 +1,15 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { NextResponse } from "next/server";
-import { hasLLM } from "@/lib/ai/providers";
 import { appendMessage } from "@/lib/chat/persist";
-import { modelIdForResponse, streamChatResponse } from "@/lib/chat/router";
+import {
+  decideRoute,
+  isAnthropicConfigured,
+  isDeepseekConfigured,
+  modelIdForRoute,
+  streamClaudeResponse,
+  streamDeepseekResponse,
+  type ForceRoute,
+} from "@/lib/chat/router";
 import {
   persistAssistantSteps,
   revalidateChatPaths,
@@ -10,27 +17,27 @@ import {
   runSkillDrafter,
   runSkillJudge,
 } from "@/lib/chat/turn";
-import type { JarvisMessageMetadata } from "@/lib/chat/ui";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type IncomingBody = {
   messages: UIMessage[];
+  forceRoute?: ForceRoute;
 };
 
 export async function POST(req: Request) {
-  if (!hasLLM()) {
+  if (!isAnthropicConfigured() && !isDeepseekConfigured()) {
     return NextResponse.json(
       {
         error:
-          "No model API key configured. Set OPENROUTER_API_KEY in .env.local.",
+          "No model API keys configured. Set ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY in .env.local.",
       },
       { status: 503 },
     );
   }
 
-  const { messages } = (await req.json()) as IncomingBody;
+  const { messages, forceRoute } = (await req.json()) as IncomingBody;
 
   const modelMessages = await convertToModelMessages(messages);
 
@@ -46,31 +53,38 @@ export async function POST(req: Request) {
     await appendMessage({ role: "user", content: latestUserText });
   }
 
-  const result = await streamChatResponse(modelMessages);
+  const route = await decideRoute(modelMessages, { forceRoute });
 
-  return result.toUIMessageStreamResponse<UIMessage<JarvisMessageMetadata>>({
-    messageMetadata: ({ part }) => {
-      // The AI SDK fires this callback for every stream part. Only the
-      // `finish-step` part carries the served model id (response.modelId);
-      // we forward it as message metadata so the client can show which
-      // upstream OpenRouter picked.
-      if (part.type === "finish-step") {
-        return { model: part.response.modelId } satisfies JarvisMessageMetadata;
-      }
-      return undefined;
-    },
+  if (route === "deepseek" && !isDeepseekConfigured()) {
+    return NextResponse.json(
+      { error: "DEEPSEEK_API_KEY not configured." },
+      { status: 503 },
+    );
+  }
+  if (route !== "deepseek" && !isAnthropicConfigured()) {
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY not configured." },
+      { status: 503 },
+    );
+  }
+
+  const result =
+    route === "deepseek"
+      ? await streamDeepseekResponse(modelMessages)
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+        );
+
+  return result.toUIMessageStreamResponse({
     onFinish: async () => {
       // Persist the assistant turn (text + any tool calls/results) from the
       // settled streamText steps, revalidate caches, then run fire-and-forget
-      // memory extraction + skill drafting. Shared with the Telegram webhook
-      // via lib/chat/turn.ts.
-      const [steps, response] = await Promise.all([
-        result.steps,
-        result.response,
-      ]);
+      // memory extraction + skill drafting + judging. Shared with the
+      // Telegram webhook via lib/chat/turn.ts.
       const { text: assistantText, toolCalls } = await persistAssistantSteps(
-        steps,
-        modelIdForResponse(response?.modelId),
+        await result.steps,
+        modelIdForRoute(route),
       );
       revalidateChatPaths();
       void runMemoryExtraction(latestUserText, assistantText);
@@ -82,6 +96,7 @@ export async function POST(req: Request) {
 
 export async function GET() {
   return NextResponse.json({
-    openrouter: hasLLM(),
+    anthropic: isAnthropicConfigured(),
+    deepseek: isDeepseekConfigured(),
   });
 }

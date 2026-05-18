@@ -263,19 +263,7 @@ export type SiteSettings = {
   updated_at: string | null;
 };
 
-// Upstream LLM provider as identified by the OpenRouter slug prefix. Stored
-// as plain text in usage_events.provider — no DB constraint, so adding new
-// providers is a type-only change. "other" is the catch-all for any slug we
-// don't pattern-match.
-export type UsageProvider =
-  | "anthropic"
-  | "deepseek"
-  | "openai"
-  | "google"
-  | "meta"
-  | "mistral"
-  | "xai"
-  | "other";
+export type UsageProvider = "anthropic" | "deepseek";
 export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
 
 export type UsageEvent = {

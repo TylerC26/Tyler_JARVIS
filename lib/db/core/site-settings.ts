@@ -50,12 +50,10 @@ export async function setClaudeEnabledCore(
   return { ok: true, data: data as SiteSettings };
 }
 
-// Async, DB-backed kill switch for the auto-router. Combines the OpenRouter
-// key check with the runtime toggle. When true → chat uses openrouter/auto;
-// when false → cheap DeepSeek mode. Name kept as `isClaudeEnabled` for v1 to
-// minimise churn — its meaning is now "is the auto-router mode on?".
+// Async, DB-backed kill switch for Anthropic calls. Combines the env-key check
+// with the runtime toggle. Used at every Claude call site.
 export async function isClaudeEnabled(): Promise<boolean> {
-  if (!process.env.OPENROUTER_API_KEY) return false;
+  if (!process.env.ANTHROPIC_API_KEY) return false;
   try {
     const s = await getSiteSettingsCore();
     return s.claude_enabled;
