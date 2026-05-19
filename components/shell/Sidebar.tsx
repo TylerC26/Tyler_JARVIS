@@ -22,7 +22,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "overview",
     items: [
       { href: "/", label: "Dashboard", code: "DSH", glyph: "◈", status: "live" },
-      { href: "/main", label: "Main", code: "MNX", glyph: "◉", status: "live" },
     ],
   },
   {
