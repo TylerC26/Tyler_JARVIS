@@ -1,17 +1,19 @@
 "use client";
 
-import { addHours } from "date-fns";
+import { addDays, addHours, format } from "date-fns";
 import { useEffect, useState } from "react";
 import {
   bulkCreateEventsAction,
   bulkUpsertWifeShiftsAction,
   createEventAction,
   deleteEventAction,
+  listCalendarRangeAction,
   moveEventAction,
   updateEventAction,
 } from "@/app/(app)/calendar/actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CategoryKey } from "@/lib/calendar/categories";
+import { monthRange, weekRange } from "@/lib/calendar/grid";
 import type { Event, WifeShift, WifeShiftCode } from "@/lib/db/types";
 import { CalendarToolbar, type ViewMode } from "./CalendarToolbar";
 import { EventDrawer } from "./EventDrawer";
@@ -52,18 +54,38 @@ export function CalendarView({
     toShiftMap(initialWifeShifts),
   );
   const [cursor, setCursor] = useState<Date>(() => new Date(initialCursor));
-
-  // When the parent server component re-renders (e.g. after Jarvis runs a tool
-  // and the chat panel calls router.refresh()), it passes fresh initial props.
-  // Mirror them into local state so the grid actually reflects the new truth
-  // — useState only honors the seed on first mount.
-  useEffect(() => {
-    setEvents(initialEvents);
-  }, [initialEvents]);
-  useEffect(() => {
-    setWifeShifts(toShiftMap(initialWifeShifts));
-  }, [initialWifeShifts]);
   const [view, setView] = useState<ViewMode>("week");
+
+  // Refetch events + wife shifts whenever the visible range changes (cursor
+  // moved, or view toggled between week/month). The initial server fetch only
+  // covers ~6 weeks from today's month, so navigating beyond that window would
+  // otherwise show an empty grid.
+  useEffect(() => {
+    let cancelled = false;
+    const { start, end } =
+      view === "week" ? weekRange(cursor) : monthRange(cursor);
+    // Pad month view by one extra week on each side so the leading/trailing
+    // grid cells from adjacent months still show their events.
+    const rangeStart = view === "month" ? addDays(start, -7) : start;
+    const rangeEnd = view === "month" ? addDays(end, 7) : end;
+    (async () => {
+      const { events: nextEvents, wifeShifts: nextShifts } =
+        await listCalendarRangeAction(
+          rangeStart.toISOString(),
+          rangeEnd.toISOString(),
+          format(rangeStart, "yyyy-MM-dd"),
+          format(rangeEnd, "yyyy-MM-dd"),
+        );
+      if (cancelled) return;
+      setEvents(nextEvents);
+      setWifeShifts(toShiftMap(nextShifts));
+    })().catch((err) => {
+      console.error("[calendar] range fetch failed:", err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cursor, view, initialEvents, initialWifeShifts]);
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "closed" });
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [drawerPending, setDrawerPending] = useState(false);

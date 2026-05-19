@@ -9,11 +9,13 @@ import {
   type CreateEventInput,
   type UpdateEventInput,
 } from "@/lib/db/core/events";
+import { listEventsInRangeCore } from "@/lib/db/core/events";
 import {
   deleteWifeShiftCore,
   upsertWifeShiftsCore,
   type WifeShiftInput,
 } from "@/lib/db/core/wife-shifts";
+import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 
 function bump() {
   revalidatePath("/calendar");
@@ -91,4 +93,17 @@ export async function deleteWifeShiftAction(shiftDate: string) {
   return result.ok
     ? { ok: true as const }
     : { ok: false as const, error: result.error };
+}
+
+export async function listCalendarRangeAction(
+  startIso: string,
+  endIso: string,
+  startDate: string,
+  endDate: string,
+) {
+  const [events, wifeShifts] = await Promise.all([
+    listEventsInRangeCore(startIso, endIso),
+    listWifeShiftsInRangeCore(startDate, endDate),
+  ]);
+  return { events, wifeShifts };
 }
