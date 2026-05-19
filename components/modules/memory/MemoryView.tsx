@@ -77,6 +77,7 @@ export function MemoryView({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showExtracted, setShowExtracted] = useState(false);
 
   useEffect(() => {
     setMemories(initialMemories);
@@ -176,23 +177,39 @@ export function MemoryView({
   }
 
   const pinnedCount = memories.filter((m) => m.pinned).length;
+  const extractedCount = memories.filter((m) => m.source === "extracted").length;
+  const visibleMemories = showExtracted
+    ? memories
+    : memories.filter((m) => m.source !== "extracted");
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         code="MEM"
         title="Memory"
-        subtitle={`${memories.length} entries · ${pinnedCount} pinned. Top 8 (pinned first, then most recently used) get injected into Jarvis's system prefix every chat turn.`}
+        subtitle={`${memories.length} entries · ${pinnedCount} pinned · ${extractedCount} extracted. Top 8 (pinned first, then most recently used) get injected into Jarvis's system prefix every chat turn.`}
         actions={
-          <Button variant="primary" onClick={openCreate}>
-            + new memory
-          </Button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-dim">
+              <input
+                type="checkbox"
+                checked={showExtracted}
+                onChange={(e) => setShowExtracted(e.target.checked)}
+              />
+              show extracted
+            </label>
+            <Button variant="primary" onClick={openCreate}>
+              + new memory
+            </Button>
+          </div>
         }
       />
 
-      {memories.length === 0 ? (
+      {visibleMemories.length === 0 ? (
         <div className="rounded-md border border-edge bg-surface/70 p-8 text-center font-mono text-sm text-fg-dim">
-          // no memories yet — Jarvis will record facts as you chat, or add one manually
+          {memories.length === 0
+            ? "// no memories yet — Jarvis will record facts as you chat, or add one manually"
+            : `// ${extractedCount} extracted ${extractedCount === 1 ? "memory" : "memories"} hidden — toggle "show extracted" to view`}
         </div>
       ) : (
         <div className="rounded-md border border-edge bg-surface/70">
@@ -209,7 +226,7 @@ export function MemoryView({
               </tr>
             </thead>
             <tbody>
-              {memories.map((m) => (
+              {visibleMemories.map((m) => (
                 <tr key={m.id} className="border-b border-edge/60 last:border-0">
                   <td className="px-2 py-2 align-top">
                     <button
