@@ -120,6 +120,7 @@ export function CalendarView({
           description: values.description,
           category: values.category,
           all_day: values.all_day,
+          task_id: values.task_id,
         });
         if (!result.ok) {
           setDrawerError(result.error);
@@ -135,6 +136,7 @@ export function CalendarView({
           description: values.description,
           category: values.category,
           all_day: values.all_day,
+          task_id: values.task_id,
         });
         if (!result.ok) {
           setDrawerError(result.error);

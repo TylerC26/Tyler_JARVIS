@@ -138,6 +138,7 @@ export function MonthView({
                   const cat = getCategory(seg.category);
                   const widthPct = ((seg.endCol - seg.startCol + 1) / 7) * 100;
                   const leftPct = (seg.startCol / 7) * 100;
+                  const linkedDone = seg.linked_task?.status === "done";
                   return (
                     <button
                       type="button"
@@ -150,6 +151,7 @@ export function MonthView({
                       className={[
                         "absolute pointer-events-auto flex items-center gap-1.5 rounded-sm border px-1.5 overflow-hidden text-left",
                         "hover:brightness-110 hover:shadow",
+                        linkedDone ? "opacity-50 saturate-50" : "",
                         cat.bg,
                         cat.border,
                       ].join(" ")}
@@ -166,7 +168,12 @@ export function MonthView({
                       >
                         {cat.glyph}
                       </span>
-                      <span className="font-mono text-[10px] truncate text-fg flex-1">
+                      <span
+                        className={[
+                          "font-mono text-[10px] truncate text-fg flex-1",
+                          linkedDone ? "line-through" : "",
+                        ].join(" ")}
+                      >
                         {seg.title}
                       </span>
                     </button>
@@ -189,6 +196,7 @@ export function MonthView({
                     >
                       {dayChips.slice(0, 3).map((e) => {
                         const cat = getCategory(e.category);
+                        const linkedDone = e.linked_task?.status === "done";
                         return (
                           <button
                             type="button"
@@ -199,6 +207,7 @@ export function MonthView({
                             }}
                             className={[
                               "pointer-events-auto rounded-sm border px-1 py-0.5 font-mono text-[10px] truncate cursor-pointer hover:brightness-125 text-left",
+                              linkedDone ? "opacity-50 saturate-50" : "",
                               cat.bg,
                               cat.border,
                             ].join(" ")}
@@ -209,7 +218,14 @@ export function MonthView({
                             <span className="text-fg">
                               {fmtTimeShort(e.starts_at)}
                             </span>{" "}
-                            <span className="text-fg-muted">{e.title}</span>
+                            <span
+                              className={[
+                                "text-fg-muted",
+                                linkedDone ? "line-through" : "",
+                              ].join(" ")}
+                            >
+                              {e.title}
+                            </span>
                           </button>
                         );
                       })}

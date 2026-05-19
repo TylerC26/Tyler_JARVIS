@@ -27,6 +27,7 @@ export type CreateEventInput = {
   location?: string | null;
   color?: string | null;
   category?: string | null;
+  task_id?: string | null;
 };
 
 export type UpdateEventInput = Partial<{
@@ -38,7 +39,12 @@ export type UpdateEventInput = Partial<{
   location: string | null;
   color: string | null;
   category: string | null;
+  task_id: string | null;
 }>;
+
+// PostgREST embedded select for the linked task. Pulled out as a constant so
+// listEvents* call sites stay in sync.
+const EVENT_SELECT = "*, linked_task:tasks(id, title, status)";
 
 export async function createEventCore(
   input: CreateEventInput,
@@ -77,8 +83,9 @@ export async function createEventCore(
       location: input.location ?? null,
       color: input.color ?? null,
       category: input.category ?? null,
+      task_id: input.task_id ?? null,
     })
-    .select()
+    .select(EVENT_SELECT)
     .single();
 
   if (error) return { ok: false, error: error.message };
@@ -111,6 +118,7 @@ export async function updateEventCore(
   if (input.location !== undefined) patch.location = input.location;
   if (input.color !== undefined) patch.color = input.color;
   if (input.category !== undefined) patch.category = input.category;
+  if (input.task_id !== undefined) patch.task_id = input.task_id;
 
   // If toggling all_day on (or already on and times changed), normalize boundaries
   if (input.all_day === true || patch.all_day === true) {
@@ -128,7 +136,7 @@ export async function updateEventCore(
     .from("events")
     .update(patch)
     .eq("id", id)
-    .select()
+    .select(EVENT_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as Event };
@@ -174,7 +182,7 @@ export async function moveEventCore(
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .select()
+    .select(EVENT_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as Event };
@@ -198,7 +206,7 @@ export async function listEventsInRangeCore(
   if (!supabase) return [];
   const { data } = await supabase
     .from("events")
-    .select("*")
+    .select(EVENT_SELECT)
     .eq("owner_id", getOwnerId())
     .gte("starts_at", startISO)
     .lt("starts_at", endISO)
@@ -213,7 +221,7 @@ export async function listUpcomingEventsCore(
   if (!supabase) return [];
   const { data } = await supabase
     .from("events")
-    .select("*")
+    .select(EVENT_SELECT)
     .eq("owner_id", getOwnerId())
     .gte("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })

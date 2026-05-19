@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  listLinkableTasksAction,
+  type LinkableTask,
+} from "@/app/(app)/calendar/actions";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { type CategoryKey } from "@/lib/calendar/categories";
 import { fromLocalInput, toLocalInput } from "@/lib/calendar/grid";
@@ -15,6 +19,7 @@ export type EventFormValues = {
   description: string | null;
   category: CategoryKey | null;
   all_day: boolean;
+  task_id: string | null;
 };
 
 type Props = {
@@ -33,11 +38,26 @@ function toForm(initial: Props["initial"]): EventFormValues {
     description: initial.description ?? null,
     category: (initial.category as CategoryKey | null | undefined) ?? null,
     all_day: initial.all_day ?? false,
+    task_id: initial.task_id ?? null,
   };
 }
 
 export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
   const [values, setValues] = useState<EventFormValues>(() => toForm(initial));
+  const [tasks, setTasks] = useState<LinkableTask[]>([]);
+
+  // Load the linkable tasks list on open so the dropdown isn't empty.
+  // Pass through the currently-linked id so we still see it if it's done.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rows = await listLinkableTasksAction(initial.task_id ?? null);
+      if (!cancelled) setTasks(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.task_id]);
 
   function update<K extends keyof EventFormValues>(key: K, v: EventFormValues[K]) {
     const next = { ...values, [key]: v };
@@ -91,6 +111,22 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
           value={values.category}
           onChange={(next) => update("category", next)}
         />
+      </Field>
+      <Field label="Linked task">
+        <select
+          name="task_id"
+          value={values.task_id ?? ""}
+          onChange={(e) => update("task_id", e.target.value || null)}
+          className="w-full rounded-sm border border-edge bg-surface px-2 py-1.5 font-mono text-[12px] text-fg outline-none focus:border-accent"
+        >
+          <option value="">— none —</option>
+          {tasks.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.status === "done" ? "✓ " : ""}
+              {t.title}
+            </option>
+          ))}
+        </select>
       </Field>
       <Field label="Location">
         <Input

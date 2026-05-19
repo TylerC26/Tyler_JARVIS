@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getOwnerId } from "@/lib/auth/currentUser";
 import {
   createEventCore,
   deleteEventCore,
@@ -16,10 +17,49 @@ import {
   type WifeShiftInput,
 } from "@/lib/db/core/wife-shifts";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
+import { getSupabaseServer } from "@/lib/supabase/server";
+import type { TaskStatus } from "@/lib/db/types";
 
 function bump() {
   revalidatePath("/calendar");
   revalidatePath("/");
+}
+
+export type LinkableTask = { id: string; title: string; status: TaskStatus };
+
+// Tasks shown in the event drawer's "link to task" picker. Defaults to open
+// tasks; if currentTaskId is supplied (editing an event already linked to a
+// completed task), that one is appended so the user can still see/clear it.
+export async function listLinkableTasksAction(
+  currentTaskId?: string | null,
+): Promise<LinkableTask[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  const owner = getOwnerId();
+
+  const { data: open } = await supabase
+    .from("tasks")
+    .select("id, title, status")
+    .eq("owner_id", owner)
+    .neq("status", "done")
+    .order("priority")
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  const tasks = (open as LinkableTask[] | null) ?? [];
+
+  if (currentTaskId && !tasks.some((t) => t.id === currentTaskId)) {
+    const { data: current } = await supabase
+      .from("tasks")
+      .select("id, title, status")
+      .eq("owner_id", owner)
+      .eq("id", currentTaskId)
+      .maybeSingle();
+    if (current) tasks.push(current as LinkableTask);
+  }
+
+  return tasks;
 }
 
 export async function createEventAction(input: CreateEventInput) {

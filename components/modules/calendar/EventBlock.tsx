@@ -49,6 +49,7 @@ export function EventBlock({
   const top = eventTopPx(startsAt);
   const height = eventHeightPx(startsAt, endsAt);
   const minimal = height < 36;
+  const linkedDone = event.linked_task?.status === "done";
 
   // Lane positioning: each event takes 1/trackCount of the column width,
   // offset by lane * width. Subtract gutter so blocks don't touch edges.
@@ -111,6 +112,9 @@ export function EventBlock({
         isDragging
           ? "shadow-2xl shadow-accent/30 ring-1 ring-accent/50 z-20"
           : "hover:shadow-md hover:brightness-110",
+        // Completed linked task → dim + line-through. Still interactive so you
+        // can edit/unlink.
+        linkedDone ? "opacity-50 saturate-50" : "",
         cat.bg,
         cat.border,
       ].join(" ")}
@@ -127,7 +131,12 @@ export function EventBlock({
         <span className={`shrink-0 text-[10px] leading-none ${cat.text}`} aria-hidden>
           {cat.glyph}
         </span>
-        <span className="font-mono text-[11px] truncate text-fg flex-1">
+        <span
+          className={[
+            "font-mono text-[11px] truncate text-fg flex-1",
+            linkedDone ? "line-through" : "",
+          ].join(" ")}
+        >
           {event.title}
         </span>
       </div>

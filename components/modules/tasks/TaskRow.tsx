@@ -1,5 +1,6 @@
 "use client";
 
+import { differenceInCalendarDays } from "date-fns";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { cycleTaskStatus, deleteTask } from "@/lib/db/actions/tasks";
@@ -14,6 +15,17 @@ const PRIORITY_COLOR: Record<number, string> = {
   3: "bg-info",
   4: "bg-fg-dim",
 };
+
+// Classify due-date urgency for chip coloring. Done tasks are always dimmed.
+function dueClass(due_at: string, done: boolean): string {
+  if (done) return "border-edge text-fg-dim";
+  const diff = differenceInCalendarDays(new Date(due_at), new Date());
+  if (diff < 0) return "border-danger/50 bg-danger/10 text-danger";
+  if (diff === 0) return "border-warn/60 bg-warn/15 text-warn";
+  if (diff <= 2) return "border-warn/40 bg-warn/5 text-warn";
+  if (diff <= 7) return "border-info/40 bg-info/5 text-info";
+  return "border-edge text-fg-muted";
+}
 
 export function TaskRow({
   task,
@@ -87,12 +99,6 @@ export function TaskRow({
           )}
           <span className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
             <span>P{task.priority}</span>
-            {task.due_at && (
-              <>
-                <span className="text-edge-strong">·</span>
-                <span>{fmtRelativeDay(task.due_at)}</span>
-              </>
-            )}
             {project && (
               <>
                 <span className="text-edge-strong">·</span>
@@ -109,6 +115,17 @@ export function TaskRow({
         </button>
 
         <div className="flex shrink-0 items-center gap-2">
+          {task.due_at && (
+            <span
+              className={[
+                "rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tabular-nums tracking-wider",
+                dueClass(task.due_at, task.status === "done"),
+              ].join(" ")}
+              title={new Date(task.due_at).toLocaleString()}
+            >
+              {fmtRelativeDay(task.due_at)}
+            </span>
+          )}
           <StatusBadge status={task.status} />
           <button
             type="button"

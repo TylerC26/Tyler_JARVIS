@@ -23,6 +23,9 @@ function bumpRevalidations() {
   revalidatePath("/tasks");
   revalidatePath("/");
   revalidatePath("/projects");
+  // Events can link to a task; toggling task status changes how the linked
+  // event renders (strikethrough + dim), so refresh the calendar too.
+  revalidatePath("/calendar");
 }
 
 export async function createTask(formData: FormData) {

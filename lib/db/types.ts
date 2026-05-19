@@ -77,6 +77,10 @@ export type Event = {
   recurrence_rule: string | null;
   source: string;
   external_id: string | null;
+  task_id: string | null;
+  // Populated via Supabase embed in listEventsInRangeCore. The calendar uses
+  // it to strike through events whose linked task has been completed.
+  linked_task?: { id: string; title: string; status: TaskStatus } | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -383,6 +387,7 @@ export type Database = {
           recurrence_rule?: string | null;
           source?: string;
           external_id?: string | null;
+          task_id?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };

@@ -63,6 +63,7 @@ export function AllDayStrip({
             const cat = getCategory(seg.category);
             const widthPct = ((seg.endCol - seg.startCol + 1) / days.length) * 100;
             const leftPct = (seg.startCol / days.length) * 100;
+            const linkedDone = seg.linked_task?.status === "done";
             return (
               <button
                 type="button"
@@ -72,6 +73,7 @@ export function AllDayStrip({
                 className={[
                   "absolute flex items-center gap-1.5 rounded-sm border px-1.5 overflow-hidden text-left",
                   "hover:brightness-110 hover:shadow",
+                  linkedDone ? "opacity-50 saturate-50" : "",
                   cat.bg,
                   cat.border,
                 ].join(" ")}
@@ -88,7 +90,12 @@ export function AllDayStrip({
                 >
                   {cat.glyph}
                 </span>
-                <span className="font-mono text-[11px] truncate text-fg flex-1">
+                <span
+                  className={[
+                    "font-mono text-[11px] truncate text-fg flex-1",
+                    linkedDone ? "line-through" : "",
+                  ].join(" ")}
+                >
                   {seg.title}
                 </span>
               </button>
