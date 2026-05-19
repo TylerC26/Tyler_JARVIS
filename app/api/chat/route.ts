@@ -17,6 +17,7 @@ import {
   runSkillDrafter,
   runSkillJudge,
 } from "@/lib/chat/turn";
+import type { JarvisMessageMetadata, JarvisUIMessage } from "@/lib/chat/ui";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -76,7 +77,17 @@ export async function POST(req: Request) {
           route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
         );
 
-  return result.toUIMessageStreamResponse({
+  const modelId = modelIdForRoute(route);
+
+  return result.toUIMessageStreamResponse<JarvisUIMessage>({
+    // Stamp the model id onto the message envelope so the client can render
+    // a "· opus 4.7" tag under each assistant turn as it streams.
+    messageMetadata: ({ part }) => {
+      if (part.type === "start") {
+        return { model: modelId } satisfies JarvisMessageMetadata;
+      }
+      return undefined;
+    },
     onFinish: async () => {
       // Persist the assistant turn (text + any tool calls/results) from the
       // settled streamText steps, revalidate caches, then run fire-and-forget
@@ -84,7 +95,7 @@ export async function POST(req: Request) {
       // Telegram webhook via lib/chat/turn.ts.
       const { text: assistantText, toolCalls } = await persistAssistantSteps(
         await result.steps,
-        modelIdForRoute(route),
+        modelId,
       );
       revalidateChatPaths();
       void runMemoryExtraction(latestUserText, assistantText);

@@ -1,15 +1,16 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { ChatInput } from "./ChatInput";
 import { ChatThread } from "./ChatThread";
 import { ClearThreadButton } from "./ClearThreadButton";
 
 type Props = {
-  initialMessages?: UIMessage[];
+  initialMessages?: JarvisUIMessage[];
   configured: { anthropic: boolean; deepseek: boolean };
   variant?: "drawer" | "page";
   onClose?: () => void;
@@ -34,11 +35,12 @@ export function ChatPanel({
     body: () => ({ forceRoute }),
   });
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
-    id: `jarvis-thread-${version}`,
-    messages: initialMessages,
-    transport,
-  });
+  const { messages, sendMessage, status, error, setMessages } =
+    useChat<JarvisUIMessage>({
+      id: `jarvis-thread-${version}`,
+      messages: initialMessages,
+      transport,
+    });
 
   const pending = status === "submitted" || status === "streaming";
   const noKeys = !configured.anthropic && !configured.deepseek;

@@ -1,11 +1,11 @@
 "use client";
 
-import type { UIMessage } from "ai";
 import { useEffect, useRef } from "react";
+import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { Message } from "./Message";
 
 type Props = {
-  messages: UIMessage[];
+  messages: JarvisUIMessage[];
   pending?: boolean;
   activeModel?: string | null;
 };

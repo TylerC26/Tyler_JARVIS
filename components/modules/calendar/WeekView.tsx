@@ -1,11 +1,13 @@
 "use client";
 
 import { format, isSameDay, isToday } from "date-fns";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  HOUR_END,
   HOUR_START,
   HOURS_VISIBLE,
   PX_PER_HOUR,
+  PX_PER_MINUTE,
   combineDateAndTime,
   hourSlots,
   spansMultipleDays,
@@ -40,6 +42,24 @@ export function WeekView({
   const days = weekDays(cursor);
   const drag = useDragReschedule(days, onMove);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // "Now" indicator: ticks every minute on the client. Initial state is null
+  // so the server-rendered HTML matches the client's first paint — we only
+  // start drawing the line after mount.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const todayIdx = days.findIndex((d) => isToday(d));
+  const nowMinutes = now ? now.getHours() * 60 + now.getMinutes() : 0;
+  const nowVisible =
+    now !== null &&
+    todayIdx >= 0 &&
+    nowMinutes >= HOUR_START * 60 &&
+    nowMinutes < HOUR_END * 60;
+  const nowTop = (nowMinutes - HOUR_START * 60) * PX_PER_MINUTE;
 
   // Partition: all-day OR multi-day events go to the top strip; everything
   // else lives in the timed grid.
@@ -124,6 +144,34 @@ export function WeekView({
 
       {/* Body grid */}
       <div className="relative">
+        {/* "Now" indicator: thin accent line across the day columns at the
+            current time, a dot on the today column, and a tiny time label in
+            the hour gutter. Only renders when today is in the visible week
+            AND the current time falls within the 6am–10pm window. */}
+        {nowVisible && (
+          <>
+            <div
+              className="pointer-events-none absolute z-10 h-px bg-accent"
+              style={{ top: `${nowTop}px`, left: "60px", right: 0 }}
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute z-10 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent"
+              style={{
+                top: `${nowTop}px`,
+                left: `calc(60px + (100% - 60px) * ${(todayIdx + 0.5) / 7})`,
+              }}
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute z-10 -translate-y-1/2 rounded-sm bg-base px-1 font-mono text-[9px] uppercase leading-none text-accent"
+              style={{ top: `${nowTop}px`, left: "2px" }}
+              aria-hidden
+            >
+              {format(now, "h:mm")}
+            </div>
+          </>
+        )}
         <div
           className="grid"
           style={{
