@@ -1,6 +1,6 @@
 // usage_events: ledger of every LLM API call. Inserts are fire-and-forget
 // from the chat router and brief generator; reads aggregate month-to-date
-// spend for the /assistant page.
+// spend for the dashboard's `spend>` line.
 
 import { getOwnerId } from "@/lib/auth/currentUser";
 import {

@@ -3,6 +3,7 @@ import { TerminalBrief } from "@/components/modules/dashboard/TerminalBrief";
 import { TerminalHeader } from "@/components/modules/dashboard/TerminalHeader";
 import { TerminalPrompt } from "@/components/modules/dashboard/TerminalPrompt";
 import { TerminalRecent } from "@/components/modules/dashboard/TerminalRecent";
+import { TerminalSpend } from "@/components/modules/dashboard/TerminalSpend";
 import { TerminalTasks } from "@/components/modules/dashboard/TerminalTasks";
 import { getLatestBrief } from "@/lib/ai/store";
 import { endOfOwnerDay, startOfOwnerDay, todayISO } from "@/lib/date";
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
         <TerminalBrief brief={brief} />
         <TerminalAgenda events={events} />
         <TerminalTasks />
+        <TerminalSpend />
         <TerminalRecent notes={notes.slice(0, 5)} ideas={ideas.slice(0, 5)} />
         <div className="mt-2 border-t border-edge pt-3">
           <TerminalPrompt />
