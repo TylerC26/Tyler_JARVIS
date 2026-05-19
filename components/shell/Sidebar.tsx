@@ -45,6 +45,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
       { href: "/agents", label: "Agents", code: "AGT", glyph: "◔", status: "live" },
       { href: "/memory", label: "Memory", code: "MEM", glyph: "◐", status: "live" },
+      { href: "/notes", label: "Notes", code: "NTS", glyph: "▢", status: "live" },
       { href: "/ideas", label: "Ideas", code: "IDE", glyph: "✺", status: "live" },
       { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
       { href: "/tools", label: "Tools", code: "TLS", glyph: "◎", status: "live" },
@@ -59,7 +60,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-// Flat list preserved for MobileTabBar and any external consumers.
+// Flat list kept for any consumer that wants a non-sectioned view.
 export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
 // ---------- drag-to-reorder persistence ----------
@@ -360,32 +361,3 @@ export function Sidebar() {
   );
 }
 
-export function MobileTabBar() {
-  const pathname = usePathname();
-  // Only show the live modules in the mobile tab bar to avoid crowding
-  const items = NAV_ITEMS.filter((i) => i.status !== "offline");
-
-  return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-edge bg-surface/95 backdrop-blur">
-      {items.map((item) => {
-        const active =
-          item.href === "/"
-            ? pathname === "/"
-            : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={[
-              "flex flex-col items-center justify-center gap-0.5 py-2 font-mono text-[10px]",
-              active ? "text-accent" : "text-fg-muted",
-            ].join(" ")}
-          >
-            <span className="text-base leading-none">{item.glyph}</span>
-            <span className="tracking-wider">{item.code}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}

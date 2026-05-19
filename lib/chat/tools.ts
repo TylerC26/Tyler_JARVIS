@@ -7,6 +7,21 @@ import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { createIdeaCore } from "@/lib/db/core/ideas";
 import { createMemoryCore, deleteMemoryCore } from "@/lib/db/core/memory";
 import {
+  createNoteCore,
+  listNoteCategoriesCore,
+  listNotesCore,
+  searchNotesCore,
+  updateNoteCore,
+} from "@/lib/db/core/notes";
+import {
+  getPromptSettingsCore,
+  upsertPromptSettingsCore,
+} from "@/lib/db/core/prompt-settings";
+import {
+  DEFAULT_EVENING_BRIEF_PROMPT,
+  DEFAULT_MORNING_BRIEF_PROMPT,
+} from "@/lib/ai/engine/claude";
+import {
   createEventCore,
   deleteEventCore,
   listEventsInRangeCore,
@@ -900,6 +915,188 @@ export const saveIdeaTool = tool({
   },
 });
 
+export const saveNoteTool = tool({
+  description:
+    "Dump a free-form note into Tyler's /notes page. Use this when he says 'note:', 'save this note', 'jot this down', 'note that …', 'add to notes', or shares a chunk of reference content he wants to keep around (a recipe, a packing list, meeting notes, a code snippet, an article summary, a quote, troubleshooting steps). Pick a short `category` that groups related notes (e.g. 'travel', 'recipes', 'work', 'tech', 'books', 'health', 'shopping'). Reuse an existing category from `read_notes({ list_categories: true })` if a close match already exists — don't proliferate near-duplicates. `body` is the actual note content; `title` is an optional headline (3-8 words). NOT for fleeting ideas (use save_idea), durable facts about him (use remember), or actionable to-dos (use add_task).",
+  inputSchema: z.object({
+    body: z
+      .string()
+      .min(1)
+      .describe("The note content. Verbatim is fine — Tyler will edit it on the web UI if he wants to."),
+    category: z
+      .string()
+      .optional()
+      .describe(
+        "Short topic slug grouping related notes. Lowercase, dash-separated. Defaults to 'general' if omitted.",
+      ),
+    title: z
+      .string()
+      .optional()
+      .describe("Optional short headline. If omitted, the card shows 'untitled'."),
+    pinned: z
+      .boolean()
+      .optional()
+      .describe("Pin if this should float to the top of the notes list."),
+  }),
+  execute: async (input) => {
+    const result = await createNoteCore({
+      title: input.title,
+      body: input.body,
+      category: input.category,
+      pinned: input.pinned ?? false,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      note_id: result.data.id,
+      category: result.data.category,
+      message: `Saved to /notes · ${result.data.category}`,
+    };
+  },
+});
+
+export const updateNoteTool = tool({
+  description:
+    "Edit an existing note in /notes. Use when Tyler says 'add to that note', 'update the recipe note', 'change the category to X', or wants to amend something he previously saved. Look up the note id via `read_notes` first if you don't have it. Only the fields you pass get changed — omit the rest.",
+  inputSchema: z.object({
+    note_id: z.string().describe("The id of the note to update."),
+    title: z.string().optional(),
+    body: z
+      .string()
+      .optional()
+      .describe(
+        "Full replacement body. To append, fetch the existing body via read_notes and pass `oldBody + '\\n\\n' + newContent`.",
+      ),
+    category: z.string().optional(),
+    pinned: z.boolean().optional(),
+  }),
+  execute: async ({ note_id, ...patch }) => {
+    const result = await updateNoteCore(note_id, patch);
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, message: `Updated note "${result.data.title || result.data.id}"` };
+  },
+});
+
+export const readNotesTool = tool({
+  description:
+    "Read or search notes Tyler has saved in /notes. Use when he references a previous note ('what was in my recipe note', 'remind me what I wrote about Tokyo'), or when you need to check existing categories before saving a new note (so you reuse 'travel' instead of inventing 'trips'). Pass `query` for keyword search, `category` to filter, or `list_categories: true` for a cheap category catalog.",
+  inputSchema: z.object({
+    query: z
+      .string()
+      .optional()
+      .describe("Keyword to search title + body. Case-insensitive."),
+    category: z
+      .string()
+      .optional()
+      .describe("Filter to a single category slug."),
+    list_categories: z
+      .boolean()
+      .optional()
+      .describe("If true, return only the list of categories with counts."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Max results. Defaults to 20."),
+  }),
+  execute: async ({ query, category, list_categories, limit }) => {
+    if (list_categories) {
+      const cats = await listNoteCategoriesCore();
+      return { ok: true, categories: cats };
+    }
+    const limitN = limit ?? 20;
+    const notes = query
+      ? await searchNotesCore(query, { limit: limitN, category })
+      : (await listNotesCore({ category })).slice(0, limitN);
+    return {
+      ok: true,
+      count: notes.length,
+      notes: notes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        category: n.category,
+        pinned: n.pinned,
+        body: n.body,
+        updated_at: n.updated_at ?? n.created_at,
+      })),
+    };
+  },
+});
+
+export const getBriefPromptTool = tool({
+  description:
+    "Read the current system prompt used to generate Tyler's morning or evening brief. Use this when he asks to see, review, or edit the brief prompt — fetch it first so you can show him what's active and propose an edit. Returns the active prompt (override if set, otherwise the default) plus a flag indicating which.",
+  inputSchema: z.object({
+    kind: z
+      .enum(["morning", "evening"])
+      .describe("Which brief — morning (start-of-day) or evening (review)."),
+  }),
+  execute: async ({ kind }) => {
+    const settings = await getPromptSettingsCore();
+    const override =
+      kind === "morning"
+        ? settings.morning_brief_prompt
+        : settings.evening_brief_prompt;
+    const active =
+      override && override.trim()
+        ? override
+        : kind === "morning"
+          ? DEFAULT_MORNING_BRIEF_PROMPT
+          : DEFAULT_EVENING_BRIEF_PROMPT;
+    return {
+      ok: true,
+      kind,
+      using_override: Boolean(override && override.trim()),
+      prompt: active,
+    };
+  },
+});
+
+export const setBriefPromptTool = tool({
+  description:
+    "Edit the system prompt used to generate Tyler's morning or evening brief. Use when he says 'change my morning brief prompt to…', 'edit the evening brief', 'reset the morning brief to default', etc. The brief is the dashboard summary generated twice daily — it must remain a system prompt that emits JSON in the shape { summary, bullets: [{ label, value, severity }] }, so preserve that output contract when rewriting. Call get_brief_prompt first if you don't already have the current text. Pass `clear: true` to drop the override and fall back to the hardcoded default.",
+  inputSchema: z.object({
+    kind: z
+      .enum(["morning", "evening"])
+      .describe("Which brief to edit."),
+    prompt: z
+      .string()
+      .optional()
+      .describe(
+        "Full replacement prompt text. Must preserve the JSON output contract — describe the schema explicitly. Omit when clearing.",
+      ),
+    clear: z
+      .boolean()
+      .optional()
+      .describe("If true, clear the override and revert to the built-in default. Ignores `prompt`."),
+  }),
+  execute: async ({ kind, prompt, clear }) => {
+    if (!clear && (!prompt || !prompt.trim())) {
+      return {
+        ok: false,
+        error:
+          "Pass either `prompt` (the new text) or `clear: true` to revert to the default.",
+      };
+    }
+    const field =
+      kind === "morning" ? "morning_brief_prompt" : "evening_brief_prompt";
+    const result = await upsertPromptSettingsCore({
+      [field]: clear ? null : prompt!,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      kind,
+      cleared: Boolean(clear),
+      message: clear
+        ? `Reset the ${kind} brief prompt to the built-in default.`
+        : `Updated the ${kind} brief prompt. Takes effect on the next brief run.`,
+    };
+  },
+});
+
 export const forgetTool = tool({
   description:
     "Delete a stored memory by id. Use when the user says 'forget that', 'remove that note', or contradicts a previously-saved fact. The memory_id is visible in the REMEMBERED section of your system prefix.",
@@ -1133,6 +1330,11 @@ export const ALL_TOOLS = {
   remember: rememberTool,
   forget: forgetTool,
   save_idea: saveIdeaTool,
+  save_note: saveNoteTool,
+  update_note: updateNoteTool,
+  read_notes: readNotesTool,
+  get_brief_prompt: getBriefPromptTool,
+  set_brief_prompt: setBriefPromptTool,
   vision_analyze: visionAnalyzeTool,
   web_search: webSearchTool,
   create_cron_job: createCronJobTool,

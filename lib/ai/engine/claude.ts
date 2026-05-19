@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { llmAuto, MODEL_AUTO } from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
+import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
@@ -33,7 +34,7 @@ const SuggestionsSchema = z.object({
   suggestions: z.array(SuggestionSchema).max(8),
 });
 
-const MORNING_SYSTEM = `You generate a morning brief for the user of a personal command-center.
+export const DEFAULT_MORNING_BRIEF_PROMPT = `You generate a morning brief for the user of a personal command-center.
 
 Inputs: a structured snapshot of the user's tasks (today / overdue / upcoming) and their wife's upcoming shifts.
 
@@ -47,7 +48,7 @@ Output: a tight, terse, terminal-style brief.
 
 Output strictly the JSON shape requested.`;
 
-const EVENING_SYSTEM = `You generate an evening review for the user.
+export const DEFAULT_EVENING_BRIEF_PROMPT = `You generate an evening review for the user.
 
 Inputs: today's data plus what was closed today, and tomorrow's pending priority load.
 
@@ -124,17 +125,37 @@ async function generateBriefViaClaude(
   }
 }
 
+async function resolveBriefPrompt(
+  kind: "morning" | "evening",
+): Promise<string> {
+  try {
+    const settings = await getPromptSettingsCore();
+    const override =
+      kind === "morning"
+        ? settings.morning_brief_prompt
+        : settings.evening_brief_prompt;
+    if (override && override.trim()) return override;
+  } catch (e) {
+    console.warn("[ai] failed to load brief prompt override:", e);
+  }
+  return kind === "morning"
+    ? DEFAULT_MORNING_BRIEF_PROMPT
+    : DEFAULT_EVENING_BRIEF_PROMPT;
+}
+
 export const claudeEngine: AIEngine = {
   name: BRIEF_MODEL_LABEL,
 
   async generateMorning(ctx) {
-    const result = await generateBriefViaClaude(ctx, MORNING_SYSTEM);
+    const systemPrompt = await resolveBriefPrompt("morning");
+    const result = await generateBriefViaClaude(ctx, systemPrompt);
     if (result) return result;
     return placeholderEngine.generateMorning(ctx);
   },
 
   async generateEvening(ctx) {
-    const result = await generateBriefViaClaude(ctx, EVENING_SYSTEM);
+    const systemPrompt = await resolveBriefPrompt("evening");
+    const result = await generateBriefViaClaude(ctx, systemPrompt);
     if (result) return result;
     return placeholderEngine.generateEvening(ctx);
   },

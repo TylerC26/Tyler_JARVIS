@@ -173,6 +173,8 @@ export type PromptSettings = {
   orchestrator_prompt: string | null;
   responder_prompt: string | null;
   prefix_addendum: string | null;
+  morning_brief_prompt: string | null;
+  evening_brief_prompt: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -293,6 +295,17 @@ export type Idea = {
   archived_at: string | null;
   promoted_to_task_id: string | null;
   promoted_to_project_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type Note = {
+  id: string;
+  owner_id: string;
+  title: string;
+  body: string;
+  category: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string | null;
 };
@@ -474,6 +487,8 @@ export type Database = {
           orchestrator_prompt?: string | null;
           responder_prompt?: string | null;
           prefix_addendum?: string | null;
+          morning_brief_prompt?: string | null;
+          evening_brief_prompt?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };
@@ -688,6 +703,21 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Idea>;
+        Relationships: [];
+      };
+      notes: {
+        Row: Note;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title?: string;
+          body?: string;
+          category?: string;
+          pinned?: boolean;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Note>;
         Relationships: [];
       };
     };

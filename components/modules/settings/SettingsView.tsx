@@ -13,10 +13,17 @@ type Props = {
   defaults: {
     orchestrator: string;
     responder: string;
+    morningBrief: string;
+    eveningBrief: string;
   };
 };
 
-type FieldKey = "orchestrator_prompt" | "responder_prompt" | "prefix_addendum";
+type FieldKey =
+  | "orchestrator_prompt"
+  | "responder_prompt"
+  | "prefix_addendum"
+  | "morning_brief_prompt"
+  | "evening_brief_prompt";
 
 type FieldSpec = {
   key: FieldKey;
@@ -36,6 +43,12 @@ export function SettingsView({ initialSettings, defaults }: Props) {
     initialSettings.responder_prompt ?? "",
   );
   const [addendum, setAddendum] = useState(initialSettings.prefix_addendum ?? "");
+  const [morningBrief, setMorningBrief] = useState(
+    initialSettings.morning_brief_prompt ?? "",
+  );
+  const [eveningBrief, setEveningBrief] = useState(
+    initialSettings.evening_brief_prompt ?? "",
+  );
   const [pendingField, setPendingField] = useState<FieldKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -46,21 +59,29 @@ export function SettingsView({ initialSettings, defaults }: Props) {
     setOrchestrator(initialSettings.orchestrator_prompt ?? "");
     setResponder(initialSettings.responder_prompt ?? "");
     setAddendum(initialSettings.prefix_addendum ?? "");
+    setMorningBrief(initialSettings.morning_brief_prompt ?? "");
+    setEveningBrief(initialSettings.evening_brief_prompt ?? "");
   }, [
     initialSettings.orchestrator_prompt,
     initialSettings.responder_prompt,
     initialSettings.prefix_addendum,
+    initialSettings.morning_brief_prompt,
+    initialSettings.evening_brief_prompt,
   ]);
 
   function valueFor(key: FieldKey): string {
     if (key === "orchestrator_prompt") return orchestrator;
     if (key === "responder_prompt") return responder;
+    if (key === "morning_brief_prompt") return morningBrief;
+    if (key === "evening_brief_prompt") return eveningBrief;
     return addendum;
   }
 
   function setValueFor(key: FieldKey, v: string) {
     if (key === "orchestrator_prompt") setOrchestrator(v);
     else if (key === "responder_prompt") setResponder(v);
+    else if (key === "morning_brief_prompt") setMorningBrief(v);
+    else if (key === "evening_brief_prompt") setEveningBrief(v);
     else setAddendum(v);
   }
 
@@ -119,6 +140,22 @@ export function SettingsView({ initialSettings, defaults }: Props) {
       hasDefault: false,
       placeholder: "e.g. Always greet me by name. Avoid suggesting restaurants in Causeway Bay.",
     },
+    {
+      key: "morning_brief_prompt",
+      label: "Morning Brief Prompt",
+      hint: "System prompt used to generate the dashboard's morning brief. Leave blank for the default. Output must stay JSON-shaped: { summary, bullets: [{ label, value, severity }] }.",
+      rows: 14,
+      hasDefault: true,
+      defaultValue: defaults.morningBrief,
+    },
+    {
+      key: "evening_brief_prompt",
+      label: "Evening Brief Prompt",
+      hint: "System prompt used to generate the evening review. Same JSON shape as the morning brief.",
+      rows: 10,
+      hasDefault: true,
+      defaultValue: defaults.eveningBrief,
+    },
   ];
 
   return (
@@ -151,7 +188,11 @@ export function SettingsView({ initialSettings, defaults }: Props) {
               ? initialSettings.orchestrator_prompt ?? ""
               : f.key === "responder_prompt"
                 ? initialSettings.responder_prompt ?? ""
-                : initialSettings.prefix_addendum ?? "";
+                : f.key === "morning_brief_prompt"
+                  ? initialSettings.morning_brief_prompt ?? ""
+                  : f.key === "evening_brief_prompt"
+                    ? initialSettings.evening_brief_prompt ?? ""
+                    : initialSettings.prefix_addendum ?? "";
           const dirty = current !== initial;
 
           return (

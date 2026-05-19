@@ -7,6 +7,8 @@ export type PromptSettingsPatch = {
   orchestrator_prompt?: string | null;
   responder_prompt?: string | null;
   prefix_addendum?: string | null;
+  morning_brief_prompt?: string | null;
+  evening_brief_prompt?: string | null;
 };
 
 // Always returns a settings shape — if no row exists yet, returns an object
@@ -18,6 +20,8 @@ export async function getPromptSettingsCore(): Promise<PromptSettings> {
     orchestrator_prompt: null,
     responder_prompt: null,
     prefix_addendum: null,
+    morning_brief_prompt: null,
+    evening_brief_prompt: null,
     created_at: new Date().toISOString(),
     updated_at: null,
   };
@@ -55,6 +59,10 @@ export async function upsertPromptSettingsCore(
     row.responder_prompt = normalize(patch.responder_prompt);
   if (patch.prefix_addendum !== undefined)
     row.prefix_addendum = normalize(patch.prefix_addendum);
+  if (patch.morning_brief_prompt !== undefined)
+    row.morning_brief_prompt = normalize(patch.morning_brief_prompt);
+  if (patch.evening_brief_prompt !== undefined)
+    row.evening_brief_prompt = normalize(patch.evening_brief_prompt);
 
   const { data, error } = await supabase
     .from("prompt_settings")
