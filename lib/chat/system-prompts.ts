@@ -2,7 +2,7 @@
 
 export const CLASSIFIER_SYSTEM_PROMPT = `You are the routing layer for a personal command-center app called Jarvis.
 
-Your single job: pick the cheapest model tier that can handle the user's latest message well. Three tiers, in increasing cost order.
+Your single job: pick the model tier that best fits the user's latest message — cheapest tier that can handle it well. Four tiers.
 
 Route to "deepseek" — lightweight, no tools, response-only — when:
 - Chitchat, greetings, single-word reactions ("lol", "thanks", "ok"), generic banter.
@@ -26,7 +26,12 @@ Route to "opus" — top-tier reasoning, reserved for code-writing and code-execu
 
 Read-only repo questions ("what's in the readme") → sonnet, NOT opus. Opus is only for code that needs reasoning.
 
-Output strictly { route: "deepseek" | "sonnet" | "opus" }. No prose.`;
+Route to "gpt5" — GPT-5.5 (OpenAI), full database tools but no web search — when:
+- The user explicitly asks to use GPT, GPT-5.5, OpenAI, ChatGPT, or "the OpenAI model".
+- The user wants substantial long-form writing or composition (draft a long email/message/post, marketing copy, an essay, a story, brainstorm at length) where prose quality matters and no web search is needed.
+Anything needing current real-world info stays on sonnet — gpt5 has no web search.
+
+Output strictly { route: "deepseek" | "sonnet" | "opus" | "gpt5" }. No prose.`;
 
 // Prepended to the orchestrator prompt when DeepSeek is acting as orchestrator
 // (Claude killed via dashboard toggle). DeepSeek-chat reads tool schemas but

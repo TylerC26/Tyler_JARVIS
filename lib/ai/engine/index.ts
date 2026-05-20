@@ -1,18 +1,22 @@
 // THE SWAP POINT.
 //
-// Returns the rule-based placeholder when Claude is disabled (kill switch off,
-// or no env key), or the Claude-backed engine otherwise. Claude itself falls
-// back to placeholder per-call on API failure (see lib/ai/engine/claude.ts),
-// so the system always produces a brief.
+// Returns the rule-based placeholder when no LLM is reachable, or the LLM-
+// backed engine otherwise. claudeEngine internally calls llmAuto() (OpenRouter)
+// and itself falls back to placeholder per-call on API failure, so the system
+// always produces a brief.
 //
-// Every historical context_snapshot in ai_briefs can be replayed through real
-// Claude later for evaluation.
+// Historically this gated on isClaudeEnabled() (i.e. ANTHROPIC_API_KEY) but the
+// engine no longer calls Anthropic directly — it routes through OpenRouter. So
+// hasLLM() is the right env gate here. The dashboard "Claude" kill switch only
+// affects the chat path and direct-Anthropic call sites.
 
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { hasLLM, isOpenAIConfigured } from "@/lib/ai/providers";
 import { claudeEngine } from "./claude";
 import { placeholderEngine } from "./placeholder";
 import type { AIEngine } from "./types";
 
 export async function getEngine(): Promise<AIEngine> {
-  return (await isClaudeEnabled()) ? claudeEngine : placeholderEngine;
+  // claudeEngine is reachable via either gateway: OpenRouter (hasLLM) or a
+  // direct OpenAI key (briefs run on GPT-5.5). Either key present → use it.
+  return hasLLM() || isOpenAIConfigured() ? claudeEngine : placeholderEngine;
 }

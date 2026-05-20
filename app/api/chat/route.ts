@@ -5,9 +5,11 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  isOpenAIConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
+  streamGpt5Response,
   type ForceRoute,
 } from "@/lib/chat/router";
 import {
@@ -28,11 +30,15 @@ type IncomingBody = {
 };
 
 export async function POST(req: Request) {
-  if (!isAnthropicConfigured() && !isDeepseekConfigured()) {
+  if (
+    !isAnthropicConfigured() &&
+    !isDeepseekConfigured() &&
+    !isOpenAIConfigured()
+  ) {
     return NextResponse.json(
       {
         error:
-          "No model API keys configured. Set ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY in .env.local.",
+          "No model API keys configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, and/or OPENAI_API_KEY in .env.local.",
       },
       { status: 503 },
     );
@@ -62,9 +68,15 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  if (route !== "deepseek" && !isAnthropicConfigured()) {
+  if ((route === "sonnet" || route === "opus") && !isAnthropicConfigured()) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY not configured." },
+      { status: 503 },
+    );
+  }
+  if (route === "gpt5" && !isOpenAIConfigured()) {
+    return NextResponse.json(
+      { error: "OPENAI_API_KEY not configured." },
       { status: 503 },
     );
   }
@@ -72,10 +84,12 @@ export async function POST(req: Request) {
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages)
-      : await streamClaudeResponse(
-          modelMessages,
-          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
-        );
+      : route === "gpt5"
+        ? await streamGpt5Response(modelMessages)
+        : await streamClaudeResponse(
+            modelMessages,
+            route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          );
 
   const modelId = modelIdForRoute(route);
 
@@ -109,5 +123,6 @@ export async function GET() {
   return NextResponse.json({
     anthropic: isAnthropicConfigured(),
     deepseek: isDeepseekConfigured(),
+    openai: isOpenAIConfigured(),
   });
 }

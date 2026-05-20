@@ -5,6 +5,7 @@ import type {
   AiSeverity,
   AiSuggestion,
   AiSuggestionKind,
+  Event,
   Task,
   WifeShift,
 } from "@/lib/db/types";
@@ -31,8 +32,9 @@ export type AIContext = {
   wifeShifts: {
     next21: WifeShift[]; // upcoming 21 days inclusive of today
   };
-  // Slots designed for, populated when those modules ship.
-  calendar?: never[];
+  events: {
+    today: Event[]; // owner-local calendar events for forDate, sorted by starts_at
+  };
 };
 
 export type BriefDraft = {

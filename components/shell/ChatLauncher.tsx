@@ -7,7 +7,7 @@ import { ChatPanel } from "@/components/modules/chat/ChatPanel";
 export function ChatLauncher({
   configured,
 }: {
-  configured: { anthropic: boolean; deepseek: boolean };
+  configured: { anthropic: boolean; deepseek: boolean; openai: boolean };
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();

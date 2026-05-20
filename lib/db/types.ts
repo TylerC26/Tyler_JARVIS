@@ -269,7 +269,7 @@ export type SiteSettings = {
   updated_at: string | null;
 };
 
-export type UsageProvider = "anthropic" | "deepseek";
+export type UsageProvider = "anthropic" | "deepseek" | "openai";
 export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
 
 export type UsageEvent = {

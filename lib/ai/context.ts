@@ -1,5 +1,6 @@
 import { isBefore, parseISO } from "date-fns";
 import { endOfOwnerDay, startOfOwnerDay, todayISO } from "@/lib/date";
+import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
 import type { Task } from "@/lib/db/types";
@@ -32,9 +33,13 @@ function partitionTasks(all: Task[], forDate: string) {
 export async function gatherContext(forDate?: string): Promise<AIContext> {
   const date = forDate ?? todayISO();
 
-  const [allTasks, wifeShiftsNext21] = await Promise.all([
+  const dayStart = startOfOwnerDay(date).toISOString();
+  const dayEnd = endOfOwnerDay(date).toISOString();
+
+  const [allTasks, wifeShiftsNext21, eventsToday] = await Promise.all([
     listTasks(),
     listUpcomingWifeShifts(21),
+    listEventsInRangeCore(dayStart, dayEnd),
   ]);
 
   return {
@@ -42,5 +47,6 @@ export async function gatherContext(forDate?: string): Promise<AIContext> {
     generatedAt: new Date().toISOString(),
     tasks: partitionTasks(allTasks, date),
     wifeShifts: { next21: wifeShiftsNext21 },
+    events: { today: eventsToday },
   };
 }

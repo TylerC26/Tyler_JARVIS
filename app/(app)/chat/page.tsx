@@ -10,6 +10,7 @@ export default async function ChatPage() {
   const configured = {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+    openai: Boolean(process.env.OPENAI_API_KEY),
   };
 
   return (

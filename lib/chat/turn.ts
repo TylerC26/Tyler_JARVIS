@@ -21,9 +21,11 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  isOpenAIConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
+  streamGpt5Response,
   type ForceRoute,
 } from "./router";
 
@@ -184,11 +186,14 @@ async function runChatTurnInner(
   await appendMessage({ role: "user", content: latestUserText });
 
   const route = await decideRoute(modelMessages, { forceRoute });
-  if (route !== "deepseek" && !isAnthropicConfigured()) {
+  if ((route === "sonnet" || route === "opus") && !isAnthropicConfigured()) {
     throw new Error("ANTHROPIC_API_KEY not configured.");
   }
   if (route === "deepseek" && !isDeepseekConfigured()) {
     throw new Error("DEEPSEEK_API_KEY not configured.");
+  }
+  if (route === "gpt5" && !isOpenAIConfigured()) {
+    throw new Error("OPENAI_API_KEY not configured.");
   }
 
   const model: ChatModel = modelIdForRoute(route);
@@ -196,10 +201,12 @@ async function runChatTurnInner(
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages)
-      : await streamClaudeResponse(
-          modelMessages,
-          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
-        );
+      : route === "gpt5"
+        ? await streamGpt5Response(modelMessages)
+        : await streamClaudeResponse(
+            modelMessages,
+            route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
   // `.steps` / `.text` settle.

@@ -1,15 +1,43 @@
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
+import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
-import { llmAuto, MODEL_AUTO } from "@/lib/ai/providers";
+import { getOwnerTz } from "@/lib/auth/currentUser";
+import {
+  gpt55,
+  isOpenAIConfigured,
+  llmAuto,
+  MODEL_AUTO,
+  MODEL_GPT55,
+} from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
 
-const BRIEF_MODEL_LABEL = MODEL_AUTO;
+// Briefs / suggestions run on GPT-5.5 when an OpenAI key is present, otherwise
+// the OpenRouter auto-router. Resolved per call so the picked model and the
+// usage-ledger label always agree, and the gpt-5.5 label gets a real cost from
+// lib/ai/pricing.ts (openrouter/auto has no price entry, so it logs $0).
+function briefModel(): { model: LanguageModel; label: string } {
+  return isOpenAIConfigured()
+    ? { model: gpt55(), label: MODEL_GPT55 }
+    : { model: llmAuto(), label: MODEL_AUTO };
+}
 
-const SeveritySchema = z.enum(["info", "warn", "crit"]);
+const BRIEF_MODEL_LABEL = isOpenAIConfigured() ? MODEL_GPT55 : MODEL_AUTO;
+
+// Accept both the canonical short form ("info"|"warn"|"crit") used by the rest
+// of the system and the longer form ("warning"|"critical") that user-authored
+// brief prompts may emit. Normalize back to the canonical enum before the
+// result leaves the engine.
+const SeveritySchema = z
+  .enum(["info", "warn", "crit", "warning", "critical"])
+  .transform((s) => {
+    if (s === "warning") return "warn" as const;
+    if (s === "critical") return "crit" as const;
+    return s;
+  });
 
 const BulletSchema = z.object({
   label: z.string(),
@@ -17,9 +45,12 @@ const BulletSchema = z.object({
   severity: SeveritySchema,
 });
 
+// Cap kept loose enough for a busy day: per the default morning prompt the
+// bullets are one per calendar event today + wife's shift + tasks roll-up +
+// quote + joke. 12 leaves headroom without letting the model spam.
 const BriefSchema = z.object({
   summary: z.string(),
-  bullets: z.array(BulletSchema).max(6),
+  bullets: z.array(BulletSchema).max(12),
 });
 
 const SuggestionSchema = z.object({
@@ -34,19 +65,30 @@ const SuggestionsSchema = z.object({
   suggestions: z.array(SuggestionSchema).max(8),
 });
 
-export const DEFAULT_MORNING_BRIEF_PROMPT = `You generate a morning brief for the user of a personal command-center.
+export const DEFAULT_MORNING_BRIEF_PROMPT = `You are Jarvis, Tyler's personal assistant. Generate a morning brief in JSON format with this exact shape:
 
-Inputs: a structured snapshot of the user's tasks (today / overdue / upcoming) and their wife's upcoming shifts.
+\`\`\`json
+{
+  "summary": "<one-line upbeat summary of the day>",
+  "bullets": [
+    { "label": "string", "value": "string", "severity": "info|warning|critical" }
+  ]
+}
+\`\`\`
 
-Output: a tight, terse, terminal-style brief.
+Populate the bullets in this order:
 
-- summary: ONE sentence, ~12 words, capturing the day's character (e.g. "Heads up for Monday — three overdue and a P1 due tonight.")
-- bullets: 3-5 high-signal bullets max. Format each as { label: SHORT-CAPS-LABEL, value: "concrete fact with numbers", severity: "info"|"warn"|"crit" }
-- Skip bullets when nothing material — better five strong ones than padding.
-- Severity: crit for hard misses (overdue P1); warn for trending issues; info for noteworthy non-issues.
-- Use specific numbers. Never fluff. No emoji.
+1. **Today's Schedule** — list each calendar event today with its time and location (if any). One bullet per event, label = "📅 <time>", value = "<event title> [@ location]", severity = "info".
 
-Output strictly the JSON shape requested.`;
+2. **Wife's Shift** — one bullet summarising Michelle's shift today and what time she's home. severity = "info" for DO/A, "warning" for P/P1/Anight/NO shifts that affect evening plans.
+
+3. **To-Do Items** — list all open tasks, overdue first. Label = "📋 Tasks", value = comma-separated task titles. severity = "warning" if any are overdue or due today, else "info".
+
+4. **Motivational Quote** — one bullet. label = "💪 Quote", value = a short motivational quote (attributed). severity = "info".
+
+5. **Dad Joke** — one bullet. label = "😄 Dad Joke", value = a clean, groan-worthy dad joke. severity = "info".
+
+Keep the summary punchy and positive. Output ONLY valid JSON — no prose, no markdown fences.`;
 
 export const DEFAULT_EVENING_BRIEF_PROMPT = `You generate an evening review for the user.
 
@@ -97,8 +139,37 @@ function formatWifeShiftsLine(ctx: AIContext): string {
   ].join("\n");
 }
 
+function formatTodayEventsLine(ctx: AIContext): string {
+  const events = ctx.events?.today ?? [];
+  if (events.length === 0) return "Today's calendar events: none.";
+  const tz = getOwnerTz();
+  const lines = events.map((e) => {
+    const time = e.all_day
+      ? "all-day"
+      : `${formatInTimeZone(e.starts_at, tz, "HH:mm")}–${formatInTimeZone(e.ends_at, tz, "HH:mm")}`;
+    const loc = e.location ? ` @ ${e.location}` : "";
+    return `  • ${time} · ${e.title}${loc}`;
+  });
+  return `Today's calendar events (${events.length}, owner-local time):\n${lines.join("\n")}`;
+}
+
+function formatWifeShiftTodayLine(ctx: AIContext): string {
+  const today = ctx.forDate;
+  const todayShift = (ctx.wifeShifts?.next21 ?? []).find(
+    (s) => s.shift_date === today,
+  );
+  if (!todayShift) {
+    return "Michelle's shift today: not on file.";
+  }
+  return `Michelle's shift today (${today}): ${todayShift.code}`;
+}
+
 function ctxToPrompt(ctx: AIContext): string {
   return `User snapshot for ${ctx.forDate} (${ctx.generatedAt}):
+
+${formatTodayEventsLine(ctx)}
+
+${formatWifeShiftTodayLine(ctx)}
 
 ${formatWifeShiftsLine(ctx)}
 
@@ -109,15 +180,16 @@ async function generateBriefViaClaude(
   ctx: AIContext,
   systemPrompt: string,
 ): Promise<BriefDraft | null> {
+  const { model, label } = briefModel();
   try {
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: BriefSchema,
       system: systemPrompt,
       prompt: ctxToPrompt(ctx),
-      maxOutputTokens: 800,
+      maxOutputTokens: 1500,
     });
-    recordModelUsage(BRIEF_MODEL_LABEL, "brief", result.usage);
+    recordModelUsage(label, "brief", result.usage);
     return { summary: result.object.summary, bullets: result.object.bullets };
   } catch (e) {
     console.warn("[ai] brief generation failed, falling back to placeholder:", e);
@@ -161,15 +233,16 @@ export const claudeEngine: AIEngine = {
   },
 
   async generateSuggestions(ctx) {
+    const { model, label } = briefModel();
     try {
       const result = await generateObject({
-        model: llmAuto(),
+        model,
         schema: SuggestionsSchema,
         system: SUGGESTIONS_SYSTEM,
         prompt: ctxToPrompt(ctx),
         maxOutputTokens: 1200,
       });
-      recordModelUsage(BRIEF_MODEL_LABEL, "suggestion", result.usage);
+      recordModelUsage(label, "suggestion", result.usage);
       return result.object.suggestions.map<SuggestionDraft>((s) => ({
         kind: s.kind,
         title: s.title,
