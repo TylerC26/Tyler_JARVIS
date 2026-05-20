@@ -1,5 +1,9 @@
-// v1: hardcoded single-user mode. RLS is disabled and every row is owned by
-// OWNER_ID. When real multi-user lands, swap the body for `auth.uid()`.
+// v1: hardcoded single-user mode. Every row is owned by OWNER_ID. RLS is
+// enabled on all tables (migration 0032) but the app has no Supabase Auth
+// session, so the server reaches the DB with the service-role key (see
+// lib/supabase/server.ts) and the public anon key is fully locked out. When
+// real multi-user lands, swap the body for `auth.uid()` and switch the server
+// client back to a session-carrying anon client.
 
 export const FALLBACK_OWNER_ID = "00000000-0000-0000-0000-000000000001";
 
