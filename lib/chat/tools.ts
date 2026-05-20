@@ -634,9 +634,8 @@ export const queryStateTool = tool({
           acc[t.status] = (acc[t.status] ?? 0) + 1;
           return acc;
         }, {}),
-        next_5_open: tasks
+        open_items: tasks
           .filter((t) => t.status !== "done")
-          .slice(0, 5)
           .map((t) => ({
             id: t.id,
             title: t.title,
