@@ -1,31 +1,18 @@
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject } from "ai";
 import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
-import {
-  gpt55,
-  isOpenAIConfigured,
-  llmAuto,
-  MODEL_AUTO,
-  MODEL_GPT55,
-} from "@/lib/ai/providers";
+import { llmOpus } from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
 
-// Briefs / suggestions run on GPT-5.5 when an OpenAI key is present, otherwise
-// the OpenRouter auto-router. Resolved per call so the picked model and the
-// usage-ledger label always agree, and the gpt-5.5 label gets a real cost from
-// lib/ai/pricing.ts (openrouter/auto has no price entry, so it logs $0).
-function briefModel(): { model: LanguageModel; label: string } {
-  return isOpenAIConfigured()
-    ? { model: gpt55(), label: MODEL_GPT55 }
-    : { model: llmAuto(), label: MODEL_AUTO };
-}
-
-const BRIEF_MODEL_LABEL = isOpenAIConfigured() ? MODEL_GPT55 : MODEL_AUTO;
+// Briefs and suggestions run on Claude Opus 4.7 (direct Anthropic). Usage is
+// logged under the canonical model id "claude-opus-4-7" so lib/ai/pricing.ts
+// can compute a real USD cost.
+const BRIEF_MODEL_LABEL = "claude-opus-4-7";
 
 // Accept both the canonical short form ("info"|"warn"|"crit") used by the rest
 // of the system and the longer form ("warning"|"critical") that user-authored
@@ -180,16 +167,15 @@ async function generateBriefViaClaude(
   ctx: AIContext,
   systemPrompt: string,
 ): Promise<BriefDraft | null> {
-  const { model, label } = briefModel();
   try {
     const result = await generateObject({
-      model,
+      model: llmOpus(),
       schema: BriefSchema,
       system: systemPrompt,
       prompt: ctxToPrompt(ctx),
       maxOutputTokens: 1500,
     });
-    recordModelUsage(label, "brief", result.usage);
+    recordModelUsage(BRIEF_MODEL_LABEL, "brief", result.usage);
     return { summary: result.object.summary, bullets: result.object.bullets };
   } catch (e) {
     console.warn("[ai] brief generation failed, falling back to placeholder:", e);
@@ -233,16 +219,15 @@ export const claudeEngine: AIEngine = {
   },
 
   async generateSuggestions(ctx) {
-    const { model, label } = briefModel();
     try {
       const result = await generateObject({
-        model,
+        model: llmOpus(),
         schema: SuggestionsSchema,
         system: SUGGESTIONS_SYSTEM,
         prompt: ctxToPrompt(ctx),
         maxOutputTokens: 1200,
       });
-      recordModelUsage(label, "suggestion", result.usage);
+      recordModelUsage(BRIEF_MODEL_LABEL, "suggestion", result.usage);
       return result.object.suggestions.map<SuggestionDraft>((s) => ({
         kind: s.kind,
         title: s.title,

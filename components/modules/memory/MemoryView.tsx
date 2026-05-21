@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  archiveMemoryAction,
   createMemoryAction,
   deleteMemoryAction,
+  restoreMemoryAction,
   togglePinMemoryAction,
   updateMemoryAction,
 } from "@/app/(app)/memory/actions";
@@ -12,10 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type {
-  MemoryConfidence,
-  MemoryEntry,
-  MemoryKind,
+import {
+  MEMORY_KINDS,
+  type MemoryConfidence,
+  type MemoryEntry,
+  type MemoryKind,
 } from "@/lib/db/types";
 
 type Editing =
@@ -34,18 +37,26 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   key: "",
   value: "",
-  kind: "fact",
+  kind: "knowledge",
   confidence: "high",
   pinned: false,
 };
 
-const KIND_TONE: Record<MemoryKind, "info" | "accent" | "warn"> = {
-  fact: "info",
+type Tone = "neutral" | "info" | "success" | "warn" | "danger" | "accent";
+
+const KIND_TONE: Record<MemoryKind, Tone> = {
+  identity: "accent",
   preference: "accent",
-  context: "warn",
+  relationship: "success",
+  health: "warn",
+  work: "info",
+  routine: "info",
+  goal: "success",
+  knowledge: "info",
+  context: "neutral",
 };
 
-const SOURCE_TONE: Record<string, "neutral" | "success" | "info"> = {
+const SOURCE_TONE: Record<string, Tone> = {
   user: "success",
   extracted: "info",
   agent: "info",
@@ -77,11 +88,30 @@ export function MemoryView({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [showExtracted, setShowExtracted] = useState(false);
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [showExtracted, setShowExtracted] = useState(true);
 
   useEffect(() => {
     setMemories(initialMemories);
   }, [initialMemories]);
+
+  const active = useMemo(
+    () => memories.filter((m) => m.status === "active"),
+    [memories],
+  );
+  const archived = useMemo(
+    () => memories.filter((m) => m.status === "archived"),
+    [memories],
+  );
+  const pinnedCount = active.filter((m) => m.pinned).length;
+  const extractedCount = active.filter((m) => m.source === "extracted").length;
+
+  const visibleMemories = useMemo(() => {
+    if (view === "archived") return archived;
+    return showExtracted
+      ? active
+      : active.filter((m) => m.source !== "extracted");
+  }, [view, active, archived, showExtracted]);
 
   function openCreate() {
     setError(null);
@@ -163,8 +193,37 @@ export function MemoryView({
     }
   }
 
-  async function remove(memory: MemoryEntry) {
-    if (!confirm(`Forget "${memory.key}"?`)) return;
+  async function archive(memory: MemoryEntry) {
+    setBusyId(memory.id);
+    try {
+      const res = await archiveMemoryAction(memory.id);
+      if (res.ok) {
+        setMemories((prev) =>
+          prev.map((m) => (m.id === res.data.id ? res.data : m)),
+        );
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function restore(memory: MemoryEntry) {
+    setBusyId(memory.id);
+    try {
+      const res = await restoreMemoryAction(memory.id);
+      if (res.ok) {
+        setMemories((prev) =>
+          prev.map((m) => (m.id === res.data.id ? res.data : m)),
+        );
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function destroy(memory: MemoryEntry) {
+    if (!confirm(`Permanently delete "${memory.key}"? This cannot be undone.`))
+      return;
     setBusyId(memory.id);
     try {
       const res = await deleteMemoryAction(memory.id);
@@ -176,28 +235,52 @@ export function MemoryView({
     }
   }
 
-  const pinnedCount = memories.filter((m) => m.pinned).length;
-  const extractedCount = memories.filter((m) => m.source === "extracted").length;
-  const visibleMemories = showExtracted
-    ? memories
-    : memories.filter((m) => m.source !== "extracted");
+  const isArchivedView = view === "archived";
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         code="MEM"
         title="Memory"
-        subtitle={`${memories.length} entries · ${pinnedCount} pinned · ${extractedCount} extracted. Top 8 (pinned first, then most recently used) get injected into Jarvis's system prefix every chat turn.`}
+        subtitle={`${active.length} active · ${pinnedCount} pinned · ${archived.length} archived. The active store is injected into Jarvis's system prefix every chat turn (semantic-ranked once it grows past 40); a background pass reconciles it after each turn.`}
         actions={
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-dim">
-              <input
-                type="checkbox"
-                checked={showExtracted}
-                onChange={(e) => setShowExtracted(e.target.checked)}
-              />
-              show extracted
-            </label>
+            <div className="flex overflow-hidden rounded-sm border border-edge font-mono text-[11px]">
+              <button
+                type="button"
+                onClick={() => setView("active")}
+                className={[
+                  "px-2 py-1 transition-colors",
+                  view === "active"
+                    ? "bg-accent/15 text-accent"
+                    : "text-fg-dim hover:text-fg",
+                ].join(" ")}
+              >
+                active ({active.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("archived")}
+                className={[
+                  "border-l border-edge px-2 py-1 transition-colors",
+                  view === "archived"
+                    ? "bg-accent/15 text-accent"
+                    : "text-fg-dim hover:text-fg",
+                ].join(" ")}
+              >
+                archived ({archived.length})
+              </button>
+            </div>
+            {!isArchivedView && (
+              <label className="flex items-center gap-1.5 font-mono text-[11px] text-fg-dim">
+                <input
+                  type="checkbox"
+                  checked={showExtracted}
+                  onChange={(e) => setShowExtracted(e.target.checked)}
+                />
+                show extracted
+              </label>
+            )}
             <Button variant="primary" onClick={openCreate}>
               + new memory
             </Button>
@@ -207,9 +290,11 @@ export function MemoryView({
 
       {visibleMemories.length === 0 ? (
         <div className="rounded-md border border-edge bg-surface/70 p-8 text-center font-mono text-sm text-fg-dim">
-          {memories.length === 0
-            ? "// no memories yet — Jarvis will record facts as you chat, or add one manually"
-            : `// ${extractedCount} extracted ${extractedCount === 1 ? "memory" : "memories"} hidden — toggle "show extracted" to view`}
+          {isArchivedView
+            ? "// no archived memories"
+            : active.length === 0
+              ? "// no memories yet — Jarvis records facts as you chat, or add one manually"
+              : `// ${extractedCount} extracted ${extractedCount === 1 ? "memory" : "memories"} hidden — toggle "show extracted" to view`}
         </div>
       ) : (
         <div className="rounded-md border border-edge bg-surface/70">
@@ -217,7 +302,7 @@ export function MemoryView({
             <thead className="border-b border-edge bg-surface-2/40">
               <tr className="text-fg-dim uppercase tracking-wider text-[10px]">
                 <th className="px-2 py-2 text-left w-8"> </th>
-                <th className="px-2 py-2 text-left w-20">kind</th>
+                <th className="px-2 py-2 text-left w-24">kind</th>
                 <th className="px-2 py-2 text-left">key</th>
                 <th className="px-2 py-2 text-left">value</th>
                 <th className="px-2 py-2 text-left w-20">source</th>
@@ -227,24 +312,40 @@ export function MemoryView({
             </thead>
             <tbody>
               {visibleMemories.map((m) => (
-                <tr key={m.id} className="border-b border-edge/60 last:border-0">
+                <tr
+                  key={m.id}
+                  className={[
+                    "border-b border-edge/60 last:border-0",
+                    isArchivedView ? "opacity-60" : "",
+                  ].join(" ")}
+                >
                   <td className="px-2 py-2 align-top">
-                    <button
-                      type="button"
-                      onClick={() => togglePin(m)}
-                      disabled={busyId === m.id}
-                      className={[
-                        "text-base leading-none transition-opacity",
-                        m.pinned ? "opacity-100" : "opacity-30 hover:opacity-80",
-                      ].join(" ")}
-                      title={m.pinned ? "Unpin" : "Pin"}
-                      aria-label={m.pinned ? "Unpin" : "Pin"}
-                    >
-                      📌
-                    </button>
+                    {isArchivedView ? (
+                      <span className="text-base leading-none opacity-30">
+                        🗄
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => togglePin(m)}
+                        disabled={busyId === m.id}
+                        className={[
+                          "text-base leading-none transition-opacity",
+                          m.pinned
+                            ? "opacity-100"
+                            : "opacity-30 hover:opacity-80",
+                        ].join(" ")}
+                        title={m.pinned ? "Unpin" : "Pin"}
+                        aria-label={m.pinned ? "Unpin" : "Pin"}
+                      >
+                        📌
+                      </button>
+                    )}
                   </td>
                   <td className="px-2 py-2 align-top">
-                    <StatusBadge tone={KIND_TONE[m.kind]}>{m.kind}</StatusBadge>
+                    <StatusBadge tone={KIND_TONE[m.kind] ?? "neutral"}>
+                      {m.kind}
+                    </StatusBadge>
                   </td>
                   <td className="px-2 py-2 align-top text-fg">{m.key}</td>
                   <td className="px-2 py-2 align-top text-fg-muted">
@@ -262,21 +363,44 @@ export function MemoryView({
                   </td>
                   <td className="px-2 py-2 align-top text-right">
                     <div className="flex justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEdit(m)}
-                      >
-                        edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={busyId === m.id}
-                        onClick={() => remove(m)}
-                      >
-                        forget
-                      </Button>
+                      {isArchivedView ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyId === m.id}
+                            onClick={() => restore(m)}
+                          >
+                            restore
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={busyId === m.id}
+                            onClick={() => destroy(m)}
+                          >
+                            delete
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEdit(m)}
+                          >
+                            edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyId === m.id}
+                            onClick={() => archive(m)}
+                          >
+                            forget
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -336,9 +460,11 @@ export function MemoryView({
                   setForm((f) => ({ ...f, kind: e.target.value as MemoryKind }))
                 }
               >
-                <option value="fact">fact</option>
-                <option value="preference">preference</option>
-                <option value="context">context</option>
+                {MEMORY_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field label="confidence">

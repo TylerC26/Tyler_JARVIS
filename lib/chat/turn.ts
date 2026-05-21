@@ -6,10 +6,9 @@
 
 import { revalidatePath } from "next/cache";
 import type { ModelMessage } from "ai";
-import { extractMemoriesFromTurn } from "@/lib/ai/memory/extract";
+import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
 import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
 import { runSkillProposer } from "@/lib/ai/skills/propose";
-import { createMemoryCore } from "@/lib/db/core/memory";
 import type { ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
 import {
@@ -21,11 +20,9 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
-  isOpenAIConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
-  streamGpt5Response,
   type ForceRoute,
 } from "./router";
 
@@ -107,18 +104,17 @@ export function revalidateChatPaths(): void {
   revalidatePath("/memory");
 }
 
-// Auto-memory extraction. Safe to fire-and-forget.
-export async function runMemoryExtraction(
+// Post-turn memory reconciliation. Reads the existing memory store, compares
+// it against the turn, and creates / updates / supersedes entries — deduped,
+// no blind inserts. Safe to fire-and-forget.
+export async function runMemoryReconciliation(
   userText: string,
   assistantText: string,
 ): Promise<void> {
   try {
-    const drafts = await extractMemoriesFromTurn(userText, assistantText);
-    for (const d of drafts) {
-      void createMemoryCore(d);
-    }
+    await reconcileMemoriesFromTurn(userText, assistantText);
   } catch (e) {
-    console.warn("[chat] memory extraction failed:", e);
+    console.warn("[chat] memory reconciliation failed:", e);
   }
 }
 
@@ -192,21 +188,16 @@ async function runChatTurnInner(
   if (route === "deepseek" && !isDeepseekConfigured()) {
     throw new Error("DEEPSEEK_API_KEY not configured.");
   }
-  if (route === "gpt5" && !isOpenAIConfigured()) {
-    throw new Error("OPENAI_API_KEY not configured.");
-  }
 
   const model: ChatModel = modelIdForRoute(route);
 
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages)
-      : route === "gpt5"
-        ? await streamGpt5Response(modelMessages)
-        : await streamClaudeResponse(
-            modelMessages,
-            route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
-          );
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+        );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
   // `.steps` / `.text` settle.
@@ -219,7 +210,7 @@ async function runChatTurnInner(
   );
 
   revalidateChatPaths();
-  void runMemoryExtraction(latestUserText, assistantText);
+  void runMemoryReconciliation(latestUserText, assistantText);
   void runSkillDrafter(latestUserText, assistantText, toolCalls);
   void runSkillJudge(latestUserText, assistantText);
 

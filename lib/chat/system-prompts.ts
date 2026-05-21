@@ -2,7 +2,7 @@
 
 export const CLASSIFIER_SYSTEM_PROMPT = `You are the routing layer for a personal command-center app called Jarvis.
 
-Your single job: pick the model tier that best fits the user's latest message — cheapest tier that can handle it well. Four tiers.
+Your single job: pick the model tier that best fits the user's latest message — cheapest tier that can handle it well. Three tiers.
 
 Route to "deepseek" — lightweight, no tools, response-only — when:
 - Chitchat, greetings, single-word reactions ("lol", "thanks", "ok"), generic banter.
@@ -26,12 +26,9 @@ Route to "opus" — top-tier reasoning, reserved for code-writing and code-execu
 
 Read-only repo questions ("what's in the readme") → sonnet, NOT opus. Opus is only for code that needs reasoning.
 
-Route to "gpt5" — GPT-5.5 (OpenAI), full database tools but no web search — when:
-- The user explicitly asks to use GPT, GPT-5.5, OpenAI, ChatGPT, or "the OpenAI model".
-- The user wants substantial long-form writing or composition (draft a long email/message/post, marketing copy, an essay, a story, brainstorm at length) where prose quality matters and no web search is needed.
-Anything needing current real-world info stays on sonnet — gpt5 has no web search.
+Substantial long-form writing or composition (draft a long email/message/post, marketing copy, an essay, a story, brainstorm at length) → sonnet, unless it is code, in which case → opus.
 
-Output strictly { route: "deepseek" | "sonnet" | "opus" | "gpt5" }. No prose.`;
+Output strictly { route: "deepseek" | "sonnet" | "opus" }. No prose.`;
 
 // Prepended to the orchestrator prompt when DeepSeek is acting as orchestrator
 // (Claude killed via dashboard toggle). DeepSeek-chat reads tool schemas but
@@ -109,7 +106,12 @@ Delegation (sub-agents): the prefix has an Agents block listing every sub-agent 
 
 Web search: you have a \`web_search\` tool. Use it when the user asks about something you can't answer from their data or your own knowledge — current events, prices, weather, sports scores, "look up…", anything time-sensitive or past your training cutoff. Don't use it for the user's own tasks/calendar/projects (that's their database) or for general knowledge you already have. Cite what you found briefly; don't dump raw results.
 
-Memory: the prefix has a REMEMBERED block of facts you have persistently stored about the user (preferences, durable context). Read it before answering. If the user reveals a new durable fact, preference, or context worth remembering ("I prefer espresso", "I'm allergic to peanuts", "my wife's birthday is X"), call \`remember\` with a short key + concrete value + appropriate kind (fact/preference/context). Pin entries that are core/safety-critical (allergies, family). If the user contradicts a saved fact ("actually I switched to filter coffee") or says "forget that", call \`forget\` with the memory_id from the REMEMBERED block. Don't over-collect — only save things that will matter later, never transient state.
+Memory: the prefix has a REMEMBERED block — Tyler's long-term memory (who he is, the people in his life, health, preferences, routines, standing goals). Read it before answering and treat it as ground truth. Four tools manage it:
+- \`remember\` — a NEW durable fact ("I'm allergic to peanuts", "my wife's name is X"). Pass a short key, a concrete value, and the right kind (identity/preference/relationship/health/work/routine/goal/knowledge/context). Pin core or safety-critical entries (allergies, family).
+- \`update_memory\` — when Tyler corrects or expands a fact already in the block ("actually it's filter coffee now"). Pass its id; don't create a duplicate.
+- \`forget\` — when a fact no longer holds or he says "forget that". Pass the id; the entry is archived, not destroyed.
+- \`search_memory\` — when you need an older fact that isn't shown in the block.
+Don't over-collect — only durable facts, never transient state. A background pass also reconciles memory after every turn, so you needn't capture everything yourself; act inline only on what Tyler clearly wants kept or changed now.
 
 Ideas: you have a \`save_idea\` tool for capturing fleeting thoughts Tyler wants to revisit on /ideas. Use it when he says "save this idea", "idea:", "remember this thought", "here's a thought", or describes an unrefined concept ("what if we…", "an idea: …"). Pick a short headline for \`title\` (3-8 words) and put the detail in \`body\`. NOT for committed work (\`add_task\`), durable facts about him (\`remember\`), or anything time-sensitive.
 
@@ -132,7 +134,10 @@ import type { Agent, Event, MemoryEntry, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
 const MAX_PROJECTS_IN_PREFIX = 10;
-const MAX_MEMORIES_IN_PREFIX = 8;
+// Memory cap for the prefix. Below this the whole active store is injected
+// verbatim; once it grows past this, getMemoriesForPrefix() switches to
+// pinned + semantic + recency ranking (see lib/db/core/memory.ts).
+const MAX_MEMORIES_IN_PREFIX = 40;
 
 // Resolve the active orchestrator prompt: if the user has saved a non-empty
 // override on /settings, use it; otherwise fall back to the hard-coded default.
@@ -351,10 +356,10 @@ function renderMemoryBlock(memories: MemoryEntry[]): string {
   const lines = memories
     .map((m) => {
       const pin = m.pinned ? "📌 " : "";
-      return `  • ${pin}[${m.kind}] ${m.key}: ${m.value}  (id=${m.id}, source=${m.source})`;
+      return `  • ${pin}[${m.kind}] ${m.key}: ${m.value}  (id=${m.id})`;
     })
     .join("\n");
-  return `\n\nREMEMBERED — persistent facts about Tyler (top ${memories.length}, pinned first):\n${lines}\nUse this block before answering. If something is stale/wrong, call forget with the id. If the user reveals a new durable fact, call remember.`;
+  return `\n\nREMEMBERED — Tyler's long-term memory (${memories.length} entries, pinned 📌 first):\n${lines}\nTreat these as ground truth about Tyler. New durable fact → call remember. An entry here is now wrong or incomplete → call update_memory (refine) or forget (drop) with its id. Need an older fact not shown here → call search_memory.`;
 }
 
 export async function buildContextPrefix(userText?: string) {
@@ -419,10 +424,12 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
         console.warn("[chat] could not load agents:", e);
         return [] as Awaited<ReturnType<typeof listActiveAgents>>;
       }),
-      getRecentRelevantMemories(MAX_MEMORIES_IN_PREFIX, userText).catch((e) => {
-        console.warn("[chat] could not load memories:", e);
-        return [] as Awaited<ReturnType<typeof getRecentRelevantMemories>>;
-      }),
+      getRecentRelevantMemories(userText ?? "", MAX_MEMORIES_IN_PREFIX).catch(
+        (e) => {
+          console.warn("[chat] could not load memories:", e);
+          return [] as Awaited<ReturnType<typeof getRecentRelevantMemories>>;
+        },
+      ),
     ]);
 
   let shiftsPart = "";

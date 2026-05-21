@@ -1,6 +1,6 @@
 // One-shot smoke test for the morning-brief engine. Runs the actual pipeline:
 //   gatherContext() → getEngine() → engine.generateMorning(ctx)
-// against the real LLM (OpenRouter), with no persistence. Prints the brief
+// against the real LLM (Claude), with no persistence. Prints the brief
 // JSON the dashboard would render so we can eyeball that the new default prompt
 // is firing and the Zod schema accepts the response.
 //
@@ -41,7 +41,7 @@ async function main() {
 
   if (!hasLLM()) {
     console.error(
-      "ERROR: OPENROUTER_API_KEY missing — cannot smoke-test the LLM engine.",
+      "ERROR: ANTHROPIC_API_KEY missing — cannot smoke-test the LLM engine.",
     );
     process.exit(1);
   }

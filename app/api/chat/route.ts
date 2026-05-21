@@ -5,17 +5,15 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
-  isOpenAIConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
-  streamGpt5Response,
   type ForceRoute,
 } from "@/lib/chat/router";
 import {
   persistAssistantSteps,
   revalidateChatPaths,
-  runMemoryExtraction,
+  runMemoryReconciliation,
   runSkillDrafter,
   runSkillJudge,
 } from "@/lib/chat/turn";
@@ -30,15 +28,11 @@ type IncomingBody = {
 };
 
 export async function POST(req: Request) {
-  if (
-    !isAnthropicConfigured() &&
-    !isDeepseekConfigured() &&
-    !isOpenAIConfigured()
-  ) {
+  if (!isAnthropicConfigured() && !isDeepseekConfigured()) {
     return NextResponse.json(
       {
         error:
-          "No model API keys configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, and/or OPENAI_API_KEY in .env.local.",
+          "No model API keys configured. Set ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY in .env.local.",
       },
       { status: 503 },
     );
@@ -74,22 +68,14 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  if (route === "gpt5" && !isOpenAIConfigured()) {
-    return NextResponse.json(
-      { error: "OPENAI_API_KEY not configured." },
-      { status: 503 },
-    );
-  }
 
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages)
-      : route === "gpt5"
-        ? await streamGpt5Response(modelMessages)
-        : await streamClaudeResponse(
-            modelMessages,
-            route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
-          );
+      : await streamClaudeResponse(
+          modelMessages,
+          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+        );
 
   const modelId = modelIdForRoute(route);
 
@@ -112,7 +98,7 @@ export async function POST(req: Request) {
         modelId,
       );
       revalidateChatPaths();
-      void runMemoryExtraction(latestUserText, assistantText);
+      void runMemoryReconciliation(latestUserText, assistantText);
       void runSkillDrafter(latestUserText, assistantText, toolCalls);
       void runSkillJudge(latestUserText, assistantText);
     },
@@ -123,6 +109,5 @@ export async function GET() {
   return NextResponse.json({
     anthropic: isAnthropicConfigured(),
     deepseek: isDeepseekConfigured(),
-    openai: isOpenAIConfigured(),
   });
 }

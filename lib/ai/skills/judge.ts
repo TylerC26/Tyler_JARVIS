@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_AUTO } from "@/lib/ai/providers";
+import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { recordSkillUsageCore } from "@/lib/db/core/skill-usages";
@@ -48,7 +48,7 @@ Assistant reply: ${opts.assistantText.trim()}`;
       prompt,
       maxOutputTokens: 400,
     });
-    recordModelUsage(MODEL_AUTO, "classifier", result.usage);
+    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
     return result.object;
   } catch (e) {
     console.warn("[skills.judge] failed:", e);

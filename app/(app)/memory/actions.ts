@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  archiveMemoryCore,
   createMemoryCore,
   deleteMemoryCore,
+  setMemoryStatusCore,
   updateMemoryCore,
   type CreateMemoryInput,
   type UpdateMemoryInput,
@@ -28,6 +30,20 @@ export async function updateMemoryAction(id: string, patch: UpdateMemoryInput) {
   return result;
 }
 
+// Soft-delete — recoverable via restoreMemoryAction.
+export async function archiveMemoryAction(id: string) {
+  const result = await archiveMemoryCore(id);
+  bump();
+  return result;
+}
+
+export async function restoreMemoryAction(id: string) {
+  const result = await setMemoryStatusCore(id, "active");
+  bump();
+  return result;
+}
+
+// Hard delete — permanent.
 export async function deleteMemoryAction(id: string) {
   const result = await deleteMemoryCore(id);
   bump();

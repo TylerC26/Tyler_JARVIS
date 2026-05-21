@@ -5,7 +5,13 @@ import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { createIdeaCore } from "@/lib/db/core/ideas";
-import { createMemoryCore, deleteMemoryCore } from "@/lib/db/core/memory";
+import {
+  archiveMemoryCore,
+  createMemoryCore,
+  searchMemoriesCore,
+  updateMemoryCore,
+} from "@/lib/db/core/memory";
+import { MEMORY_KINDS } from "@/lib/db/types";
 import {
   createNoteCore,
   listNoteCategoriesCore,
@@ -57,7 +63,7 @@ import { listProjectSummaries } from "@/lib/db/queries/projects";
 import { listActiveSkills } from "@/lib/db/queries/skills";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
-import { webSearch } from "@/lib/web-search/openrouter";
+import { webSearch } from "@/lib/web-search/anthropic";
 
 // ---------- task tools ----------
 
@@ -837,20 +843,20 @@ export const delegateToAgentTool = tool({
 
 export const rememberTool = tool({
   description:
-    "Persist a fact about Tyler so you can recall it in future conversations. Use this when the user says things like 'remember that…', 'note that I prefer…', 'just so you know…', or reveals a durable preference / fact (food allergies, preferred working hours, family details). The fact will be injected into your system prefix on every future chat turn. Keep the `key` short (3-6 words) and the `value` concrete and specific. Don't store transient state (today's task list, current mood).",
+    "Persist a NEW durable fact about Tyler so you recall it in future conversations. Use this when he reveals something stable and worth keeping — a preference, a person in his life, a health detail, how he works, a standing goal ('remember that…', 'just so you know…', 'I prefer…'). The fact is injected into your system prefix on future turns. Keep `key` short (2-6 words) and `value` a single concrete sentence. To CHANGE a fact already in the REMEMBERED block, use update_memory instead — do not create a near-duplicate. Never store transient state (today's tasks, current mood). A background pass also reconciles memory after each turn, so reserve this for facts Tyler clearly wants kept.",
   inputSchema: z.object({
     key: z
       .string()
       .describe(
-        "Short label for the fact, like a dictionary key. Examples: 'coffee preference', 'wife job', 'allergic to'.",
+        "Short dictionary-style label. Examples: 'coffee preference', 'wife name', 'peanut allergy'.",
       ),
     value: z
       .string()
-      .describe("The fact itself, written as a clear declarative statement."),
+      .describe("The fact itself, written as a clear declarative sentence."),
     kind: z
-      .enum(["fact", "preference", "context"])
+      .enum(MEMORY_KINDS)
       .describe(
-        "'fact' = objective truth; 'preference' = how the user likes things; 'context' = situational background.",
+        "identity = who he is; preference = how he likes things; relationship = a person in his life; health; work; routine = recurring habit/schedule; goal = a standing objective; knowledge = other durable fact; context = situational background.",
       ),
     confidence: z
       .enum(["high", "medium", "low"])
@@ -878,6 +884,73 @@ export const rememberTool = tool({
       ok: true,
       message: `Remembered: ${result.data.key}`,
       memory_id: result.data.id,
+    };
+  },
+});
+
+export const updateMemoryTool = tool({
+  description:
+    "Refine or correct an existing memory by id. Use when Tyler gives a fuller or more accurate version of something already in the REMEMBERED block ('actually it's…', 'also…'), or to re-pin it / change its kind. Pass only the fields that change. To add a brand-new fact use remember; to drop one use forget.",
+  inputSchema: z.object({
+    memory_id: z
+      .string()
+      .describe("id of the memory to update (from the REMEMBERED block)."),
+    value: z
+      .string()
+      .optional()
+      .describe("Replacement value — a full declarative sentence."),
+    key: z.string().optional().describe("Replacement short label."),
+    kind: z.enum(MEMORY_KINDS).optional(),
+    confidence: z.enum(["high", "medium", "low"]).optional(),
+    pinned: z
+      .boolean()
+      .optional()
+      .describe("Set true to always include this entry in the prefix."),
+  }),
+  execute: async ({ memory_id, ...patch }) => {
+    const result = await updateMemoryCore(memory_id, patch);
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Updated memory: ${result.data.key}`,
+      memory: {
+        id: result.data.id,
+        key: result.data.key,
+        value: result.data.value,
+      },
+    };
+  },
+});
+
+export const searchMemoryTool = tool({
+  description:
+    "Search Tyler's full long-term memory store by meaning or keyword. Your system prefix already lists the most relevant memories every turn — use this tool only when you need a fact that may not be shown there (an older or narrowly-scoped detail). Returns matching entries with their ids.",
+  inputSchema: z.object({
+    query: z
+      .string()
+      .min(2)
+      .describe("What to look for — a topic, a person, or a keyword."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(25)
+      .optional()
+      .describe("Max results to return (default 10)."),
+  }),
+  execute: async ({ query, limit }) => {
+    const hits = await searchMemoriesCore(query, limit ?? 10);
+    return {
+      ok: true,
+      query,
+      count: hits.length,
+      memories: hits.map((m) => ({
+        id: m.id,
+        kind: m.kind,
+        key: m.key,
+        value: m.value,
+        pinned: m.pinned,
+      })),
     };
   },
 });
@@ -1098,14 +1171,14 @@ export const setBriefPromptTool = tool({
 
 export const forgetTool = tool({
   description:
-    "Delete a stored memory by id. Use when the user says 'forget that', 'remove that note', or contradicts a previously-saved fact. The memory_id is visible in the REMEMBERED section of your system prefix.",
+    "Archive a stored memory by id when it no longer holds or Tyler says 'forget that'. The entry is removed from your prefix but kept (recoverable) on the /memory page — it is not permanently deleted. If Tyler is CORRECTING a fact rather than dropping it, prefer update_memory. The memory_id is visible in the REMEMBERED section of your system prefix.",
   inputSchema: z.object({
-    memory_id: z.string().describe("The id of the memory entry to delete."),
+    memory_id: z.string().describe("The id of the memory entry to archive."),
   }),
   execute: async ({ memory_id }) => {
-    const result = await deleteMemoryCore(memory_id);
+    const result = await archiveMemoryCore(memory_id);
     if (!result.ok) return { ok: false, error: result.error };
-    return { ok: true, message: "Memory forgotten." };
+    return { ok: true, message: "Memory archived." };
   },
 });
 
@@ -1206,7 +1279,7 @@ export const deleteCronJobTool = tool({
 
 export const webSearchTool = tool({
   description:
-    "Search the live web via OpenRouter's web plugin and return a synthesized answer with source citations. Use for any question whose answer depends on real-world facts that change over time: flight schedules and prices, hotel availability, news, weather, sports scores, current product specs, visa rules, exchange rates, store hours, who-just-won-X, what-just-happened. Do NOT use for things in the user's own data (tasks/events/projects — use query_state) or for code questions (use read_project_repo). Quote prices/dates exactly as the answer reports them; never round or paraphrase numbers.",
+    "Search the live web and return a synthesized answer with source citations. Use for any question whose answer depends on real-world facts that change over time: flight schedules and prices, hotel availability, news, weather, sports scores, current product specs, visa rules, exchange rates, store hours, who-just-won-X, what-just-happened. Do NOT use for things in the user's own data (tasks/events/projects — use query_state) or for code questions (use read_project_repo). Quote prices/dates exactly as the answer reports them; never round or paraphrase numbers.",
   inputSchema: z.object({
     query: z
       .string()
@@ -1221,7 +1294,7 @@ export const webSearchTool = tool({
       .max(10)
       .optional()
       .describe(
-        "How many web hits OpenRouter should scrape and feed into the answer. Defaults to 5. Bump to 8-10 for broad research questions, drop to 2-3 for tightly-scoped fact lookups.",
+        "How many web results to scrape and feed into the answer. Defaults to 5. Bump to 8-10 for broad research questions, drop to 2-3 for tightly-scoped fact lookups.",
       ),
     recency: z
       .enum(["day", "week", "month", "year"])
@@ -1327,6 +1400,8 @@ export const ALL_TOOLS = {
   generate_brief: generateBriefTool,
   delegate_to_agent: delegateToAgentTool,
   remember: rememberTool,
+  update_memory: updateMemoryTool,
+  search_memory: searchMemoryTool,
   forget: forgetTool,
   save_idea: saveIdeaTool,
   save_note: saveNoteTool,

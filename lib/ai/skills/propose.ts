@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_AUTO } from "@/lib/ai/providers";
+import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { createSkillCore, listSkillsCore } from "@/lib/db/core/skills";
@@ -63,7 +63,7 @@ Final assistant reply: ${opts.assistantText.trim()}`;
       prompt,
       maxOutputTokens: 1200,
     });
-    recordModelUsage(MODEL_AUTO, "classifier", result.usage);
+    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
 
     const p = result.object;
     if (!p.reusable) return;

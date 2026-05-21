@@ -45,17 +45,6 @@ const PRICES: Record<string, ModelPrice> = {
     cacheRead: 0.07,
     cacheWrite: 0.27,
   },
-  // GPT-5.5 (OpenAI). OpenAI caches input automatically with no separate write
-  // charge, so cacheWrite mirrors the input rate (cache-write tokens aren't
-  // reported anyway). VERIFY these against current OpenAI pricing — placeholder
-  // values based on the GPT-5 tier.
-  "gpt-5.5": {
-    provider: "openai",
-    input: 1.25,
-    output: 10,
-    cacheRead: 0.125,
-    cacheWrite: 1.25,
-  },
 };
 
 export function getModelPricing(model: string): ModelPrice | null {

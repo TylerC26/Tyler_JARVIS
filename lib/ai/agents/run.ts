@@ -2,8 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
 import { generateText, stepCountIs } from "ai";
 import { getToolsForAgent } from "@/lib/ai/agents/tools";
-import { hasLLM, llmAuto } from "@/lib/ai/providers";
-import { isDeepseekConfigured } from "@/lib/chat/router";
+import { isAnthropicConfigured, isDeepseekConfigured } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import type { Agent } from "@/lib/db/types";
 
@@ -22,22 +21,22 @@ export type AgentRunResult = {
 const AGENT_STEP_BUDGET = 4;
 
 async function pickModel(agent: Agent) {
-  // 'auto' is the explicit opt-in to OpenRouter's auto-router (lib/ai/providers).
-  // Use it when you want the model picked dynamically per call rather than
-  // pinning to a single Claude or DeepSeek SDK path.
-  if (agent.model_pref === "auto" && hasLLM()) return llmAuto();
+  // Claude is reachable when the dashboard kill switch is on AND the key is set.
+  const claudeReady = (await isClaudeEnabled()) && isAnthropicConfigured();
 
-  const claudeOn = await isClaudeEnabled();
+  // 'auto' lets the system pick — runs on Claude Sonnet: full tool support,
+  // cheaper than Opus.
+  if (agent.model_pref === "auto" && claudeReady)
+    return anthropic("claude-sonnet-4-6");
   if (agent.model_pref === "deepseek" && isDeepseekConfigured())
     return deepseek("deepseek-chat");
-  if (agent.model_pref === "claude" && claudeOn)
+  if (agent.model_pref === "claude" && claudeReady)
     return anthropic("claude-opus-4-7");
 
   // Fallback chain when the agent's preferred provider isn't configured:
-  // direct Claude → direct DeepSeek → OpenRouter (if any key is set).
-  if (claudeOn) return anthropic("claude-opus-4-7");
+  // Claude → DeepSeek.
+  if (claudeReady) return anthropic("claude-opus-4-7");
   if (isDeepseekConfigured()) return deepseek("deepseek-chat");
-  if (hasLLM()) return llmAuto();
   return null;
 }
 
@@ -53,7 +52,7 @@ export async function runAgent(
       text: "",
       tool_calls: [],
       error:
-        "No model configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or OPENROUTER_API_KEY in env.",
+        "No model configured. Set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY in env.",
     };
   }
 

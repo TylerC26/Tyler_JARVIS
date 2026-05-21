@@ -8,7 +8,6 @@ import {
   type ModelMessage,
 } from "ai";
 import { z } from "zod";
-import { gpt55, isOpenAIConfigured, MODEL_GPT55 } from "@/lib/ai/providers";
 import { getOwnerTz } from "@/lib/auth/currentUser";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { recordUsageCore } from "@/lib/db/core/usage";
@@ -47,7 +46,7 @@ export function recordModelUsage(
 }
 
 const RouteSchema = z.object({
-  route: z.enum(["deepseek", "sonnet", "opus", "gpt5"]),
+  route: z.enum(["deepseek", "sonnet", "opus"]),
 });
 
 // Resolved routing decision:
@@ -56,25 +55,21 @@ const RouteSchema = z.object({
 //              skills, web search, vision, etc. Default for any action turn.
 // - opus     → reserved for coding-execution turns — writing/editing/refactoring
 //              code, repo questions, dispatching remote code tasks.
-// - gpt5     → GPT-5.5 (OpenAI). Long-form writing and the explicit "use GPT"
-//              ask. Full DB tools but no web search (Anthropic-only provider
-//              tool). Falls back to sonnet when OPENAI_API_KEY is absent.
-export type ChatRoute = "deepseek" | "sonnet" | "opus" | "gpt5";
+export type ChatRoute = "deepseek" | "sonnet" | "opus";
 
 // Anthropic model ids the Claude routes can run on.
 export type ClaudeModelId = "claude-opus-4-7" | "claude-sonnet-4-6";
 
 // Identifier persisted to chat_messages.model for a resolved route.
-export type ChatModelId = ClaudeModelId | "deepseek-chat" | typeof MODEL_GPT55;
+export type ChatModelId = ClaudeModelId | "deepseek-chat";
 
 export function modelIdForRoute(route: ChatRoute): ChatModelId {
   if (route === "deepseek") return "deepseek-chat";
   if (route === "opus") return "claude-opus-4-7";
-  if (route === "gpt5") return MODEL_GPT55;
   return "claude-sonnet-4-6";
 }
 
-export type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus" | "gpt5";
+export type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
@@ -91,10 +86,6 @@ export function isDeepseekConfigured(): boolean {
   return Boolean(process.env.DEEPSEEK_API_KEY);
 }
 
-// Re-exported so chat call sites can do all their key gating off one module
-// alongside isAnthropicConfigured / isDeepseekConfigured.
-export { isOpenAIConfigured };
-
 export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
@@ -108,8 +99,6 @@ export async function decideRoute(
   if (opts.forceRoute === "opus") return "opus";
   if (opts.forceRoute === "sonnet") return "sonnet";
   if (opts.forceRoute === "deepseek") return "deepseek";
-  // gpt5 needs the OpenAI key — without it fall back to the default action tier.
-  if (opts.forceRoute === "gpt5") return isOpenAIConfigured() ? "gpt5" : "sonnet";
 
   // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
   if (!isDeepseekConfigured()) return "sonnet";
@@ -123,11 +112,7 @@ export async function decideRoute(
       maxOutputTokens: 30,
     });
     recordModelUsage("deepseek-chat", "classifier", result.usage);
-    const route = result.object.route;
-    // The classifier may pick gpt5 even when the key is missing — demote to
-    // sonnet so the turn still runs with full tools.
-    if (route === "gpt5" && !isOpenAIConfigured()) return "sonnet";
-    return route;
+    return result.object.route;
   } catch (e) {
     console.warn("[chat] classifier failed, defaulting to sonnet:", e);
     return "sonnet";
@@ -177,7 +162,7 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   // taking actions. When Claude is killed via the StatusRail toggle, every
   // turn lands here, so DeepSeek picks up orchestrator duties: full tool
   // access + the orchestrator prompt so tasks/calendar/skills/etc still work.
-  // web_search is dropped (Anthropic-only provider tool).
+  // The web_search tool in ALL_TOOLS still works — it calls Anthropic itself.
   const claudeOn = await isClaudeEnabled();
   const userText = extractLatestUserText(messages);
   const [prefixContent, baseSystem] = await Promise.all([
@@ -268,29 +253,5 @@ export async function streamClaudeResponse(
     stopWhen: stepCountIs(8),
   });
   recordModelUsage(model, "chat", result.totalUsage);
-  return result;
-}
-
-// GPT-5.5 orchestrator turn. Same orchestrator prompt + ALL_TOOLS as the Claude
-// routes, so DB CRUD / queries / skills / vision all work. The Anthropic
-// provider-defined web_search tool is intentionally omitted — it's Anthropic
-// only — so the classifier keeps "needs current info" turns on the sonnet tier.
-export async function streamGpt5Response(messages: ModelMessage[]) {
-  const [prefixContent, system] = await Promise.all([
-    buildContextPrefix(extractLatestUserText(messages)),
-    getActiveOrchestratorPrompt(),
-  ]);
-  const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
-  const result = streamText({
-    model: gpt55(),
-    system,
-    messages: [ctxPrefix, ...messages],
-    tools: ALL_TOOLS,
-    stopWhen: stepCountIs(8),
-    onError: ({ error }) => {
-      console.warn("[chat] gpt-5.5 stream error:", error);
-    },
-  });
-  recordModelUsage(MODEL_GPT55, "chat", result.totalUsage);
   return result;
 }

@@ -10,18 +10,11 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 // Compact display label for the model id stamped on each assistant turn.
-// Handles both bare provider ids (direct Anthropic/DeepSeek SDK path) and
-// OpenRouter slugs (briefs / OCR / agents with model_pref='auto').
 function modelLabel(model: string): string {
   if (model === "claude-opus-4-7") return "opus 4.7";
   if (model === "claude-sonnet-4-6") return "sonnet 4.6";
   if (model === "claude-haiku-4-5") return "haiku 4.5";
   if (model === "deepseek-chat") return "deepseek";
-  if (model === "openrouter/auto") return "auto";
-  if (model.startsWith("anthropic/claude-opus-")) return "opus";
-  if (model.startsWith("anthropic/claude-sonnet-")) return "sonnet";
-  if (model.startsWith("anthropic/claude-haiku-")) return "haiku";
-  if (model.startsWith("deepseek/")) return "deepseek";
   return model;
 }
 

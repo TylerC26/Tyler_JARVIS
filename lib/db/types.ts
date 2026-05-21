@@ -145,9 +145,28 @@ export type Agent = {
   updated_at: string | null;
 };
 
-export type MemoryKind = "fact" | "preference" | "context";
+// The conventional memory category set. The DB no longer constrains `kind`
+// (the CHECK was dropped in migration 0033) — this tuple is the single source
+// of truth and can be extended here with no migration. Ordered loosely from
+// most-stable (identity) to most-situational (context).
+export const MEMORY_KINDS = [
+  "identity", // who Tyler is — name, location, background
+  "preference", // how he likes things done
+  "relationship", // people in his life
+  "health", // medical facts, allergies, fitness
+  "work", // job, employer, professional context
+  "routine", // recurring habits and schedule
+  "goal", // standing objectives he's working toward
+  "knowledge", // other durable objective facts
+  "context", // situational background, looser than a hard fact
+] as const;
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
+
 export type MemorySource = "user" | "extracted" | "agent";
 export type MemoryConfidence = "high" | "medium" | "low";
+// Lifecycle: 'active' is live; 'archived' is a soft-delete (recoverable);
+// 'superseded' means a corrected entry replaced it (see superseded_by).
+export type MemoryStatus = "active" | "archived" | "superseded";
 // 'global' or 'agent:<slug>' — v1 only uses 'global'.
 export type MemoryScope = string;
 
@@ -161,11 +180,18 @@ export type MemoryEntry = {
   source: MemorySource;
   confidence: MemoryConfidence;
   pinned: boolean;
+  status: MemoryStatus;
+  // When status='superseded', the id of the entry that replaced this one.
+  superseded_by: string | null;
+  // jsonb expansion slot for structured metadata (dates, related entities).
+  details: Record<string, unknown>;
   used_count: number;
   last_used_at: string | null;
   created_at: string;
   updated_at: string | null;
-  embedding: number[] | null;
+  // Omitted by read paths that don't need it (the 1536-float vector is large
+  // and never rendered) — hence optional.
+  embedding?: number[] | null;
 };
 
 export type PromptSettings = {
@@ -269,7 +295,7 @@ export type SiteSettings = {
   updated_at: string | null;
 };
 
-export type UsageProvider = "anthropic" | "deepseek" | "openai";
+export type UsageProvider = "anthropic" | "deepseek";
 export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
 
 export type UsageEvent = {
@@ -471,6 +497,9 @@ export type Database = {
           source: MemorySource;
           confidence?: MemoryConfidence;
           pinned?: boolean;
+          status?: MemoryStatus;
+          superseded_by?: string | null;
+          details?: Record<string, unknown>;
           used_count?: number;
           last_used_at?: string | null;
           created_at?: string;
@@ -723,13 +752,20 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      // Semantic memory match — returns ids + cosine similarity only; the
+      // caller fetches whatever columns it needs (see lib/db/core/memory.ts).
       match_memories: {
         Args: {
           query_embedding: number[];
           owner: string;
           match_count: number;
         };
-        Returns: Array<MemoryEntry & { similarity: number }>;
+        Returns: Array<{ id: string; similarity: number }>;
+      };
+      // Atomic used_count increment + last_used_at stamp for the given ids.
+      bump_memory_usage: {
+        Args: { ids: string[] };
+        Returns: undefined;
       };
     };
     Enums: { [_ in never]: never };
