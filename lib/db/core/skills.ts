@@ -151,28 +151,12 @@ export async function deleteSkillCore(
   return { ok: true, data: { id } };
 }
 
-// The four seed skills shipped on first load. Idempotent: only inserted when
-// the owner has zero rows in `skills`. Tyler can edit, disable, or delete any
-// of these afterwards.
+// The seed skills shipped on first load. Idempotent: only inserted when the
+// owner has zero rows in `skills`. Tyler can edit, disable, or delete any of
+// these afterwards. Daily-planning and quick-capture behaviors ship as Agents
+// (see SEED_AGENTS in core/agents.ts), not Skills — keeping each concept in
+// exactly one system avoids the agent/skill duplication.
 const SEED_SKILLS: CreateSkillInput[] = [
-  {
-    name: "Daily Planner",
-    description:
-      "Proposes a time-boxed day plan honoring wife shifts and today's tasks.",
-    trigger_keywords: ["plan my day", "what should i do today", "schedule today", "today's plan"],
-    instructions: `You are acting as Tyler's Daily Planner.
-
-When triggered:
-- Open with the current local date and day of week from the context prefix.
-- Pull today's open tasks and overdue items via query_state (domain: tasks). Prioritize anything tagged high or overdue.
-- Note the wife's shift code for today from the context prefix. If she's on NO or Anight she sleeps during the day — keep mornings quiet, suggest evening solo activities. If she's on A or P, you can suggest meals together accordingly.
-- Block the day into chunks: morning deep work, midday admin, afternoon errands/fitness, evening wind-down.
-- Output a numbered plan with explicit time ranges (e.g. "09:00–11:00 — deep work on X"). Keep total to 6–10 lines.
-- End with one optional stretch goal Tyler could attempt if he has spare time.
-
-Do not invent commitments not present in tasks or events. If today is light, say so.`,
-    source: "seeded",
-  },
   {
     name: "Weekly Review",
     description:
@@ -188,23 +172,6 @@ When triggered:
   3. **Next week** — 2-3 priorities to carry forward.
 - Keep the whole reply under 200 words. Use plain bullets, not nested formatting.
 - End with one question that prompts reflection (e.g. "What's the one thing you'd repeat?").`,
-    source: "seeded",
-  },
-  {
-    name: "Quick Capture",
-    description:
-      "Splits a brain-dump paragraph into tasks and calendar events.",
-    trigger_keywords: ["capture", "inbox", "dump", "brain dump", "process this"],
-    instructions: `You are Tyler's Quick Capture processor.
-
-When triggered:
-- Read the user's message carefully. It will contain a mixed brain-dump.
-- Extract every actionable item and classify each as one of: task, calendar event.
-- For each, call the appropriate tool: add_task or add_calendar_event.
-- Infer sensible defaults: tasks get a priority based on language ("urgent" = high), events get a 1-hour duration unless stated.
-- After all tool calls succeed, respond with a single compact summary like:
-  "Captured: 3 tasks · 1 event. All saved."
-- If anything is ambiguous, surface that in one line at the end and ask for clarification — but only after saving the unambiguous items.`,
     source: "seeded",
   },
   {
