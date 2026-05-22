@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { draftAgentFromDescription } from "@/lib/ai/agents/draft";
 import {
   createAgentCore,
   deleteAgentCore,
@@ -36,4 +37,10 @@ export async function deleteAgentAction(id: string) {
 
 export async function toggleAgentActiveAction(id: string, active: boolean) {
   return updateAgentAction(id, { active });
+}
+
+// Draft a full agent config from a one-line description via Sonnet. Persists
+// nothing — the UI drops the result into the review form to be saved.
+export async function draftAgentAction(description: string) {
+  return draftAgentFromDescription(description);
 }

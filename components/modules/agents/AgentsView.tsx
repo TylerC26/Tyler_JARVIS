@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   createAgentAction,
   deleteAgentAction,
+  draftAgentAction,
   toggleAgentActiveAction,
   updateAgentAction,
 } from "@/app/(app)/agents/actions";
@@ -14,9 +15,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Agent, AgentModelPref } from "@/lib/db/types";
 
+// The create flow is two-phase: "describe" collects a one-line description and
+// has Sonnet draft the rest; "review" is the full form, pre-filled and
+// editable, before the agent is saved. Edit always opens straight to the form.
 type Editing =
   | { kind: "closed" }
-  | { kind: "create" }
+  | { kind: "create"; phase: "describe" | "review" }
   | { kind: "edit"; agent: Agent };
 
 type FormState = {
@@ -49,6 +53,8 @@ export function AgentsView({
   const [agents, setAgents] = useState<Agent[]>(initialAgents);
   const [editing, setEditing] = useState<Editing>({ kind: "closed" });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [describeText, setDescribeText] = useState("");
+  const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -60,7 +66,8 @@ export function AgentsView({
   function openCreate() {
     setError(null);
     setForm(EMPTY_FORM);
-    setEditing({ kind: "create" });
+    setDescribeText("");
+    setEditing({ kind: "create", phase: "describe" });
   }
 
   function openEdit(agent: Agent) {
@@ -80,6 +87,7 @@ export function AgentsView({
   function close() {
     setEditing({ kind: "closed" });
     setForm(EMPTY_FORM);
+    setDescribeText("");
     setError(null);
   }
 
@@ -90,6 +98,47 @@ export function AgentsView({
         ? f.tool_allowlist.filter((t) => t !== name)
         : [...f.tool_allowlist, name],
     }));
+  }
+
+  // Phase 1 → 2: hand the description to Sonnet, drop its draft into the form,
+  // and advance to the review phase. On failure, stay on describe with the
+  // error shown so the user can retry or skip to manual entry.
+  async function generate() {
+    if (!describeText.trim() || drafting) return;
+    setError(null);
+    setDrafting(true);
+    try {
+      const res = await draftAgentAction(describeText);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setForm({
+        name: res.data.name,
+        slug: res.data.slug,
+        description: res.data.description,
+        system_prompt: res.data.system_prompt,
+        tool_allowlist: res.data.tool_allowlist.filter((t) =>
+          allToolNames.includes(t),
+        ),
+        model_pref: res.data.model_pref,
+        color: res.data.color,
+      });
+      setEditing({ kind: "create", phase: "review" });
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  function fillManually() {
+    setError(null);
+    setForm(EMPTY_FORM);
+    setEditing({ kind: "create", phase: "review" });
+  }
+
+  function backToDescribe() {
+    setError(null);
+    setEditing({ kind: "create", phase: "describe" });
   }
 
   async function save() {
@@ -161,6 +210,51 @@ export function AgentsView({
       setBusyId(null);
     }
   }
+
+  const isDescribe = editing.kind === "create" && editing.phase === "describe";
+  const showForm =
+    editing.kind === "edit" ||
+    (editing.kind === "create" && editing.phase === "review");
+
+  const modalTitle =
+    editing.kind === "edit"
+      ? `Edit · ${form.name}`
+      : isDescribe
+        ? "New Agent"
+        : `Review · ${form.name || "New Agent"}`;
+
+  const modalSubtitle = isDescribe
+    ? "describe it — Sonnet drafts the rest"
+    : "sub-agent config";
+
+  const footer = isDescribe ? (
+    <>
+      <Button variant="ghost" onClick={close} disabled={drafting}>
+        cancel
+      </Button>
+      <Button
+        variant="primary"
+        onClick={generate}
+        disabled={drafting || !describeText.trim()}
+      >
+        {drafting ? "drafting…" : "generate with Sonnet"}
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button variant="ghost" onClick={close} disabled={pending}>
+        cancel
+      </Button>
+      {editing.kind === "create" && (
+        <Button variant="ghost" onClick={backToDescribe} disabled={pending}>
+          back
+        </Button>
+      )}
+      <Button variant="primary" onClick={save} disabled={pending}>
+        {pending ? "saving…" : "save"}
+      </Button>
+    </>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -268,18 +362,9 @@ export function AgentsView({
       <AddItemModal
         open={editing.kind !== "closed"}
         onClose={close}
-        title={editing.kind === "edit" ? `Edit · ${form.name}` : "New Agent"}
-        subtitle="sub-agent config"
-        footer={
-          <>
-            <Button variant="ghost" onClick={close} disabled={pending}>
-              cancel
-            </Button>
-            <Button variant="primary" onClick={save} disabled={pending}>
-              {pending ? "saving…" : "save"}
-            </Button>
-          </>
-        }
+        title={modalTitle}
+        subtitle={modalSubtitle}
+        footer={footer}
       >
         <div className="flex flex-col gap-3">
           {error && (
@@ -288,105 +373,156 @@ export function AgentsView({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="name">
-              <Input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </Field>
-            <Field
-              label="slug"
-              hint={
-                editing.kind === "edit"
-                  ? "slug is read-only after creation"
-                  : "auto-derived from name if blank"
-              }
-            >
-              <Input
-                value={form.slug}
-                disabled={editing.kind === "edit"}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, slug: e.target.value }))
-                }
-              />
-            </Field>
-          </div>
-
-          <Field label="description" hint="One sentence shown in agents list and the system prefix.">
-            <Input
-              value={form.description}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, description: e.target.value }))
-              }
-            />
-          </Field>
-
-          <Field
-            label="system prompt"
-            hint="Addressed to the agent in second person. Be concrete about behavior + output format."
-          >
-            <Textarea
-              rows={8}
-              value={form.system_prompt}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, system_prompt: e.target.value }))
-              }
-            />
-          </Field>
-
-          <Field
-            label={`tool allowlist (${form.tool_allowlist.length}/${allToolNames.length})`}
-            hint="Pick the tools this agent can call. Leave empty for a text-only specialist."
-          >
-            <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto rounded-sm border border-edge bg-surface-2 p-2">
-              {allToolNames.map((name) => {
-                const on = form.tool_allowlist.includes(name);
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => toggleTool(name)}
-                    className={[
-                      "rounded-sm border px-1.5 py-0.5 font-mono text-[10px] transition-colors",
-                      on
-                        ? "border-accent/60 bg-accent/15 text-accent"
-                        : "border-edge bg-surface text-fg-muted hover:text-fg",
-                    ].join(" ")}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="model preference">
-              <Select
-                value={form.model_pref}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    model_pref: e.target.value as AgentModelPref,
-                  }))
-                }
+          {isDescribe && (
+            <>
+              <Field
+                label="describe the agent"
+                hint="One or two sentences — what it should do, when Jarvis should delegate to it. Sonnet writes the name, prompt, tools, and the rest."
               >
-                <option value="claude">claude (opus 4.7)</option>
-                <option value="deepseek">deepseek</option>
-                <option value="auto">auto (whichever configured)</option>
-              </Select>
-            </Field>
-            <Field label="color" hint="Optional hex (e.g. #00d9ff).">
-              <Input
-                value={form.color}
-                placeholder="#00d9ff"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, color: e.target.value }))
-                }
-              />
-            </Field>
-          </div>
+                <Textarea
+                  rows={5}
+                  autoFocus
+                  value={describeText}
+                  placeholder="e.g. An agent that reviews my open tasks each morning, flags anything overdue or stalled, and suggests what to tackle first."
+                  onChange={(e) => setDescribeText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      generate();
+                    }
+                  }}
+                />
+              </Field>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] text-fg-dim">
+                  ⌘↵ to generate
+                </span>
+                <button
+                  type="button"
+                  onClick={fillManually}
+                  className="font-mono text-[11px] text-fg-dim underline decoration-dotted underline-offset-2 hover:text-fg"
+                >
+                  skip — fill in manually
+                </button>
+              </div>
+            </>
+          )}
+
+          {showForm && (
+            <>
+              {editing.kind === "create" && (
+                <p className="font-mono text-[11px] text-fg-dim leading-relaxed">
+                  // drafted by Sonnet — review and tweak anything before
+                  saving
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="name">
+                  <Input
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="slug"
+                  hint={
+                    editing.kind === "edit"
+                      ? "slug is read-only after creation"
+                      : "auto-derived from name if blank"
+                  }
+                >
+                  <Input
+                    value={form.slug}
+                    disabled={editing.kind === "edit"}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, slug: e.target.value }))
+                    }
+                  />
+                </Field>
+              </div>
+
+              <Field
+                label="description"
+                hint="One sentence shown in agents list and the system prefix."
+              >
+                <Input
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                />
+              </Field>
+
+              <Field
+                label="system prompt"
+                hint="Addressed to the agent in second person. Be concrete about behavior + output format."
+              >
+                <Textarea
+                  rows={8}
+                  value={form.system_prompt}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, system_prompt: e.target.value }))
+                  }
+                />
+              </Field>
+
+              <Field
+                label={`tool allowlist (${form.tool_allowlist.length}/${allToolNames.length})`}
+                hint="Pick the tools this agent can call. Leave empty for a text-only specialist."
+              >
+                <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto rounded-sm border border-edge bg-surface-2 p-2">
+                  {allToolNames.map((name) => {
+                    const on = form.tool_allowlist.includes(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => toggleTool(name)}
+                        className={[
+                          "rounded-sm border px-1.5 py-0.5 font-mono text-[10px] transition-colors",
+                          on
+                            ? "border-accent/60 bg-accent/15 text-accent"
+                            : "border-edge bg-surface text-fg-muted hover:text-fg",
+                        ].join(" ")}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="model preference">
+                  <Select
+                    value={form.model_pref}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        model_pref: e.target.value as AgentModelPref,
+                      }))
+                    }
+                  >
+                    <option value="claude">claude (opus 4.7)</option>
+                    <option value="deepseek">deepseek</option>
+                    <option value="auto">auto (whichever configured)</option>
+                  </Select>
+                </Field>
+                <Field label="color" hint="Optional hex (e.g. #00d9ff).">
+                  <Input
+                    value={form.color}
+                    placeholder="#00d9ff"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, color: e.target.value }))
+                    }
+                  />
+                </Field>
+              </div>
+            </>
+          )}
         </div>
       </AddItemModal>
     </div>
