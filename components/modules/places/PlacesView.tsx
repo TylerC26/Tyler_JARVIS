@@ -99,22 +99,32 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
     return list;
   }, [places, status, activeCity, query]);
 
-  // Group filtered places by city for section headers.
+  // Group filtered places by AREA — the useful unit when most places sit in
+  // one city (e.g. Hong Kong districts: Central, TST, Wan Chai…). Falls back
+  // to city, then "Unsorted", so nothing is hidden.
+  function groupKey(p: Place): string {
+    return p.area?.trim() || p.city?.trim() || "Unsorted";
+  }
+
   const grouped = useMemo(() => {
     const map = new Map<string, Place[]>();
     for (const p of filtered) {
-      const c = p.city ?? "Unknown";
-      if (!map.has(c)) map.set(c, []);
-      map.get(c)!.push(p);
+      const key = groupKey(p);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
     }
     return [...map.entries()].sort(([a], [b]) => {
-      if (a === "Unknown") return 1;
-      if (b === "Unknown") return -1;
+      if (a === "Unsorted") return 1;
+      if (b === "Unsorted") return -1;
       return a.localeCompare(b);
     });
   }, [filtered]);
 
   const wantCount = places.filter((p) => p.status === "want_to_go").length;
+  const areaCount = useMemo(
+    () => new Set(places.map(groupKey)).size,
+    [places],
+  );
 
   async function handleSave(
     place: Place,
@@ -146,7 +156,7 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
       <PageHeader
         code="PLC"
         title="Places"
-        subtitle={`${places.length} saved · ${wantCount} want-to-go · ${cities.length} ${cities.length === 1 ? "city" : "cities"}`}
+        subtitle={`${places.length} saved · ${wantCount} want-to-go · ${areaCount} ${areaCount === 1 ? "area" : "areas"}`}
       />
 
       <div className="px-6 py-2 flex flex-col gap-2 border-b border-edge/40">
@@ -217,10 +227,10 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
             </p>
           </div>
         ) : (
-          grouped.map(([city, list]) => (
-            <section key={city} className="space-y-2">
+          grouped.map(([area, list]) => (
+            <section key={area} className="space-y-2">
               <h2 className="font-mono text-[10px] uppercase tracking-widest text-fg-dim border-b border-edge/40 pb-1">
-                // {city} ({list.length})
+                // {area} ({list.length})
               </h2>
               <div className="space-y-2">
                 {list.map((place) => (
@@ -267,7 +277,7 @@ function PlaceCard({ place, onSave, onDelete }: CardProps) {
   }
 
   const catTone = CATEGORY_TONE[place.category] ?? "text-fg-dim";
-  const meta = [place.cuisine, place.area].filter(Boolean).join(" · ");
+  const meta = [place.cuisine, place.city].filter(Boolean).join(" · ");
 
   return (
     <div className="group rounded-sm border border-edge bg-surface-2/40 px-4 py-3 flex flex-col gap-1.5">
