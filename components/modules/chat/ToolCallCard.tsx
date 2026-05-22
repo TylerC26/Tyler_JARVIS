@@ -12,7 +12,6 @@ const TOOL_GLYPH: Record<string, string> = {
   add_calendar_event: "▦",
   query_state: "◊",
   generate_brief: "◊",
-  delegate_to_agent: "◔",
   remember: "◐",
   forget: "◐",
 };
@@ -24,7 +23,6 @@ const TOOL_LABEL: Record<string, string> = {
   add_calendar_event: "EVENT",
   query_state: "QUERY",
   generate_brief: "BRIEF",
-  delegate_to_agent: "AGENT · DELEGATED",
   remember: "MEMORY · SAVED",
   forget: "MEMORY · FORGOT",
 };

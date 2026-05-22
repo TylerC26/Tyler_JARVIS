@@ -1,6 +1,7 @@
 "use client";
 
 import type { JarvisUIMessage } from "@/lib/chat/ui";
+import { DelegationCard } from "./DelegationCard";
 import { ToolCallCard } from "./ToolCallCard";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -54,10 +55,23 @@ export function Message({ message }: { message: JarvisUIMessage }) {
           if (part.type.startsWith("tool-")) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const tp = part as any;
+            const toolName = part.type.replace("tool-", "");
+            // Delegation gets a dedicated animated card visualizing the
+            // orchestrator → sub-agent handoff; everything else is generic.
+            if (toolName === "delegate_to_agent") {
+              return (
+                <DelegationCard
+                  key={i}
+                  state={tp.state}
+                  input={tp.input}
+                  output={tp.output}
+                />
+              );
+            }
             return (
               <ToolCallCard
                 key={i}
-                name={part.type.replace("tool-", "")}
+                name={toolName}
                 state={tp.state}
                 input={tp.input}
                 output={tp.output}

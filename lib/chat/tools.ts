@@ -832,6 +832,7 @@ export const delegateToAgentTool = tool({
       message: `→ ${agent.name} (${callsSuffix})`,
       agent_name: agent.name,
       agent_slug: agent.slug,
+      agent_color: agent.color,
       result: result.text,
       tool_calls_count: calls,
       tool_calls: result.tool_calls.map((c) => c.name),
