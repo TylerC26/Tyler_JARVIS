@@ -13,6 +13,7 @@ import { listMessages } from "@/lib/chat/persist";
 import { runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import { claimUpdate } from "@/lib/telegram/dedupe";
+import { detectPostUrl } from "@/lib/places/fetch-post";
 import {
   downloadFile,
   getFile,
@@ -106,7 +107,14 @@ export async function POST(req: Request) {
           ? `[Replying to: "${message.reply_to_message.text}"]\n\n`
           : "";
         const fullText = replyQuote + rawText;
-        userContent = [{ type: "text", text: fullText }];
+        // Forwarded Instagram/Threads post → nudge the orchestrator to capture
+        // the place. The hint rides along in the model input only; the stored
+        // user text stays clean for memory reconciliation.
+        const post = detectPostUrl(rawText);
+        const placeHint = post
+          ? `\n\n[system: forwarded ${post.platform} post — call save_place with url="${post.url}"]`
+          : "";
+        userContent = [{ type: "text", text: fullText + placeHint }];
         latestUserText = fullText;
       }
 

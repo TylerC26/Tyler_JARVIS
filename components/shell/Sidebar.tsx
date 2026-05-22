@@ -28,6 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "life",
     items: [
       { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
+      { href: "/places", label: "Places", code: "PLC", glyph: "⌖", status: "live" },
     ],
   },
   {

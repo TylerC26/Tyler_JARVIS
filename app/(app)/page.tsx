@@ -1,6 +1,7 @@
 import { TerminalAgenda } from "@/components/modules/dashboard/TerminalAgenda";
 import { TerminalBrief } from "@/components/modules/dashboard/TerminalBrief";
 import { TerminalHeader } from "@/components/modules/dashboard/TerminalHeader";
+import { TerminalPlaces } from "@/components/modules/dashboard/TerminalPlaces";
 import { TerminalPrompt } from "@/components/modules/dashboard/TerminalPrompt";
 import { TerminalRecent } from "@/components/modules/dashboard/TerminalRecent";
 import { TerminalSpend } from "@/components/modules/dashboard/TerminalSpend";
@@ -10,6 +11,7 @@ import { endOfOwnerDay, startOfOwnerDay, todayISO } from "@/lib/date";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listIdeasCore } from "@/lib/db/core/ideas";
 import { listNotesCore } from "@/lib/db/core/notes";
+import { listPlacesCore } from "@/lib/db/core/places";
 import { listTodayTasks } from "@/lib/db/queries/tasks";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 
@@ -20,14 +22,16 @@ export default async function DashboardPage() {
   const dayStart = startOfOwnerDay();
   const dayEnd = endOfOwnerDay();
 
-  const [brief, events, shifts, tasks, notes, ideas] = await Promise.all([
-    getLatestBrief("morning", today),
-    listEventsInRangeCore(dayStart.toISOString(), dayEnd.toISOString()),
-    listWifeShiftsInRangeCore(today, today),
-    listTodayTasks(6),
-    listNotesCore(),
-    listIdeasCore(),
-  ]);
+  const [brief, events, shifts, tasks, notes, ideas, places] =
+    await Promise.all([
+      getLatestBrief("morning", today),
+      listEventsInRangeCore(dayStart.toISOString(), dayEnd.toISOString()),
+      listWifeShiftsInRangeCore(today, today),
+      listTodayTasks(6),
+      listNotesCore(),
+      listIdeasCore(),
+      listPlacesCore({ status: "want_to_go" }),
+    ]);
 
   return (
     <div className="crt-scanlines relative min-h-[calc(100vh-8rem)] rounded-md border border-edge bg-base/40 px-4 py-3 md:px-6 md:py-4">
@@ -42,6 +46,7 @@ export default async function DashboardPage() {
         <TerminalTasks />
         <TerminalSpend />
         <TerminalRecent notes={notes.slice(0, 5)} ideas={ideas.slice(0, 5)} />
+        <TerminalPlaces places={places} />
         <div className="mt-2 border-t border-edge pt-3">
           <TerminalPrompt />
         </div>

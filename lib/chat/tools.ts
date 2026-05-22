@@ -11,7 +11,15 @@ import {
   searchMemoriesCore,
   updateMemoryCore,
 } from "@/lib/db/core/memory";
-import { MEMORY_KINDS } from "@/lib/db/types";
+import { MEMORY_KINDS, PLACE_CATEGORIES } from "@/lib/db/types";
+import {
+  createPlaceCore,
+  listPlacesCore,
+  searchPlacesCore,
+  updatePlaceStatusCore,
+} from "@/lib/db/core/places";
+import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
+import { extractPlace } from "@/lib/places/extract";
 import {
   createNoteCore,
   listNoteCategoriesCore,
@@ -1378,6 +1386,266 @@ export const visionAnalyzeTool = tool({
   },
 });
 
+// ---------- places ----------
+
+export const savePlaceTool = tool({
+  description:
+    "Save a restaurant / cafe / bar / activity to Tyler's places shortlist — the spots he wants to visit, used later for date planning. Use this whenever Tyler forwards an Instagram or Threads post (pass its URL as `url` — the tool fetches the post, reads the caption, and extracts the venue automatically), OR when he names a spot he wants to try in chat (pass `name` and whatever else he gave you, `source` stays manual). If the tool returns `needs_confirmation: true`, the post could not be read (private/blocked) — ask Tyler for the place name and city in ONE short question, then call save_place again with the explicit `name`/`city` AND the same `url`. Explicit fields you pass always override what the extractor inferred.",
+  inputSchema: z.object({
+    url: z
+      .string()
+      .optional()
+      .describe(
+        "Instagram or Threads post URL to fetch and extract. Pass this whenever Tyler forwarded a post link.",
+      ),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        "Explicit venue name. Required when there is no URL; also used to override or rescue a failed extraction.",
+      ),
+    category: z
+      .enum(PLACE_CATEGORIES)
+      .optional()
+      .describe("restaurant / cafe / bar / dessert / activity / other."),
+    cuisine: z.string().optional().describe("e.g. 'italian', 'omakase'."),
+    city: z.string().optional(),
+    area: z.string().optional().describe("Neighborhood or district."),
+    address: z.string().optional(),
+    price_level: z
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .optional()
+      .describe("1 (cheap) to 4 (expensive)."),
+    notes: z.string().optional().describe("Any extra context Tyler added."),
+  }),
+  execute: async (input) => {
+    const overrides = {
+      category: input.category,
+      cuisine: input.cuisine,
+      city: input.city,
+      area: input.area,
+      address: input.address,
+      price_level: input.price_level,
+      notes: input.notes,
+    };
+
+    // --- URL path: fetch the post, extract the venue. ---
+    if (input.url && input.url.trim()) {
+      const post = detectPostUrl(input.url);
+      if (!post) {
+        if (!input.name) {
+          return {
+            ok: false,
+            error:
+              "That URL isn't a recognized Instagram or Threads post. Pass a place `name` to save it manually.",
+          };
+        }
+        // Not a post URL but Tyler named the place — save manually.
+        const r = await createPlaceCore({
+          name: input.name,
+          source: "manual",
+          ...overrides,
+        });
+        if (!r.ok) return { ok: false, error: r.error };
+        return {
+          ok: true,
+          existed: r.existed,
+          place: r.data,
+          message: `Saved ${r.data.name} to your places list.`,
+        };
+      }
+
+      const fetched = await fetchPost(post.url);
+
+      if (fetched.ok) {
+        const extracted = await extractPlace({
+          caption: fetched.caption,
+          handle: fetched.handle,
+          locationHint: fetched.locationHint,
+          platform: fetched.platform,
+        });
+
+        const name =
+          input.name?.trim() ||
+          (extracted.ok && extracted.data.is_place
+            ? extracted.data.name.trim()
+            : "");
+
+        if (name) {
+          const e = extracted.ok ? extracted.data : null;
+          const r = await createPlaceCore({
+            name,
+            category: overrides.category ?? e?.category,
+            cuisine: overrides.cuisine ?? e?.cuisine,
+            city: overrides.city ?? e?.city,
+            area: overrides.area ?? e?.area,
+            address: overrides.address ?? e?.address,
+            price_level: overrides.price_level ?? e?.price_level,
+            notes: overrides.notes,
+            source: post.platform,
+            source_url: post.url,
+            image_url: fetched.imageUrl,
+            raw_caption: fetched.caption || null,
+          });
+          if (!r.ok) return { ok: false, error: r.error };
+          return {
+            ok: true,
+            existed: r.existed,
+            place: r.data,
+            summary: e?.summary ?? null,
+            message: r.existed
+              ? `${r.data.name} was already on your places list.`
+              : `Saved ${r.data.name} (${r.data.category}${r.data.city ? `, ${r.data.city}` : ""}) to your places list.`,
+          };
+        }
+
+        // Post read fine but no nameable venue in it.
+        return {
+          ok: false,
+          needs_confirmation: true,
+          source_url: post.url,
+          reason: extracted.ok ? "no_place_found" : "extraction_failed",
+          message:
+            "I read that post but couldn't pin down a specific place. What's the spot called, and which city?",
+        };
+      }
+
+      // Fetch failed — degrade gracefully.
+      if (input.name) {
+        const r = await createPlaceCore({
+          name: input.name,
+          source: post.platform,
+          source_url: post.url,
+          ...overrides,
+        });
+        if (!r.ok) return { ok: false, error: r.error };
+        return {
+          ok: true,
+          existed: r.existed,
+          place: r.data,
+          message: `Saved ${r.data.name} to your places list.`,
+        };
+      }
+      return {
+        ok: false,
+        needs_confirmation: true,
+        source_url: post.url,
+        reason: fetched.reason,
+        message: `I couldn't read that ${post.platform} post (${fetched.message}). What's the place called, and which city?`,
+      };
+    }
+
+    // --- Manual path: no URL, just a name. ---
+    if (input.name && input.name.trim()) {
+      const r = await createPlaceCore({
+        name: input.name,
+        source: "manual",
+        ...overrides,
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      return {
+        ok: true,
+        existed: r.existed,
+        place: r.data,
+        message: `Saved ${r.data.name} to your places list.`,
+      };
+    }
+
+    return {
+      ok: false,
+      error: "Provide a post `url` or a place `name`.",
+    };
+  },
+});
+
+export const findPlacesTool = tool({
+  description:
+    "Search Tyler's saved places shortlist. Use this for date planning ('schedule a date', 'where should we go', 'pick somewhere to eat') and whenever he asks what's on his list. Defaults to status 'want_to_go' (spots not yet visited or booked). Filter by city, category, or cuisine to match the vibe he's after.",
+  inputSchema: z.object({
+    query: z
+      .string()
+      .optional()
+      .describe("Keyword search over name / cuisine / area / caption."),
+    city: z.string().optional(),
+    category: z.enum(PLACE_CATEGORIES).optional(),
+    cuisine: z
+      .string()
+      .optional()
+      .describe("Substring match on the cuisine field."),
+    status: z
+      .enum(["want_to_go", "scheduled", "visited"])
+      .optional()
+      .describe("Defaults to want_to_go."),
+  }),
+  execute: async ({ query, city, category, cuisine, status }) => {
+    const st = status ?? "want_to_go";
+    let places = query
+      ? await searchPlacesCore(query, { status: st, limit: 40 })
+      : await listPlacesCore({ city, category, status: st });
+
+    if (query && city) {
+      const c = city.toLowerCase();
+      places = places.filter((p) => (p.city ?? "").toLowerCase() === c);
+    }
+    if (query && category) {
+      places = places.filter((p) => p.category === category);
+    }
+    if (cuisine) {
+      const c = cuisine.toLowerCase();
+      places = places.filter((p) => (p.cuisine ?? "").toLowerCase().includes(c));
+    }
+
+    return {
+      ok: true,
+      count: places.length,
+      status: st,
+      places: places.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        cuisine: p.cuisine,
+        city: p.city,
+        area: p.area,
+        price_level: p.price_level,
+        status: p.status,
+        source_url: p.source_url,
+      })),
+    };
+  },
+});
+
+export const updatePlaceStatusTool = tool({
+  description:
+    "Update a saved place's status. Use 'scheduled' once a date is booked onto the calendar (pass the calendar `event_id` from add_calendar_event and `scheduled_for`), 'visited' after Tyler has been, or 'want_to_go' to put it back on the active shortlist. Look up `place_id` via find_places first.",
+  inputSchema: z.object({
+    place_id: z.string(),
+    status: z.enum(["want_to_go", "scheduled", "visited"]),
+    event_id: z
+      .string()
+      .optional()
+      .describe("Calendar event id to link when marking 'scheduled'."),
+    scheduled_for: z
+      .string()
+      .optional()
+      .describe("YYYY-MM-DD of the planned visit, when marking 'scheduled'."),
+  }),
+  execute: async ({ place_id, status, event_id, scheduled_for }) => {
+    const result = await updatePlaceStatusCore(place_id, status, {
+      ...(event_id !== undefined ? { scheduled_event_id: event_id } : {}),
+      ...(scheduled_for !== undefined ? { scheduled_for } : {}),
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `${result.data.name} → ${result.data.status}`,
+      place: result.data,
+    };
+  },
+});
+
 // ---------- registry ----------
 
 export const ALL_TOOLS = {
@@ -1416,6 +1684,9 @@ export const ALL_TOOLS = {
   list_cron_jobs: listCronJobsTool,
   toggle_cron_job: toggleCronJobTool,
   delete_cron_job: deleteCronJobTool,
+  save_place: savePlaceTool,
+  find_places: findPlacesTool,
+  update_place_status: updatePlaceStatusTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

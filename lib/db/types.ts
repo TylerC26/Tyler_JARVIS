@@ -336,6 +336,47 @@ export type Note = {
   updated_at: string | null;
 };
 
+// Places: spots (restaurants/cafes/bars/activities) Tyler wants to visit,
+// captured from forwarded Instagram/Threads posts or added manually. The DB
+// does not constrain category/source/status — these tuples are the single
+// source of truth (cf. MEMORY_KINDS) and extend with no migration.
+export const PLACE_CATEGORIES = [
+  "restaurant",
+  "cafe",
+  "bar",
+  "dessert",
+  "activity",
+  "other",
+] as const;
+export type PlaceCategory = (typeof PLACE_CATEGORIES)[number];
+
+export type PlaceSource = "instagram" | "threads" | "manual";
+// want_to_go = on the wishlist; scheduled = booked onto the calendar;
+// visited = already been.
+export type PlaceStatus = "want_to_go" | "scheduled" | "visited";
+
+export type Place = {
+  id: string;
+  owner_id: string;
+  name: string;
+  category: PlaceCategory;
+  cuisine: string | null;
+  city: string | null;
+  area: string | null;
+  address: string | null;
+  price_level: number | null;
+  source: PlaceSource;
+  source_url: string | null;
+  image_url: string | null;
+  raw_caption: string | null;
+  notes: string | null;
+  status: PlaceStatus;
+  scheduled_event_id: string | null;
+  scheduled_for: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type AiBriefKind = "morning" | "evening";
 export type AiSuggestionKind = "productivity";
 export type AiSuggestionStatus = "open" | "dismissed" | "acted";
@@ -747,6 +788,32 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Note>;
+        Relationships: [];
+      };
+      places: {
+        Row: Place;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          category?: PlaceCategory;
+          cuisine?: string | null;
+          city?: string | null;
+          area?: string | null;
+          address?: string | null;
+          price_level?: number | null;
+          source?: PlaceSource;
+          source_url?: string | null;
+          image_url?: string | null;
+          raw_caption?: string | null;
+          notes?: string | null;
+          status?: PlaceStatus;
+          scheduled_event_id?: string | null;
+          scheduled_for?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Place>;
         Relationships: [];
       };
     };

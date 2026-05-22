@@ -115,6 +115,7 @@ export function revalidateChatPaths(): void {
   revalidatePath("/chat");
   revalidatePath("/agents");
   revalidatePath("/memory");
+  revalidatePath("/places");
 }
 
 // Post-turn memory reconciliation. Reads the existing memory store, compares
