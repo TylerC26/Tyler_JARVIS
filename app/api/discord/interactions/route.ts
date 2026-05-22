@@ -121,7 +121,7 @@ export async function POST(req: Request) {
   // Defer immediately; we'll PATCH the response when the turn finishes.
   after(async () => {
     try {
-      const history = dbToUIMessages(await listMessages(60));
+      const history = dbToUIMessages(await listMessages(null, 60));
       const userMessage: UIMessage = {
         id: crypto.randomUUID(),
         role: "user",

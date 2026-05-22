@@ -71,7 +71,7 @@ async function runJob(job: CronJob): Promise<void> {
   const promptForModel = `${CRON_PREAMBLE}${job.prompt}`;
 
   // Build model messages: recent history + the cron prompt as a fresh user turn.
-  const history = dbToUIMessages(await listMessages(40));
+  const history = dbToUIMessages(await listMessages(null, 40));
   const cronUserMessage: UIMessage = {
     id: crypto.randomUUID(),
     role: "user",

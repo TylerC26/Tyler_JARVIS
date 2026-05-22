@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { ChatInput } from "./ChatInput";
 import { ChatThread } from "./ChatThread";
@@ -14,6 +15,9 @@ type Props = {
   configured: { anthropic: boolean; deepseek: boolean };
   variant?: "drawer" | "page";
   onClose?: () => void;
+  // When set, this panel is a direct sub-agent thread rather than main Jarvis:
+  // turns stream against the agent's own prompt + tools, no classifier routing.
+  agent?: ActiveAgent | null;
 };
 
 type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
@@ -23,6 +27,7 @@ export function ChatPanel({
   configured,
   variant = "page",
   onClose,
+  agent = null,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
@@ -32,30 +37,34 @@ export function ChatPanel({
     api: "/api/chat",
     // Timezone is resolved server-side from the owner's configured tz
     // (getOwnerTz) — the browser's local zone is intentionally not used.
-    body: () => ({ forceRoute }),
+    // agentSlug scopes the turn to a sub-agent thread (null = main Jarvis).
+    body: () => ({ forceRoute, agentSlug: agent?.slug ?? null }),
   });
 
   const { messages, sendMessage, status, error, setMessages } =
     useChat<JarvisUIMessage>({
-      id: `jarvis-thread-${version}`,
+      id: `jarvis-thread-${agent?.slug ?? "main"}-${version}`,
       messages: initialMessages,
       transport,
     });
 
   const pending = status === "submitted" || status === "streaming";
   const noKeys = !configured.anthropic && !configured.deepseek;
+  // A sub-agent whose preferred provider isn't configured has no model to run.
+  const agentOffline = Boolean(agent) && !agent?.modelId;
+  const inputDisabled = noKeys || agentOffline;
 
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const activeModel = pending
-    ? forceRoute === "opus"
-      ? "claude-opus-4-7"
-      : forceRoute === "sonnet"
-        ? "claude-sonnet-4-6"
-        : forceRoute === "deepseek"
-          ? "deepseek-chat"
-          : "routing…"
+    ? agent
+      ? (agent.modelId ?? "model offline")
+      : forceRoute === "opus"
+        ? "claude-opus-4-7"
+        : forceRoute === "sonnet"
+          ? "claude-sonnet-4-6"
+          : forceRoute === "deepseek"
+            ? "deepseek-chat"
+            : "routing…"
     : null;
-  void lastAssistant;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -81,6 +90,9 @@ export function ChatPanel({
     prevStatus.current = status;
   }, [status, router]);
 
+  const title = agent ? agent.name : "jarvis";
+  const accent = agent?.color ?? "#00d9ff";
+
   return (
     <div
       className={[
@@ -88,11 +100,24 @@ export function ChatPanel({
       ].join(" ")}
     >
       <header className="flex items-center justify-between border-b border-edge px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-accent text-sm">◢◤</span>
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg">
-            jarvis
+        <div className="flex items-center gap-2 min-w-0">
+          {agent ? (
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: accent }}
+              aria-hidden
+            />
+          ) : (
+            <span className="font-mono text-accent text-sm">◢◤</span>
+          )}
+          <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg">
+            {title}
           </span>
+          {agent && (
+            <span className="hidden font-mono text-[10px] uppercase tracking-wider text-fg-dim sm:inline">
+              /{agent.slug}
+            </span>
+          )}
           {activeModel && (
             <span className="font-mono text-[10px] uppercase tracking-wider text-accent">
               · {activeModel}
@@ -100,29 +125,40 @@ export function ChatPanel({
           )}
           {!activeModel && (
             <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-              · idle
+              · {agentOffline ? "offline" : "idle"}
             </span>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <select
-            value={forceRoute}
-            onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
-            className="rounded-sm border border-edge bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
-            title="Routing override"
-          >
-            <option value="auto">AUTO</option>
-            <option value="deepseek" disabled={!configured.deepseek}>
-              DEEPSEEK
-            </option>
-            <option value="sonnet" disabled={!configured.anthropic}>
-              SONNET
-            </option>
-            <option value="opus" disabled={!configured.anthropic}>
-              OPUS
-            </option>
-          </select>
+          {!agent && (
+            <select
+              value={forceRoute}
+              onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
+              className="rounded-sm border border-edge bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
+              title="Routing override"
+            >
+              <option value="auto">AUTO</option>
+              <option value="deepseek" disabled={!configured.deepseek}>
+                DEEPSEEK
+              </option>
+              <option value="sonnet" disabled={!configured.anthropic}>
+                SONNET
+              </option>
+              <option value="opus" disabled={!configured.anthropic}>
+                OPUS
+              </option>
+            </select>
+          )}
+          {agent?.modelId && (
+            <span
+              className="font-mono text-[10px] uppercase tracking-wider text-fg-dim"
+              title="This agent's model preference"
+            >
+              {agent.modelId}
+            </span>
+          )}
           <ClearThreadButton
+            agentSlug={agent?.slug ?? null}
             onCleared={() => {
               setMessages([]);
               setVersion((v) => v + 1);
@@ -148,6 +184,13 @@ export function ChatPanel({
         </div>
       )}
 
+      {agentOffline && !noKeys && (
+        <div className="border-b border-warn/40 bg-warn/5 px-4 py-2 font-mono text-[11px] text-warn">
+          // {agent?.name} has no configured model — its provider key is
+          missing. Adjust the agent at /agents or add the key.
+        </div>
+      )}
+
       {error && (
         <div className="border-b border-danger/40 bg-danger/5 px-4 py-2 font-mono text-[11px] text-danger">
           ! {error.message}
@@ -158,10 +201,11 @@ export function ChatPanel({
         messages={messages}
         pending={pending}
         activeModel={activeModel}
+        agent={agent}
       />
 
       <ChatInput
-        disabled={noKeys}
+        disabled={inputDisabled}
         pending={pending}
         onSend={(text) => sendMessage({ text })}
       />

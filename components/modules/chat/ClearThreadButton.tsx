@@ -3,17 +3,28 @@
 import { useTransition } from "react";
 import { clearThreadAction } from "@/app/(app)/chat/actions";
 
-export function ClearThreadButton({ onCleared }: { onCleared?: () => void }) {
+export function ClearThreadButton({
+  agentSlug = null,
+  onCleared,
+}: {
+  // null = main Jarvis thread; a slug clears only that sub-agent's thread.
+  agentSlug?: string | null;
+  onCleared?: () => void;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <button
       type="button"
       disabled={pending}
       onClick={() => {
-        if (!confirm("Clear the entire chat history? This cannot be undone."))
+        if (
+          !confirm(
+            "Clear this thread's history? This cannot be undone.",
+          )
+        )
           return;
         startTransition(async () => {
-          await clearThreadAction();
+          await clearThreadAction(agentSlug);
           onCleared?.();
         });
       }}

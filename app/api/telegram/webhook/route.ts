@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     try {
       await sendChatAction(chatId, "typing");
 
-      const history = dbToUIMessages(await listMessages(60));
+      const history = dbToUIMessages(await listMessages(null, 60));
       const historyModelMsgs = await convertToModelMessages(history);
 
       // Build user content — multimodal for photos, plain text otherwise.

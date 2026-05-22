@@ -362,7 +362,17 @@ function renderMemoryBlock(memories: MemoryEntry[]): string {
   return `\n\nREMEMBERED — Tyler's long-term memory (${memories.length} entries, pinned 📌 first):\n${lines}\nTreat these as ground truth about Tyler. New durable fact → call remember. An entry here is now wrong or incomplete → call update_memory (refine) or forget (drop) with its id. Need an older fact not shown here → call search_memory.`;
 }
 
-export async function buildContextPrefix(userText?: string) {
+export type ContextPrefixOptions = {
+  // Direct sub-agent threads suppress the delegation block — the agent can't
+  // delegate, and telling it to call delegate_to_agent would just mislead it.
+  includeAgents?: boolean;
+};
+
+export async function buildContextPrefix(
+  userText?: string,
+  opts: ContextPrefixOptions = {},
+) {
+  const { includeAgents = true } = opts;
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
   // shifts on every message — no tool-call required. This is what makes the
@@ -496,7 +506,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
 
   let agentsPart = "";
   try {
-    agentsPart = renderAgentsBlock(agents);
+    agentsPart = includeAgents ? renderAgentsBlock(agents) : "";
   } catch (e) {
     console.warn("[chat] could not render agents for context prefix:", e);
   }

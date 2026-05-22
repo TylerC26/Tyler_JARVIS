@@ -29,11 +29,19 @@ import {
 export type ChatModel = ChatModelId;
 
 // Minimal shape of an AI SDK v6 step we read from. `streamText`'s StepResult
-// carries more, but we only need the text + tool activity.
+// carries more, but we only need the text + tool activity. Entries are allowed
+// to be `undefined` because a streamText run over a Partial tool set (sub-agent
+// allowlists) widens the SDK's TypedToolCall element type with `undefined`.
 type StepLike = {
   text?: string;
-  toolCalls?: { toolCallId: string; toolName: string; input?: unknown }[];
-  toolResults?: { toolCallId: string; toolName: string; output?: unknown }[];
+  toolCalls?: (
+    | { toolCallId: string; toolName: string; input?: unknown }
+    | undefined
+  )[];
+  toolResults?: (
+    | { toolCallId: string; toolName: string; output?: unknown }
+    | undefined
+  )[];
 };
 
 export type PersistedTurn = {
@@ -49,6 +57,7 @@ export type PersistedTurn = {
 export async function persistAssistantSteps(
   steps: StepLike[],
   model: ChatModel,
+  agentSlug: string | null = null,
 ): Promise<PersistedTurn> {
   const toolCalls: ChatToolCall[] = [];
   const toolResults: { id: string; name: string; result: unknown }[] = [];
@@ -57,6 +66,7 @@ export async function persistAssistantSteps(
   for (const step of steps) {
     if (step.text) text += step.text;
     for (const tc of step.toolCalls ?? []) {
+      if (!tc) continue;
       toolCalls.push({
         id: tc.toolCallId,
         name: tc.toolName,
@@ -64,6 +74,7 @@ export async function persistAssistantSteps(
       });
     }
     for (const tr of step.toolResults ?? []) {
+      if (!tr) continue;
       toolResults.push({
         id: tr.toolCallId,
         name: tr.toolName,
@@ -77,6 +88,7 @@ export async function persistAssistantSteps(
     content: text || null,
     tool_calls: toolCalls.length > 0 ? toolCalls : null,
     model,
+    agent_slug: agentSlug,
   });
 
   for (const r of toolResults) {
@@ -85,6 +97,7 @@ export async function persistAssistantSteps(
       tool_call_id: r.id,
       tool_name: r.name,
       tool_result: r.result as Record<string, unknown>,
+      agent_slug: agentSlug,
     });
   }
 

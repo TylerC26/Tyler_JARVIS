@@ -1,5 +1,6 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { NextResponse } from "next/server";
+import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { appendMessage } from "@/lib/chat/persist";
 import {
   decideRoute,
@@ -18,6 +19,7 @@ import {
   runSkillJudge,
 } from "@/lib/chat/turn";
 import type { JarvisMessageMetadata, JarvisUIMessage } from "@/lib/chat/ui";
+import { getAgentBySlug } from "@/lib/db/queries/agents";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +27,8 @@ export const maxDuration = 60;
 type IncomingBody = {
   messages: UIMessage[];
   forceRoute?: ForceRoute;
+  // When set, the turn belongs to a sub-agent thread rather than main Jarvis.
+  agentSlug?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -38,7 +42,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { messages, forceRoute } = (await req.json()) as IncomingBody;
+  const { messages, forceRoute, agentSlug } = (await req.json()) as IncomingBody;
 
   const modelMessages = await convertToModelMessages(messages);
 
@@ -50,6 +54,62 @@ export async function POST(req: Request) {
         .map((p) => (p as { type: "text"; text: string }).text)
         .join("\n")
     : "";
+
+  // ---- Sub-agent thread: stream against the agent's own prompt + tools. ----
+  if (agentSlug) {
+    const agent = await getAgentBySlug(agentSlug);
+    if (!agent) {
+      return NextResponse.json(
+        { error: `No agent matches slug "${agentSlug}".` },
+        { status: 404 },
+      );
+    }
+
+    if (latestUser) {
+      await appendMessage({
+        role: "user",
+        content: latestUserText,
+        agent_slug: agent.slug,
+      });
+    }
+
+    const stream = await streamAgentResponse(
+      agent,
+      modelMessages,
+      latestUserText,
+    );
+    if (!stream) {
+      return NextResponse.json(
+        {
+          error:
+            "No model configured for this agent. Set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY.",
+        },
+        { status: 503 },
+      );
+    }
+
+    return stream.result.toUIMessageStreamResponse<JarvisUIMessage>({
+      messageMetadata: ({ part }) => {
+        if (part.type === "start") {
+          return { model: stream.modelId } satisfies JarvisMessageMetadata;
+        }
+        return undefined;
+      },
+      onFinish: async () => {
+        // Persist the agent turn scoped to its thread. Memory reconciliation
+        // and skill drafting stay main-thread only — they're tuned for the
+        // orchestrator's trajectories, not a focused sub-agent's.
+        await persistAssistantSteps(
+          await stream.result.steps,
+          stream.modelId,
+          agent.slug,
+        );
+        revalidateChatPaths();
+      },
+    });
+  }
+
+  // ---- Main Jarvis thread: classifier-routed orchestrator. ----
   if (latestUser) {
     await appendMessage({ role: "user", content: latestUserText });
   }
