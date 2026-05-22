@@ -1,9 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Input } from "@/components/ui/Input";
+import {
+  deletePlaceAction,
+  updatePlaceAction,
+} from "@/app/(app)/places/actions";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
-import type { Place, PlaceStatus } from "@/lib/db/types";
+import {
+  PLACE_CATEGORIES,
+  type Place,
+  type PlaceStatus,
+} from "@/lib/db/types";
 
 type CitySummary = { city: string; count: number };
 
@@ -52,7 +61,7 @@ function priceGlyphs(level: number | null) {
 }
 
 export function PlacesView({ initialPlaces, initialCities }: Props) {
-  const [places] = useState<Place[]>(initialPlaces);
+  const [places, setPlaces] = useState<Place[]>(initialPlaces);
   const [activeCity, setActiveCity] = useState<string | null>(null);
   const [status, setStatus] = useState<PlaceStatus | "all">("all");
   const [query, setQuery] = useState("");
@@ -106,6 +115,31 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
   }, [filtered]);
 
   const wantCount = places.filter((p) => p.status === "want_to_go").length;
+
+  async function handleSave(
+    place: Place,
+    patch: Parameters<typeof updatePlaceAction>[1],
+  ): Promise<boolean> {
+    const result = await updatePlaceAction(place.id, patch);
+    if (!result.ok) {
+      alert(result.error);
+      return false;
+    }
+    setPlaces((prev) =>
+      prev.map((p) => (p.id === place.id ? result.data : p)),
+    );
+    return true;
+  }
+
+  async function handleDelete(place: Place) {
+    if (!confirm(`Delete "${place.name}" from your places?`)) return;
+    const result = await deletePlaceAction(place.id);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    setPlaces((prev) => prev.filter((p) => p.id !== place.id));
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -190,7 +224,12 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
               </h2>
               <div className="space-y-2">
                 {list.map((place) => (
-                  <PlaceCard key={place.id} place={place} />
+                  <PlaceCard
+                    key={place.id}
+                    place={place}
+                    onSave={(patch) => handleSave(place, patch)}
+                    onDelete={() => handleDelete(place)}
+                  />
                 ))}
               </div>
             </section>
@@ -201,12 +240,37 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
   );
 }
 
-function PlaceCard({ place }: { place: Place }) {
+type EditPatch = Parameters<typeof updatePlaceAction>[1];
+
+type CardProps = {
+  place: Place;
+  onSave: (patch: EditPatch) => Promise<boolean>;
+  onDelete: () => void;
+};
+
+function PlaceCard({ place, onSave, onDelete }: CardProps) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <PlaceEditForm
+        place={place}
+        onCancel={() => setEditing(false)}
+        onDelete={onDelete}
+        onSave={async (patch) => {
+          const ok = await onSave(patch);
+          if (ok) setEditing(false);
+          return ok;
+        }}
+      />
+    );
+  }
+
   const catTone = CATEGORY_TONE[place.category] ?? "text-fg-dim";
   const meta = [place.cuisine, place.area].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-sm border border-edge bg-surface-2/40 px-4 py-3 flex flex-col gap-1.5">
+    <div className="group rounded-sm border border-edge bg-surface-2/40 px-4 py-3 flex flex-col gap-1.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
           <span
@@ -233,21 +297,36 @@ function PlaceCard({ place }: { place: Place }) {
             </span>
           )}
         </div>
-        <span
-          className={[
-            "shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider",
-            STATUS_TONE[place.status],
-          ].join(" ")}
-        >
-          {STATUS_LABEL[place.status]}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            edit
+          </button>
+          <span
+            className={[
+              "rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+              STATUS_TONE[place.status],
+            ].join(" ")}
+          >
+            {STATUS_LABEL[place.status]}
+          </span>
+        </div>
       </div>
 
-      {(meta || place.price_level || place.notes) && (
+      {(meta || place.price_level) && (
         <div className="flex items-center gap-3 font-mono text-[11px] text-fg-muted">
           {meta && <span className="truncate">{meta}</span>}
           {priceGlyphs(place.price_level)}
         </div>
+      )}
+
+      {place.address && (
+        <p className="font-mono text-[11px] text-fg-muted leading-relaxed">
+          {place.address}
+        </p>
       )}
 
       {place.notes && (
@@ -271,5 +350,184 @@ function PlaceCard({ place }: { place: Place }) {
         )}
       </div>
     </div>
+  );
+}
+
+const PRICE_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "1", label: "$" },
+  { value: "2", label: "$$" },
+  { value: "3", label: "$$$" },
+  { value: "4", label: "$$$$" },
+];
+
+function PlaceEditForm({
+  place,
+  onSave,
+  onCancel,
+  onDelete,
+}: {
+  place: Place;
+  onSave: (patch: EditPatch) => Promise<boolean>;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: place.name,
+    category: place.category as string,
+    status: place.status as PlaceStatus,
+    cuisine: place.cuisine ?? "",
+    city: place.city ?? "",
+    area: place.area ?? "",
+    address: place.address ?? "",
+    price_level: place.price_level ? String(place.price_level) : "",
+    notes: place.notes ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!form.name.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    setSaving(true);
+    const ok = await onSave({
+      name: form.name,
+      category: form.category,
+      status: form.status,
+      cuisine: form.cuisine,
+      city: form.city,
+      area: form.area,
+      address: form.address,
+      price_level: form.price_level ? Number(form.price_level) : null,
+      notes: form.notes,
+    });
+    setSaving(false);
+    if (!ok) setError("Save failed — try again.");
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-sm border border-accent/30 bg-surface-2/60 p-4 space-y-3"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
+        // edit place
+      </p>
+
+      <Field label="Name">
+        <Input
+          value={form.name}
+          onChange={(e) => set("name", e.target.value)}
+          required
+          autoFocus
+        />
+      </Field>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Category">
+          <Select
+            value={form.category}
+            onChange={(e) => set("category", e.target.value)}
+          >
+            {PLACE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Status">
+          <Select
+            value={form.status}
+            onChange={(e) => set("status", e.target.value as PlaceStatus)}
+          >
+            {(["want_to_go", "scheduled", "visited"] as PlaceStatus[]).map(
+              (s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ),
+            )}
+          </Select>
+        </Field>
+        <Field label="Cuisine / vibe">
+          <Input
+            value={form.cuisine}
+            onChange={(e) => set("cuisine", e.target.value)}
+            placeholder="italian, omakase…"
+          />
+        </Field>
+        <Field label="Price">
+          <Select
+            value={form.price_level}
+            onChange={(e) => set("price_level", e.target.value)}
+          >
+            {PRICE_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="City">
+          <Input
+            value={form.city}
+            onChange={(e) => set("city", e.target.value)}
+          />
+        </Field>
+        <Field label="Area / neighborhood">
+          <Input
+            value={form.area}
+            onChange={(e) => set("area", e.target.value)}
+          />
+        </Field>
+      </div>
+
+      <Field label="Address">
+        <Input
+          value={form.address}
+          onChange={(e) => set("address", e.target.value)}
+        />
+      </Field>
+
+      <Field label="Notes">
+        <Textarea
+          value={form.notes}
+          onChange={(e) => set("notes", e.target.value)}
+          rows={3}
+          placeholder="why you saved it, what to order…"
+        />
+      </Field>
+
+      {error && <p className="font-mono text-[11px] text-danger">{error}</p>}
+
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="danger" size="sm" onClick={onDelete}>
+          delete
+        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            cancel
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={saving}>
+            {saving ? "saving…" : "save"}
+          </Button>
+        </div>
+      </div>
+    </form>
   );
 }

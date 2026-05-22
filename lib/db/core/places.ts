@@ -194,6 +194,59 @@ export async function updatePlaceStatusCore(
   return { ok: true, data: data as Place };
 }
 
+export type UpdatePlaceInput = Partial<{
+  name: string;
+  category: string;
+  cuisine: string | null;
+  city: string | null;
+  area: string | null;
+  address: string | null;
+  price_level: number | null;
+  status: PlaceStatus;
+  notes: string | null;
+}>;
+
+// General-purpose edit (the /places web UI). Only the fields passed are
+// touched. Status-only transitions from the date-planning flow still go
+// through updatePlaceStatusCore so the event link is managed consistently.
+export async function updatePlaceCore(
+  id: string,
+  patch: UpdatePlaceInput,
+): Promise<CoreResult<Place>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+
+  const updates: Partial<Place> & { updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) return { ok: false, error: "Place name cannot be empty." };
+    updates.name = name;
+  }
+  if (patch.category !== undefined)
+    updates.category = normalizeCategory(patch.category);
+  if (patch.cuisine !== undefined) updates.cuisine = clean(patch.cuisine);
+  if (patch.city !== undefined) updates.city = clean(patch.city);
+  if (patch.area !== undefined) updates.area = clean(patch.area);
+  if (patch.address !== undefined) updates.address = clean(patch.address);
+  if (patch.notes !== undefined) updates.notes = clean(patch.notes);
+  if (patch.price_level !== undefined)
+    updates.price_level = patch.price_level ?? null;
+  if (patch.status !== undefined) updates.status = patch.status;
+
+  const { data, error } = await supabase
+    .from("places")
+    .update(updates)
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as Place };
+}
+
 export async function deletePlaceCore(
   id: string,
 ): Promise<CoreResult<{ id: string }>> {
