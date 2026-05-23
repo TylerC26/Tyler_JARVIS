@@ -355,6 +355,40 @@ export type PlaceSource = "instagram" | "threads" | "manual";
 // visited = already been.
 export type PlaceStatus = "want_to_go" | "scheduled" | "visited";
 
+// Grocery list: structured shopping items, populated by the Health Officer
+// agent during meal-prep planning and by Tyler from chat / the /grocery web
+// UI. Categories are a soft enum (no DB CHECK, cf. PLACE_CATEGORIES) — order
+// here is also the rendering order on /grocery (most perishable first).
+export const GROCERY_CATEGORIES = [
+  "produce",
+  "bakery",
+  "dairy",
+  "protein",
+  "frozen",
+  "pantry",
+  "beverage",
+  "household",
+  "other",
+] as const;
+export type GroceryCategory = (typeof GROCERY_CATEGORIES)[number];
+
+export type GrocerySource = "manual" | "health-officer" | "chat";
+
+export type GroceryItem = {
+  id: string;
+  owner_id: string;
+  name: string;
+  quantity: string | null;
+  category: GroceryCategory;
+  checked: boolean;
+  note: string | null;
+  source: GrocerySource;
+  position: number;
+  created_at: string;
+  checked_at: string | null;
+  updated_at: string | null;
+};
+
 export type Place = {
   id: string;
   owner_id: string;
@@ -814,6 +848,25 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Place>;
+        Relationships: [];
+      };
+      grocery_items: {
+        Row: GroceryItem;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          quantity?: string | null;
+          category?: GroceryCategory;
+          checked?: boolean;
+          note?: string | null;
+          source?: GrocerySource;
+          position?: number;
+          created_at?: string;
+          checked_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: Partial<GroceryItem>;
         Relationships: [];
       };
     };

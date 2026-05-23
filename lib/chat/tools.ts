@@ -11,13 +11,25 @@ import {
   searchMemoriesCore,
   updateMemoryCore,
 } from "@/lib/db/core/memory";
-import { MEMORY_KINDS, PLACE_CATEGORIES } from "@/lib/db/types";
+import {
+  GROCERY_CATEGORIES,
+  MEMORY_KINDS,
+  PLACE_CATEGORIES,
+} from "@/lib/db/types";
 import {
   createPlaceCore,
   listPlacesCore,
   searchPlacesCore,
   updatePlaceStatusCore,
 } from "@/lib/db/core/places";
+import {
+  addGroceryItemsCore,
+  clearCheckedGroceryItemsCore,
+  deleteGroceryItemCore,
+  findGroceryItemsByNameCore,
+  listGroceryItemsCore,
+  setGroceryItemCheckedCore,
+} from "@/lib/db/core/grocery";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
 import {
@@ -1647,6 +1659,220 @@ export const updatePlaceStatusTool = tool({
   },
 });
 
+// ---------- grocery tools ----------
+
+export const addGroceryItemsTool = tool({
+  description:
+    "Add one or more items to Tyler's grocery list on /grocery. Use this whenever you produce a shopping list — meal-prep groceries, restock items, anything he says 'add to the grocery list'. Pass a BATCH of items in one call (don't call this once per item); each item carries a free-form `quantity` ('2 lb', '1 dozen', '3') and a `category` from the soft enum. Items already on the list (same name + category, still unchecked) are merged in place rather than duplicated, so re-running a plan is safe. Health Officer: pass `source: 'health-officer'` so the list shows where each item came from.",
+  inputSchema: z.object({
+    items: z
+      .array(
+        z.object({
+          name: z
+            .string()
+            .describe(
+              "Item name without quantity — 'chicken breast', not '2 lb chicken breast'.",
+            ),
+          quantity: z
+            .string()
+            .optional()
+            .describe("Free-form amount: '2 lb', '1 dozen', '3', '500 g'."),
+          category: z
+            .enum(GROCERY_CATEGORIES)
+            .optional()
+            .describe(
+              "produce / bakery / dairy / protein / frozen / pantry / beverage / household / other. Defaults to 'other' if omitted.",
+            ),
+          note: z
+            .string()
+            .optional()
+            .describe(
+              "Short why/context: 'for stir-fry Tue', 'low-fat', 'organic preferred'.",
+            ),
+        }),
+      )
+      .min(1)
+      .describe("Batch of grocery items to add."),
+    source: z
+      .enum(["manual", "health-officer", "chat"])
+      .optional()
+      .describe(
+        "Where this list came from. Defaults to 'chat'. Health Officer should pass 'health-officer'.",
+      ),
+  }),
+  execute: async ({ items, source }) => {
+    const result = await addGroceryItemsCore(
+      items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity ?? null,
+        category: i.category,
+        note: i.note ?? null,
+        source: source ?? "chat",
+      })),
+      { defaultSource: source ?? "chat" },
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    const { inserted, merged } = result.data;
+    const summary =
+      inserted.length && merged.length
+        ? `Added ${inserted.length} new + merged ${merged.length} existing into /grocery.`
+        : inserted.length
+          ? `Added ${inserted.length} item${inserted.length === 1 ? "" : "s"} to /grocery.`
+          : `All ${merged.length} item${merged.length === 1 ? " was" : "s were"} already on /grocery — merged.`;
+    return {
+      ok: true,
+      inserted_count: inserted.length,
+      merged_count: merged.length,
+      message: summary,
+    };
+  },
+});
+
+export const readGroceryListTool = tool({
+  description:
+    "Read Tyler's current grocery list (the /grocery page). Use this when he asks 'what's on my grocery list', 'do I need X', 'what am I buying', or before adding items so you can avoid duplicating. Returns items grouped by category, with checked items included only if `include_checked: true`.",
+  inputSchema: z.object({
+    include_checked: z
+      .boolean()
+      .optional()
+      .describe("Include already-checked items (default false)."),
+  }),
+  execute: async ({ include_checked }) => {
+    const items = await listGroceryItemsCore({
+      include_checked: include_checked ?? false,
+    });
+    const byCategory: Record<string, { name: string; quantity: string | null; checked: boolean; note: string | null }[]> = {};
+    for (const it of items) {
+      const bucket = byCategory[it.category] ?? (byCategory[it.category] = []);
+      bucket.push({
+        name: it.name,
+        quantity: it.quantity,
+        checked: it.checked,
+        note: it.note,
+      });
+    }
+    return {
+      ok: true,
+      total: items.length,
+      checked_count: items.filter((i) => i.checked).length,
+      by_category: byCategory,
+    };
+  },
+});
+
+export const checkGroceryItemTool = tool({
+  description:
+    "Mark a grocery item as bought (checked) or put it back on the list. Pass either an `id` (from read_grocery_list) or a `name` for fuzzy lookup. If a name matches multiple items, returns the candidates so you can ask Tyler which one.",
+  inputSchema: z.object({
+    id: z.string().optional(),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        "Item name or partial match — case-insensitive substring. Use when you don't have an id.",
+      ),
+    checked: z
+      .boolean()
+      .optional()
+      .describe("True to mark bought (default), false to uncheck."),
+  }),
+  execute: async ({ id, name, checked }) => {
+    const target = checked ?? true;
+    if (id) {
+      const r = await setGroceryItemCheckedCore(id, target);
+      if (!r.ok) return { ok: false, error: r.error };
+      return {
+        ok: true,
+        message: `${r.data.name} → ${target ? "checked" : "unchecked"}`,
+      };
+    }
+    if (!name)
+      return { ok: false, error: "Pass an `id` or a `name` to look up." };
+    const matches = await findGroceryItemsByNameCore(name, {
+      include_checked: !target,
+    });
+    if (matches.length === 0)
+      return {
+        ok: false,
+        error: `No grocery item matches "${name}".`,
+      };
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        needs_confirmation: true,
+        message: `Multiple matches for "${name}" — ask which one.`,
+        candidates: matches.map((m) => ({
+          id: m.id,
+          name: m.name,
+          quantity: m.quantity,
+          category: m.category,
+        })),
+      };
+    }
+    const r = await setGroceryItemCheckedCore(matches[0].id, target);
+    if (!r.ok) return { ok: false, error: r.error };
+    return {
+      ok: true,
+      message: `${r.data.name} → ${target ? "checked" : "unchecked"}`,
+    };
+  },
+});
+
+export const deleteGroceryItemTool = tool({
+  description:
+    "Remove a grocery item from the list (not the same as checking it off — this deletes it outright). Pass `id` or `name`. Also accepts `clear_checked: true` to sweep all currently-checked items at once.",
+  inputSchema: z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    clear_checked: z
+      .boolean()
+      .optional()
+      .describe("Delete every checked item in one shot."),
+  }),
+  execute: async ({ id, name, clear_checked }) => {
+    if (clear_checked) {
+      const r = await clearCheckedGroceryItemsCore();
+      if (!r.ok) return { ok: false, error: r.error };
+      return {
+        ok: true,
+        message: `Cleared ${r.data.deleted} checked item${r.data.deleted === 1 ? "" : "s"}.`,
+      };
+    }
+    if (id) {
+      const r = await deleteGroceryItemCore(id);
+      if (!r.ok) return { ok: false, error: r.error };
+      return { ok: true, message: "Deleted." };
+    }
+    if (!name)
+      return {
+        ok: false,
+        error: "Pass `id`, `name`, or `clear_checked: true`.",
+      };
+    const matches = await findGroceryItemsByNameCore(name, {
+      include_checked: true,
+    });
+    if (matches.length === 0)
+      return { ok: false, error: `No grocery item matches "${name}".` };
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        needs_confirmation: true,
+        message: `Multiple matches for "${name}" — ask which one.`,
+        candidates: matches.map((m) => ({
+          id: m.id,
+          name: m.name,
+          quantity: m.quantity,
+          category: m.category,
+          checked: m.checked,
+        })),
+      };
+    }
+    const r = await deleteGroceryItemCore(matches[0].id);
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, message: `Removed ${matches[0].name}.` };
+  },
+});
+
 // ---------- registry ----------
 
 export const ALL_TOOLS = {
@@ -1688,6 +1914,10 @@ export const ALL_TOOLS = {
   save_place: savePlaceTool,
   find_places: findPlacesTool,
   update_place_status: updatePlaceStatusTool,
+  add_grocery_items: addGroceryItemsTool,
+  read_grocery_list: readGroceryListTool,
+  check_grocery_item: checkGroceryItemTool,
+  delete_grocery_item: deleteGroceryItemTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

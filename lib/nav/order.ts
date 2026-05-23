@@ -30,6 +30,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
       { href: "/places", label: "Places", code: "PLC", glyph: "⌖", status: "live" },
+      { href: "/grocery", label: "Grocery", code: "GRC", glyph: "▥", status: "live" },
     ],
   },
   {
