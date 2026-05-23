@@ -40,7 +40,10 @@ export function TerminalPlaces({ places }: { places: Place[] }) {
               </span>
               <span
                 className={[
-                  "w-16 shrink-0 text-[10px] uppercase tracking-wider",
+                  // Wide enough to contain "[RESTAURANT]" (the longest
+                  // category tag) so the closing bracket never runs into
+                  // the venue name.
+                  "w-28 shrink-0 text-[10px] uppercase tracking-wider",
                   CATEGORY_TONE[p.category] ?? "text-fg-dim",
                 ].join(" ")}
               >
