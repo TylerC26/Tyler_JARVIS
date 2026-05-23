@@ -135,7 +135,9 @@ export function TaskRow({
               if (confirm("Delete task?"))
                 startTransition(() => void deleteTask(task.id));
             }}
-            className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-fg-dim hover:text-danger transition-opacity"
+            // Persistently visible (dimmed) instead of pure hover-reveal so
+            // the affordance exists on touch devices where there's no hover.
+            className="grid h-11 w-11 place-items-center font-mono text-[12px] text-fg-dim opacity-50 hover:opacity-100 hover:text-danger transition-opacity"
           >
             ✕
           </button>

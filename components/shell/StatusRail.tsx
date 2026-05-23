@@ -69,7 +69,7 @@ export async function StatusRail() {
     : "offline";
 
   return (
-    <div className="hidden items-center gap-4 md:flex">
+    <div className="hidden items-center gap-4 lg:flex">
       <Indicator label="DB" status="online" />
       <ClaudeToggleIndicator status={claudeStatus} />
       <Indicator label="DEEPSEEK" status={deepseekStatus} />

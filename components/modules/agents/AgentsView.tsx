@@ -394,9 +394,11 @@ export function AgentsView({
                 />
               </Field>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[10px] text-fg-dim">
+                {/* Hidden on touch — ⌘ isn't a useful hint there. */}
+                <span className="hidden font-mono text-[10px] text-fg-dim md:inline">
                   ⌘↵ to generate
                 </span>
+                <span className="md:hidden" aria-hidden />
                 <button
                   type="button"
                   onClick={fillManually}

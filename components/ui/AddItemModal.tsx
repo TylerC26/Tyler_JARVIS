@@ -43,7 +43,7 @@ export function AddItemModal({
       />
       <div
         className={[
-          "relative w-full max-w-2xl max-h-[90vh]",
+          "relative w-full max-w-2xl max-h-[90dvh]",
           "rounded-md border border-edge bg-surface shadow-2xl",
           "flex flex-col",
         ].join(" ")}
@@ -60,10 +60,10 @@ export function AddItemModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm border border-edge px-2 py-1 font-mono text-[10px] uppercase text-fg-muted hover:text-fg hover:border-edge-strong"
+            className="grid h-11 w-11 place-items-center rounded-sm border border-edge font-mono text-base leading-none text-fg-muted hover:text-fg hover:border-edge-strong active:bg-accent/15"
             aria-label="Close"
           >
-            ESC ✕
+            ×
           </button>
         </header>
 

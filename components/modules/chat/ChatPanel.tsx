@@ -32,6 +32,14 @@ export function ChatPanel({
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
   const [version, setVersion] = useState(0); // bump on clear to reset useChat state
+  // Per-mount nonce baked into the useChat id. Without it, switching threads
+  // and switching back would reuse the previous mount's Chat instance (the
+  // SDK keys its in-memory store by id) and ignore the freshly-fetched
+  // `initialMessages` we get back from the server — so the user would see a
+  // stale or empty thread until a page reload.
+  const [mountKey] = useState(
+    () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+  );
 
   const transport = new DefaultChatTransport({
     api: "/api/chat",
@@ -43,7 +51,7 @@ export function ChatPanel({
 
   const { messages, sendMessage, status, error, setMessages } =
     useChat<JarvisUIMessage>({
-      id: `jarvis-thread-${agent?.slug ?? "main"}-${version}`,
+      id: `jarvis-thread-${agent?.slug ?? "main"}-${mountKey}-${version}`,
       messages: initialMessages,
       transport,
     });
@@ -134,7 +142,7 @@ export function ChatPanel({
             <select
               value={forceRoute}
               onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
-              className="rounded-sm border border-edge bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
+              className="min-h-[44px] rounded-sm border border-edge bg-surface-2 px-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
               title="Routing override"
             >
               <option value="auto">AUTO</option>
@@ -168,10 +176,10 @@ export function ChatPanel({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-sm border border-edge px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg"
+              className="grid h-11 w-11 place-items-center rounded-sm border border-edge font-mono text-base leading-none text-fg-muted hover:text-fg active:bg-accent/15"
               aria-label="Close"
             >
-              ESC
+              ×
             </button>
           )}
         </div>

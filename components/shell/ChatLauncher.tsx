@@ -35,9 +35,9 @@ export function ChatLauncher({
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open Jarvis chat"
-          title="Open Jarvis chat (⌘J)"
+          title="Open Jarvis chat"
           className={[
-            "fixed z-40 right-4 md:right-6 bottom-20 md:bottom-6",
+            "fixed z-40 right-4 lg:right-6 bottom-20 lg:bottom-6",
             "flex items-center gap-2 rounded-full border bg-surface/95 backdrop-blur-md px-3.5 py-2.5",
             "shadow-2xl shadow-accent/10 transition-all hover:scale-105",
             live
@@ -53,23 +53,31 @@ export function ChatLauncher({
             aria-hidden
           />
           <span className="font-mono text-base leading-none">◢◤</span>
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] hidden md:inline">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] hidden lg:inline">
             jarvis
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hidden md:inline">
+          {/* ⌘J chip only on lg+ (devices likely to have a keyboard). On
+              iPad / touch this hint would be misleading. */}
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hidden lg:inline">
             ⌘J
           </span>
         </button>
       )}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
+        >
           <button
             type="button"
             aria-label="Close chat"
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-3xl h-[85vh] max-h-[800px] shadow-2xl">
+          <div className="relative w-full max-w-3xl h-[85dvh] max-h-[800px] shadow-2xl">
             <ChatPanel
               configured={configured}
               variant="drawer"

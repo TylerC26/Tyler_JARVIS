@@ -178,3 +178,27 @@ body {
   box-shadow: 0 0 8px rgba(0, 217, 255, 0.7);
   animation: block-caret 1s steps(1) infinite;
 }
+
+/* iPad / touch-device polish.
+ *
+ * - 16px input font suppresses Safari's auto-zoom-on-focus.
+ * - Tap highlight removal cleans up the default grey flash on every <a>/<button>.
+ * - Safe-area padding on body keeps content clear of the home indicator and
+ *   any landscape camera notch on Pro models. Combined with `viewport-fit:
+ *   cover` from the root layout, this is the standard iPadOS pattern. */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

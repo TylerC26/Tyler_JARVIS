@@ -311,7 +311,9 @@ function PlaceCard({ place, onSave, onDelete }: CardProps) {
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"
+            // Persistently visible (dimmed) so the affordance exists on touch
+            // where there's no hover state.
+            className="flex min-h-[44px] items-center rounded-sm px-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim opacity-60 hover:opacity-100 hover:text-accent active:bg-accent/10 transition-opacity"
           >
             edit
           </button>

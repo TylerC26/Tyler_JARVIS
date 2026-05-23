@@ -3,130 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { usePointerCoarse } from "@/lib/hooks/usePointerCoarse";
+import {
+  NAV_SECTIONS,
+  loadStoredOrder,
+  moveItemWithinSection,
+  persistOrder,
+  type NavItem,
+  type NavSection,
+} from "@/lib/nav/order";
 
-type NavItem = {
-  href: string;
-  label: string;
-  code: string;
-  glyph: string;
-  status?: "live" | "offline";
-};
-
-type NavSection = {
-  label: string;
-  items: NavItem[];
-};
-
-export const NAV_SECTIONS: NavSection[] = [
-  {
-    label: "overview",
-    items: [
-      { href: "/", label: "Dashboard", code: "DSH", glyph: "◈", status: "live" },
-    ],
-  },
-  {
-    label: "life",
-    items: [
-      { href: "/calendar", label: "Calendar", code: "CAL", glyph: "▦", status: "live" },
-      { href: "/places", label: "Places", code: "PLC", glyph: "⌖", status: "live" },
-    ],
-  },
-  {
-    label: "work",
-    items: [
-      { href: "/tasks", label: "Tasks", code: "TSK", glyph: "▤", status: "live" },
-      { href: "/projects", label: "Projects", code: "PRJ", glyph: "⌬", status: "live" },
-    ],
-  },
-
-  {
-    label: "ai",
-    items: [
-      { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
-      { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
-      { href: "/agents", label: "Agents", code: "AGT", glyph: "◔", status: "live" },
-      { href: "/memory", label: "Memory", code: "MEM", glyph: "◐", status: "live" },
-      { href: "/notes", label: "Notes", code: "NTS", glyph: "▢", status: "live" },
-      { href: "/ideas", label: "Ideas", code: "IDE", glyph: "✺", status: "live" },
-      { href: "/skills", label: "Skills", code: "SKL", glyph: "✦", status: "live" },
-      { href: "/tools", label: "Tools", code: "TLS", glyph: "◎", status: "live" },
-      { href: "/cron", label: "Cron Jobs", code: "CRN", glyph: "⏲", status: "live" },
-    ],
-  },
-  {
-    label: "system",
-    items: [
-      { href: "/settings", label: "Settings", code: "SET", glyph: "◇", status: "live" },
-    ],
-  },
-];
-
-// Flat list kept for any consumer that wants a non-sectioned view.
-export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
-
-// ---------- drag-to-reorder persistence ----------
-
-const STORAGE_KEY = "jarvis-nav-order-v1";
-
-// Storage shape is intentionally minimal: section label + ordered hrefs only.
-// Item metadata (label, glyph, code) is always rehydrated from the code-side
-// NAV_SECTIONS definition so renames/tweaks ship without users losing order.
-type StoredOrder = { sectionLabel: string; hrefs: string[] }[];
-
-function applyStoredOrder(
-  defaults: NavSection[],
-  stored: StoredOrder,
-): NavSection[] {
-  const itemByHref = new Map<string, NavItem>();
-  for (const s of defaults) for (const i of s.items) itemByHref.set(i.href, i);
-
-  const result: NavSection[] = [];
-  const used = new Set<string>();
-
-  // Pass 1: build sections in stored order, dropping items whose href no
-  // longer exists in code.
-  for (const { sectionLabel, hrefs } of stored) {
-    const items: NavItem[] = [];
-    for (const href of hrefs) {
-      if (used.has(href)) continue;
-      const item = itemByHref.get(href);
-      if (!item) continue;
-      items.push(item);
-      used.add(href);
-    }
-    if (items.length > 0) result.push({ label: sectionLabel, items });
-  }
-
-  // Pass 2: append any code-defined items not in storage to their original
-  // section (creating the section if it wasn't in storage either). This way
-  // newly-shipped nav entries surface without a localStorage clear.
-  for (const s of defaults) {
-    let target = result.find((r) => r.label === s.label);
-    for (const item of s.items) {
-      if (used.has(item.href)) continue;
-      if (!target) {
-        target = { label: s.label, items: [] };
-        result.push(target);
-      }
-      target.items.push(item);
-      used.add(item.href);
-    }
-  }
-
-  return result;
-}
-
-function persistOrder(sections: NavSection[]) {
-  try {
-    const stored: StoredOrder = sections.map((s) => ({
-      sectionLabel: s.label,
-      hrefs: s.items.map((i) => i.href),
-    }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-  } catch {
-    // localStorage may be unavailable in private mode / quota exceeded.
-  }
-}
+// Re-export so existing imports (`@/components/shell/Sidebar`) keep working
+// without churn while the actual definitions live in `lib/nav/order.ts`.
+export { NAV_ITEMS, NAV_SECTIONS } from "@/lib/nav/order";
+export type { NavItem, NavSection } from "@/lib/nav/order";
 
 type DropTarget = {
   sectionLabel: string;
@@ -136,25 +26,33 @@ type DropTarget = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const coarse = usePointerCoarse();
   // Render defaults on first paint to match SSR; rehydrate from localStorage
   // post-mount. Brief flicker is acceptable for a personal-OS sidebar.
   const [sections, setSections] = useState<NavSection[]>(NAV_SECTIONS);
+  const [reorderMode, setReorderMode] = useState(false);
   const [draggingHref, setDraggingHref] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const dragHrefRef = useRef<string | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as StoredOrder;
-      if (Array.isArray(parsed)) {
-        setSections(applyStoredOrder(NAV_SECTIONS, parsed));
-      }
-    } catch {
-      // Ignore parse errors — fall back to defaults.
-    }
+    const restored = loadStoredOrder(NAV_SECTIONS);
+    if (restored) setSections(restored);
   }, []);
+
+  // Exit reorder mode when the device gains a fine pointer (e.g. user plugs
+  // in a Magic Keyboard mid-session) so the desktop drag affordance returns.
+  useEffect(() => {
+    if (!coarse && reorderMode) setReorderMode(false);
+  }, [coarse, reorderMode]);
+
+  function swap(sectionLabel: string, href: string, direction: "up" | "down") {
+    setSections((current) => {
+      const next = moveItemWithinSection(current, sectionLabel, href, direction);
+      if (next !== current) persistOrder(next);
+      return next;
+    });
+  }
 
   function onDragStart(e: React.DragEvent, href: string) {
     dragHrefRef.current = href;
@@ -245,7 +143,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex sticky top-0 h-screen w-60 shrink-0 flex-col border-r border-edge bg-surface/60 backdrop-blur-sm">
+    <aside className="hidden lg:flex sticky top-0 h-screen w-60 shrink-0 flex-col border-r border-edge bg-surface/60 backdrop-blur-sm">
       <div className="flex h-14 items-center gap-2 border-b border-edge px-4">
         <span className="font-mono text-accent text-sm">◢◤</span>
         <span className="font-mono text-sm font-semibold tracking-[0.2em]">
@@ -254,98 +152,169 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {sections.map((section, idx) => (
-          <div
-            key={section.label}
-            className={idx === 0 ? "" : "mt-4"}
-            onDragOver={(e) => onDragOverSection(e, section.label)}
-            onDrop={onDrop}
-          >
-            <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-              // {section.label}
-            </div>
-            <ul className="mt-1 flex flex-col gap-0.5">
-              {section.items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-                const isDragging = draggingHref === item.href;
-                const showIndicatorAbove =
-                  dropTarget?.sectionLabel === section.label &&
-                  dropTarget.beforeHref === item.href &&
-                  !isDragging;
-                return (
-                  <li
-                    key={item.href}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, item.href)}
-                    onDragEnd={onDragEnd}
-                    onDragOver={(e) =>
-                      onDragOverItem(e, section.label, item.href)
-                    }
-                    onDrop={onDrop}
-                    className={[
-                      "relative",
-                      isDragging ? "opacity-40" : "",
-                    ].join(" ")}
-                  >
-                    {showIndicatorAbove && (
-                      <span
-                        className="pointer-events-none absolute -top-px left-1 right-1 h-0.5 bg-accent"
-                        aria-hidden
-                      />
-                    )}
-                    <Link
-                      href={item.href}
+        {sections.map((section, idx) => {
+          const lastItemIdx = section.items.length - 1;
+          return (
+            <div
+              key={section.label}
+              className={idx === 0 ? "" : "mt-4"}
+              onDragOver={
+                !coarse && !reorderMode
+                  ? (e) => onDragOverSection(e, section.label)
+                  : undefined
+              }
+              onDrop={!coarse && !reorderMode ? onDrop : undefined}
+            >
+              <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+                // {section.label}
+              </div>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {section.items.map((item, itemIdx) => {
+                  const active =
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(item.href);
+                  const isDragging = draggingHref === item.href;
+                  const showIndicatorAbove =
+                    dropTarget?.sectionLabel === section.label &&
+                    dropTarget.beforeHref === item.href &&
+                    !isDragging;
+                  const dragProps =
+                    !coarse && !reorderMode
+                      ? {
+                          draggable: true,
+                          onDragStart: (e: React.DragEvent) =>
+                            onDragStart(e, item.href),
+                          onDragEnd,
+                          onDragOver: (e: React.DragEvent) =>
+                            onDragOverItem(e, section.label, item.href),
+                          onDrop,
+                        }
+                      : {};
+                  return (
+                    <li
+                      key={item.href}
+                      {...dragProps}
                       className={[
-                        "group flex items-center gap-3 rounded-sm px-3 py-2 font-mono text-xs transition-colors cursor-grab active:cursor-grabbing",
-                        active
-                          ? "bg-accent/10 text-accent"
-                          : "text-fg-muted hover:bg-surface-2 hover:text-fg",
+                        "relative",
+                        isDragging ? "opacity-40" : "",
                       ].join(" ")}
                     >
-                      <span
-                        className={[
-                          "w-4 text-center text-base leading-none",
-                          active
-                            ? "text-accent"
-                            : "text-fg-dim group-hover:text-fg-muted",
-                        ].join(" ")}
-                        aria-hidden
-                      >
-                        {item.glyph}
-                      </span>
-                      <span className="tracking-wider">{item.code}</span>
-                      <span className="ml-1 normal-case tracking-normal text-[11px]">
-                        {item.label}
-                      </span>
-                      {item.status === "offline" && (
-                        <span className="ml-auto rounded-sm bg-edge px-1 text-[9px] text-fg-dim">
-                          P2
-                        </span>
+                      {showIndicatorAbove && (
+                        <span
+                          className="pointer-events-none absolute -top-px left-1 right-1 h-0.5 bg-accent"
+                          aria-hidden
+                        />
                       )}
-                      {active && (
-                        <span className="ml-auto text-accent text-base">›</span>
+                      {reorderMode ? (
+                        <div
+                          className={[
+                            "flex items-center gap-2 rounded-sm border px-2 py-1 font-mono text-xs",
+                            "border-accent/30 bg-accent/5",
+                          ].join(" ")}
+                        >
+                          <span
+                            className="w-4 text-center text-base leading-none text-fg-dim"
+                            aria-hidden
+                          >
+                            {item.glyph}
+                          </span>
+                          <span className="flex-1 truncate normal-case tracking-normal text-[11px] text-fg-muted">
+                            {item.label}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={itemIdx === 0}
+                            onClick={() => swap(section.label, item.href, "up")}
+                            aria-label={`Move ${item.label} up`}
+                            className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:text-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={itemIdx === lastItemIdx}
+                            onClick={() =>
+                              swap(section.label, item.href, "down")
+                            }
+                            aria-label={`Move ${item.label} down`}
+                            className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:text-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          className={[
+                            "group flex items-center gap-3 rounded-sm px-3 py-2 font-mono text-xs transition-colors",
+                            coarse ? "" : "cursor-grab active:cursor-grabbing",
+                            active
+                              ? "bg-accent/10 text-accent"
+                              : "text-fg-muted hover:bg-surface-2 hover:text-fg",
+                          ].join(" ")}
+                        >
+                          <span
+                            className={[
+                              "w-4 text-center text-base leading-none",
+                              active
+                                ? "text-accent"
+                                : "text-fg-dim group-hover:text-fg-muted",
+                            ].join(" ")}
+                            aria-hidden
+                          >
+                            {item.glyph}
+                          </span>
+                          <span className="tracking-wider">{item.code}</span>
+                          <span className="ml-1 normal-case tracking-normal text-[11px]">
+                            {item.label}
+                          </span>
+                          {item.status === "offline" && (
+                            <span className="ml-auto rounded-sm bg-edge px-1 text-[9px] text-fg-dim">
+                              P2
+                            </span>
+                          )}
+                          {active && (
+                            <span className="ml-auto text-accent text-base">›</span>
+                          )}
+                        </Link>
                       )}
-                    </Link>
-                  </li>
-                );
-              })}
-              {/* End-of-section drop slot for "append to bottom" */}
-              {dropTarget?.sectionLabel === section.label &&
-                dropTarget.beforeHref === null &&
-                draggingHref && (
-                  <li className="pointer-events-none px-1">
-                    <span className="block h-0.5 bg-accent" aria-hidden />
-                  </li>
-                )}
-            </ul>
-          </div>
-        ))}
+                    </li>
+                  );
+                })}
+                {/* End-of-section drop slot for "append to bottom" */}
+                {!coarse &&
+                  !reorderMode &&
+                  dropTarget?.sectionLabel === section.label &&
+                  dropTarget.beforeHref === null &&
+                  draggingHref && (
+                    <li className="pointer-events-none px-1">
+                      <span className="block h-0.5 bg-accent" aria-hidden />
+                    </li>
+                  )}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
 
-      <div className="border-t border-edge p-3">
+      <div className="border-t border-edge p-3 flex flex-col gap-2">
+        {coarse && (
+          <button
+            type="button"
+            onClick={() => setReorderMode((r) => !r)}
+            aria-pressed={reorderMode}
+            className={[
+              "flex h-11 w-full items-center justify-center gap-2 rounded-sm border px-2 font-mono text-[11px] uppercase tracking-wider",
+              reorderMode
+                ? "border-accent/60 bg-accent/10 text-accent"
+                : "border-edge bg-surface-2 text-fg-muted hover:text-fg",
+            ].join(" ")}
+          >
+            <span aria-hidden>▤</span>
+            {reorderMode ? "done" : "reorder"}
+          </button>
+        )}
         <div className="flex items-center gap-2 rounded-sm bg-surface-2 px-2 py-1.5">
           <div className="size-6 rounded-sm bg-accent/20 text-accent grid place-items-center font-mono text-[10px]">
             T
@@ -361,4 +330,3 @@ export function Sidebar() {
     </aside>
   );
 }
-

@@ -10,7 +10,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     <input
       ref={ref}
       className={[
-        "h-9 w-full rounded-sm border border-edge bg-surface-2 px-2.5 font-mono text-sm text-fg placeholder:text-fg-dim",
+        "h-11 w-full rounded-sm border border-edge bg-surface-2 px-2.5 font-mono text-sm text-fg placeholder:text-fg-dim",
         "focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40",
         "disabled:opacity-50",
         className,
@@ -30,7 +30,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     <select
       ref={ref}
       className={[
-        "h-9 w-full rounded-sm border border-edge bg-surface-2 px-2 font-mono text-sm text-fg",
+        "h-11 w-full rounded-sm border border-edge bg-surface-2 px-2 font-mono text-sm text-fg",
         "focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40",
         className,
       ].join(" ")}

@@ -39,7 +39,7 @@ export default async function ChatPage({
   };
 
   return (
-    <div className="h-[calc(100vh-3.5rem-2.5rem)] md:h-[calc(100vh-3.5rem-3rem)]">
+    <div className="h-[calc(100dvh-3.5rem-2.5rem)] md:h-[calc(100dvh-3.5rem-3rem)]">
       <ChatWorkspace
         agents={agents.map((a) => ({
           slug: a.slug,

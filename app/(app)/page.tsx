@@ -34,7 +34,7 @@ export default async function DashboardPage() {
     ]);
 
   return (
-    <div className="crt-scanlines relative min-h-[calc(100vh-8rem)] rounded-md border border-edge bg-base/40 px-4 py-3 md:px-6 md:py-4">
+    <div className="crt-scanlines relative min-h-[calc(100dvh-8rem)] rounded-md border border-edge bg-base/40 px-4 py-3 md:px-6 md:py-4">
       <div className="relative z-[2] flex flex-col gap-4">
         <TerminalHeader
           wifeShift={shifts[0]?.code ?? null}

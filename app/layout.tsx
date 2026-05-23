@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,23 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JARVIS // Personal OS",
   description: "Command center.",
+  // Apple-specific PWA hints. On iPadOS these let the app pin to the home
+  // screen with our dark theme and a sensible status-bar treatment.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "JARVIS",
+  },
+};
+
+// Viewport config lives separately from `metadata` per Next 14+ conventions.
+// `viewport-fit: cover` + `dvh` units below let layouts flow under the iOS
+// status bar and reflow when the software keyboard opens.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0a0a0c",
 };
 
 export default function RootLayout({

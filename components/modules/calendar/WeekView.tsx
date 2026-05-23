@@ -88,7 +88,9 @@ export function WeekView({
     <div
       ref={containerRef}
       className="rounded-md border border-edge bg-surface/40 overflow-y-auto"
-      style={{ maxHeight: "70vh" }}
+      // overscroll-contain stops iOS rubber-banding from bubbling to the page
+      // when the user reaches the top/bottom of the week's timeline.
+      style={{ maxHeight: "70dvh", overscrollBehavior: "contain" }}
       onPointerMove={drag.onPointerMove}
       onPointerUp={drag.onPointerUp}
       onPointerCancel={drag.onPointerCancel}
