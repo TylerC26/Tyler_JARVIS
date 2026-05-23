@@ -1,5 +1,5 @@
 import { convertToModelMessages, type UIMessage } from "ai";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { appendMessage } from "@/lib/chat/persist";
 import {
@@ -88,23 +88,29 @@ export async function POST(req: Request) {
       );
     }
 
-    return stream.result.toUIMessageStreamResponse<JarvisUIMessage>({
-      messageMetadata: ({ part }) => {
-        if (part.type === "start") {
-          return { model: stream.modelId } satisfies JarvisMessageMetadata;
-        }
-        return undefined;
-      },
-      onFinish: async () => {
-        // Persist the agent turn scoped to its thread. Memory reconciliation
-        // and skill drafting stay main-thread only — they're tuned for the
-        // orchestrator's trajectories, not a focused sub-agent's.
+    // Persist via `after()` rather than the response's onFinish so an aborted
+    // HTTP stream (user switching threads mid-reply) still saves the
+    // assistant turn — the model call to Anthropic/DeepSeek runs to
+    // completion regardless of whether the browser stayed connected.
+    after(async () => {
+      try {
         await persistAssistantSteps(
           await stream.result.steps,
           stream.modelId,
           agent.slug,
         );
         revalidateChatPaths();
+      } catch (e) {
+        console.warn("[chat] agent turn persistence failed:", e);
+      }
+    });
+
+    return stream.result.toUIMessageStreamResponse<JarvisUIMessage>({
+      messageMetadata: ({ part }) => {
+        if (part.type === "start") {
+          return { model: stream.modelId } satisfies JarvisMessageMetadata;
+        }
+        return undefined;
       },
     });
   }
@@ -139,20 +145,11 @@ export async function POST(req: Request) {
 
   const modelId = modelIdForRoute(route);
 
-  return result.toUIMessageStreamResponse<JarvisUIMessage>({
-    // Stamp the model id onto the message envelope so the client can render
-    // a "· opus 4.7" tag under each assistant turn as it streams.
-    messageMetadata: ({ part }) => {
-      if (part.type === "start") {
-        return { model: modelId } satisfies JarvisMessageMetadata;
-      }
-      return undefined;
-    },
-    onFinish: async () => {
-      // Persist the assistant turn (text + any tool calls/results) from the
-      // settled streamText steps, revalidate caches, then run fire-and-forget
-      // memory extraction + skill drafting + judging. Shared with the
-      // Telegram webhook via lib/chat/turn.ts.
+  // Persist via `after()` rather than the response's onFinish so an aborted
+  // HTTP stream (user switching threads mid-reply) still saves the assistant
+  // turn — the model keeps generating to completion regardless.
+  after(async () => {
+    try {
       const { text: assistantText, toolCalls } = await persistAssistantSteps(
         await result.steps,
         modelId,
@@ -161,6 +158,19 @@ export async function POST(req: Request) {
       void runMemoryReconciliation(latestUserText, assistantText);
       void runSkillDrafter(latestUserText, assistantText, toolCalls);
       void runSkillJudge(latestUserText, assistantText);
+    } catch (e) {
+      console.warn("[chat] main turn persistence failed:", e);
+    }
+  });
+
+  return result.toUIMessageStreamResponse<JarvisUIMessage>({
+    // Stamp the model id onto the message envelope so the client can render
+    // a "· opus 4.7" tag under each assistant turn as it streams.
+    messageMetadata: ({ part }) => {
+      if (part.type === "start") {
+        return { model: modelId } satisfies JarvisMessageMetadata;
+      }
+      return undefined;
     },
   });
 }
