@@ -1465,6 +1465,7 @@ export const savePlaceTool = tool({
           caption: fetched.caption,
           handle: fetched.handle,
           locationHint: fetched.locationHint,
+          imageUrl: fetched.imageUrl,
           platform: fetched.platform,
         });
 
