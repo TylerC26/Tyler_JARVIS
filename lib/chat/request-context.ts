@@ -9,12 +9,29 @@ export type TelegramTurnContext = {
   message_id: number;
 };
 
+// When a Telegram photo arrives, the webhook uploads it to Supabase Storage
+// (so it survives past Telegram's expiring file URL) and stashes both the
+// public URL and the raw bytes here. The log_meal tool reads from this so the
+// orchestrator doesn't need to re-fetch or re-pass the image — it just decides
+// to log the meal and writes the row.
+export type MealPhotoContext = {
+  publicUrl: string | null;
+  bytes: Buffer | null;
+  mediaType: string;
+  caption: string | null;
+};
+
 export type ChatRequestContext = {
   telegram?: TelegramTurnContext;
+  mealPhoto?: MealPhotoContext;
 };
 
 export const requestContext = new AsyncLocalStorage<ChatRequestContext>();
 
 export function getTelegramContext(): TelegramTurnContext | null {
   return requestContext.getStore()?.telegram ?? null;
+}
+
+export function getMealPhotoContext(): MealPhotoContext | null {
+  return requestContext.getStore()?.mealPhoto ?? null;
 }

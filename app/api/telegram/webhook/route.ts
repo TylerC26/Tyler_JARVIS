@@ -14,6 +14,8 @@ import { runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import { claimUpdate } from "@/lib/telegram/dedupe";
 import { detectPostUrl } from "@/lib/places/fetch-post";
+import { uploadMealPhoto } from "@/lib/meals/storage";
+import type { MealPhotoContext } from "@/lib/chat/request-context";
 import {
   downloadFile,
   getFile,
@@ -75,20 +77,39 @@ export async function POST(req: Request) {
       // Build user content — multimodal for photos, plain text otherwise.
       let latestUserText: string;
       let userContent: UserContent;
+      let mealPhotoContext: MealPhotoContext | undefined;
 
       if (hasPhoto) {
         // Pick the highest-resolution version (last in the array).
         const largest = message.photo![message.photo!.length - 1];
         const caption = message.caption?.trim() ?? "";
-        const prompt = caption || "What's in this image?";
+        const captionPrompt = caption || "What's in this image?";
+        // Hint the orchestrator that food photos should be logged via the
+        // log_meal tool. Cheap to inline — the model still decides whether
+        // the photo is actually food.
+        const mealHint =
+          "\n\n[system: if this image is food/drink/a meal, analyze it and call log_meal with structured macros. The photo has already been uploaded server-side, so log_meal will auto-attach it — do NOT pass an image_url. If the image is not food, ignore this hint and respond normally.]";
 
         const fileResult = await getFile(largest.file_id);
         if (fileResult.ok) {
           const imageBuffer = await downloadFile(fileResult.data.file_path);
           if (imageBuffer) {
+            // Re-host the photo so /kcal can render it long after Telegram's
+            // file URL expires. Fire-and-don't-block-on-failure: if the upload
+            // fails, the orchestrator still sees the image inline and can log
+            // a meal — it just won't have a thumbnail on the web UI.
+            const publicUrl = await uploadMealPhoto(imageBuffer, {
+              mediaType: "image/jpeg",
+            });
+            mealPhotoContext = {
+              publicUrl,
+              bytes: imageBuffer,
+              mediaType: "image/jpeg",
+              caption: caption || null,
+            };
             userContent = [
               { type: "image", image: imageBuffer, mediaType: "image/jpeg" },
-              { type: "text", text: prompt },
+              { type: "text", text: captionPrompt + mealHint },
             ];
             latestUserText = caption ? `[photo] ${caption}` : "[photo]";
           } else {
@@ -125,6 +146,7 @@ export async function POST(req: Request) {
         modelMessages,
         latestUserText,
         telegramContext: { chat_id: chatId, message_id: message.message_id },
+        mealPhotoContext,
       });
 
       await sendMessage(

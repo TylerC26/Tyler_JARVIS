@@ -30,6 +30,8 @@ import {
   listGroceryItemsCore,
   setGroceryItemCheckedCore,
 } from "@/lib/db/core/grocery";
+import { createMealCore, listMealsCore } from "@/lib/db/core/meals";
+import { getMealPhotoContext } from "@/lib/chat/request-context";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
 import {
@@ -1873,6 +1875,157 @@ export const deleteGroceryItemTool = tool({
   },
 });
 
+// ---------- meals ----------
+
+export const logMealTool = tool({
+  description:
+    "Log a meal Tyler is eating, with structured nutrition macros, onto /kcal. Use this WHENEVER Tyler sends a photo that is food OR explicitly says 'log this meal', 'kcal:', 'track this meal', 'I'm eating…'. When a Telegram photo of food triggers the turn, you (the orchestrator) can see the image inline — analyze it: identify every component, estimate per-item portion + macros, and call this tool ONCE with the totals. Make a concrete estimate even if uncertain — that's the value here; mention major assumptions in `notes`. The photo (when one was sent) is auto-attached server-side, so you don't need to pass an image URL. Macros must roughly reconcile against kcal: protein*4 + carbs*4 + fat*9 ≈ kcal ± 15%. Do not call this for screenshots, receipts, restaurant menus, scenery, or other non-food images.",
+  inputSchema: z.object({
+    title: z
+      .string()
+      .describe(
+        "Short label for the meal, 3-8 words. Examples: 'Chicken caesar salad', 'Bowl of pho with brisket', 'Protein shake + banana'.",
+      ),
+    meal_type: z
+      .enum(["breakfast", "lunch", "dinner", "snack", "other"])
+      .optional()
+      .describe(
+        "Best guess from time-of-day in your context + visual cues. Defaults to 'other' if you skip it.",
+      ),
+    items: z
+      .array(
+        z.object({
+          name: z
+            .string()
+            .describe("Short item name, e.g. 'grilled chicken breast'."),
+          quantity: z
+            .string()
+            .optional()
+            .describe("Estimated portion, e.g. '~150g', '1 cup', '2 slices'."),
+          kcal: z.number().optional(),
+          protein_g: z.number().optional(),
+          carbs_g: z.number().optional(),
+          fat_g: z.number().optional(),
+          fiber_g: z.number().optional(),
+        }),
+      )
+      .min(1)
+      .describe("Every distinct component you can see in the meal."),
+    kcal: z
+      .number()
+      .describe(
+        "Total estimated calories for the whole meal. Whole number — round to the nearest 5.",
+      ),
+    protein_g: z
+      .number()
+      .describe("Total grams of protein, one decimal place max."),
+    carbs_g: z.number().describe("Total grams of carbs."),
+    fat_g: z.number().describe("Total grams of fat."),
+    fiber_g: z.number().optional().describe("Total grams of fiber, if estimable."),
+    notes: z
+      .string()
+      .optional()
+      .describe(
+        "1-2 sentence caveat on the estimate — portion-size assumptions, hidden ingredients, low-confidence items. Omit when you're confident.",
+      ),
+    eaten_at: z
+      .string()
+      .optional()
+      .describe(
+        "ISO 8601 timestamp WITH the user's local offset. Defaults to now — omit unless Tyler said something like 'log this as breakfast 2 hours ago'.",
+      ),
+  }),
+  execute: async (input) => {
+    const photo = getMealPhotoContext();
+    const result = await createMealCore({
+      title: input.title,
+      meal_type: input.meal_type ?? null,
+      items: input.items,
+      kcal: input.kcal,
+      protein_g: input.protein_g,
+      carbs_g: input.carbs_g,
+      fat_g: input.fat_g,
+      fiber_g: input.fiber_g ?? null,
+      notes: input.notes ?? null,
+      photo_url: photo?.publicUrl ?? null,
+      source: photo ? "telegram" : "chat",
+      eaten_at: input.eaten_at,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    const m = result.data;
+    return {
+      ok: true,
+      meal_id: m.id,
+      message: `Logged ${m.title} — ${m.kcal} kcal · ${m.protein_g}P / ${m.carbs_g}C / ${m.fat_g}F.`,
+      summary: {
+        title: m.title,
+        meal_type: m.meal_type,
+        kcal: m.kcal,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        item_count: m.items.length,
+      },
+    };
+  },
+});
+
+export const readMealsTool = tool({
+  description:
+    "Read Tyler's recent logged meals from /kcal. Use when he asks 'what did I eat today', 'how many calories so far', 'today's macros', 'how much protein this week'. Returns most-recent-first. Pass `since` (ISO 8601) for a day/week window — otherwise defaults to the last 24 hours.",
+  inputSchema: z.object({
+    since: z
+      .string()
+      .optional()
+      .describe(
+        "ISO 8601 timestamp — only return meals eaten on/after this instant. Defaults to 24h ago.",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Max meals to return (default 20)."),
+  }),
+  execute: async ({ since, limit }) => {
+    const sinceIso =
+      since ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const meals = await listMealsCore({ since: sinceIso, limit: limit ?? 20 });
+    const totals = meals.reduce(
+      (acc, m) => ({
+        kcal: acc.kcal + Number(m.kcal ?? 0),
+        protein_g: acc.protein_g + Number(m.protein_g ?? 0),
+        carbs_g: acc.carbs_g + Number(m.carbs_g ?? 0),
+        fat_g: acc.fat_g + Number(m.fat_g ?? 0),
+      }),
+      { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+    );
+    return {
+      ok: true,
+      since: sinceIso,
+      count: meals.length,
+      totals: {
+        kcal: Math.round(totals.kcal),
+        protein_g: Math.round(totals.protein_g * 10) / 10,
+        carbs_g: Math.round(totals.carbs_g * 10) / 10,
+        fat_g: Math.round(totals.fat_g * 10) / 10,
+      },
+      meals: meals.map((m) => ({
+        id: m.id,
+        eaten_at: m.eaten_at,
+        meal_type: m.meal_type,
+        title: m.title,
+        kcal: m.kcal,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        item_count: m.items.length,
+      })),
+    };
+  },
+});
+
 // ---------- registry ----------
 
 export const ALL_TOOLS = {
@@ -1918,6 +2071,8 @@ export const ALL_TOOLS = {
   read_grocery_list: readGroceryListTool,
   check_grocery_item: checkGroceryItemTool,
   delete_grocery_item: deleteGroceryItemTool,
+  log_meal: logMealTool,
+  read_meals: readMealsTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

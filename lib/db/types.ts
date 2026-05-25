@@ -389,6 +389,51 @@ export type GroceryItem = {
   updated_at: string | null;
 };
 
+// Meals: structured nutrition log fed primarily by Telegram photo analysis.
+// Categories are a soft enum (no DB CHECK, cf. PLACE_CATEGORIES) so we can add
+// 'pre-workout', 'dessert' etc. without a migration. Items carry per-component
+// macros when the model could break them out — totals on the row are
+// authoritative (the model rounds and the items may not sum perfectly).
+export const MEAL_TYPES = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "snack",
+  "other",
+] as const;
+export type MealType = (typeof MEAL_TYPES)[number];
+
+export type MealSource = "telegram" | "manual" | "chat";
+
+export type MealItem = {
+  name: string;
+  quantity?: string | null;
+  kcal?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
+  fiber_g?: number | null;
+};
+
+export type Meal = {
+  id: string;
+  owner_id: string;
+  eaten_at: string;
+  meal_type: MealType | string | null;
+  title: string;
+  items: MealItem[];
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number | null;
+  notes: string | null;
+  photo_url: string | null;
+  source: MealSource;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type Place = {
   id: string;
   owner_id: string;
@@ -848,6 +893,29 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Place>;
+        Relationships: [];
+      };
+      meals: {
+        Row: Meal;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          eaten_at?: string;
+          meal_type?: string | null;
+          title: string;
+          items?: MealItem[];
+          kcal?: number;
+          protein_g?: number;
+          carbs_g?: number;
+          fat_g?: number;
+          fiber_g?: number | null;
+          notes?: string | null;
+          photo_url?: string | null;
+          source?: MealSource;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Meal>;
         Relationships: [];
       };
       grocery_items: {

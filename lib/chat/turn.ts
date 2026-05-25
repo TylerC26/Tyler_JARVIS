@@ -13,6 +13,7 @@ import type { ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
 import {
   requestContext,
+  type MealPhotoContext,
   type TelegramTurnContext,
 } from "./request-context";
 import {
@@ -116,6 +117,8 @@ export function revalidateChatPaths(): void {
   revalidatePath("/agents");
   revalidatePath("/memory");
   revalidatePath("/places");
+  revalidatePath("/grocery");
+  revalidatePath("/kcal");
 }
 
 // Post-turn memory reconciliation. Reads the existing memory store, compares
@@ -169,6 +172,9 @@ export type RunChatTurnInput = {
   forceRoute?: ForceRoute;
   // Optional per-turn metadata exposed to tools via lib/chat/request-context.
   telegramContext?: TelegramTurnContext;
+  // Set when this turn was triggered by a Telegram photo — log_meal reads from
+  // here to pull the pre-uploaded public URL onto the meal row.
+  mealPhotoContext?: MealPhotoContext;
 };
 
 export type RunChatTurnResult = {
@@ -183,7 +189,7 @@ export async function runChatTurn(
   input: RunChatTurnInput,
 ): Promise<RunChatTurnResult> {
   return requestContext.run(
-    { telegram: input.telegramContext },
+    { telegram: input.telegramContext, mealPhoto: input.mealPhotoContext },
     async () => runChatTurnInner(input),
   );
 }
