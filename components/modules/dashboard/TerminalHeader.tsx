@@ -1,13 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import type { WifeShiftCode } from "@/lib/db/types";
-
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
 
 const WIFE_TONE: Record<WifeShiftCode, string> = {
   A: "text-warn",
@@ -33,13 +28,9 @@ export function TerminalHeader({ wifeShift, eventCount, taskCount }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const date = now
-    ? `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`
-    : "----.--.--";
-  const dow = now ? WEEKDAYS[now.getDay()] : "—";
-  const time = now
-    ? `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    : "--:--:--";
+  const date = now ? fmtDate(now, "yyyy.MM.dd") : "----.--.--";
+  const dow = now ? fmtDate(now, "EEE").toUpperCase() : "—";
+  const time = now ? fmtDate(now, "HH:mm:ss") : "--:--:--";
 
   return (
     <header className="font-mono text-[12px] leading-relaxed text-fg-muted">
