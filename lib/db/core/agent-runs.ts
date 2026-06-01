@@ -75,10 +75,44 @@ export async function finishAgentRunCore(
   }
 }
 
+// A run that never recorded a terminal status is orphaned: the request was
+// torn down (page closed, serverless timeout) before finishAgentRunCore — or
+// its catch — could fire, so the row is stuck at 'running' and the Ops Board
+// pulses it as "working" forever. A chat turn is capped at 60s (maxDuration),
+// so anything still 'running' well past that is provably dead. This is the
+// margin past which we sweep such rows to a terminal state.
+const STALE_RUN_MS = 90_000;
+
+// Finalize orphaned 'running' rows older than the stale cutoff. Best-effort and
+// idempotent (matches 0 rows in the common case). Called on every read so the
+// board self-heals on the next poll instead of needing a separate cron sweep.
+async function reapStaleAgentRunsCore(): Promise<void> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return;
+  const cutoff = new Date(Date.now() - STALE_RUN_MS).toISOString();
+  try {
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "error",
+        result_summary: "interrupted — no completion signal (page closed or timed out)",
+        ended_at: new Date().toISOString(),
+      })
+      .eq("owner_id", getOwnerId())
+      .eq("status", "running")
+      .lt("started_at", cutoff);
+  } catch {
+    /* best-effort telemetry cleanup */
+  }
+}
+
 // Recent runs, most-recent-first. Powers the dashboard Agent Ops Board poll.
+// Reaps orphaned 'running' rows first so a delegation interrupted by a page
+// switch settles to a terminal state instead of pulsing "working" forever.
 export async function listRecentAgentRunsCore(limit = 12): Promise<AgentRun[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
+  await reapStaleAgentRunsCore();
   try {
     const { data } = await supabase
       .from("agent_runs")

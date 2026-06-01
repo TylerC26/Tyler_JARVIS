@@ -35,9 +35,19 @@ function triggerTag(source: string) {
   if (source === "api") return "api";
   return "chat";
 }
+// A run reaped by the stale-run sweep (lib/db/core/agent-runs.ts) carries this
+// marker — it wasn't a real agent failure, the turn was just interrupted (page
+// closed / timed out) before it could report completion, so we label it apart
+// from genuine errors.
+function isInterrupted(r: AgentRun) {
+  return (
+    r.status === "error" && (r.result_summary?.startsWith("interrupted") ?? false)
+  );
+}
+
 function runDetail(r: AgentRun) {
   if (r.status === "running") return "running";
-  if (r.status === "error") return "failed";
+  if (r.status === "error") return isInterrupted(r) ? "interrupted" : "failed";
   const n = r.tool_calls_count ?? 0;
   return n === 0 ? "replied" : `${n} tool${n === 1 ? "" : "s"}`;
 }
@@ -88,6 +98,7 @@ export function OfficeStage({ agents, initialRuns }: Props) {
         !active && now != null && endedAt != null && now - endedAt < SETTLE_MS;
       const justErr = settling && run?.status === "error";
       const justDone = settling && run?.status === "done";
+      const interrupted = run ? isInterrupted(run) : false;
 
       return {
         slug: a.slug,
@@ -98,6 +109,7 @@ export function OfficeStage({ agents, initialRuns }: Props) {
         active,
         justErr,
         justDone,
+        interrupted,
         neverRan: !run,
         task: run?.task ?? null,
         lastClock: run ? clockHM(run.started_at) : null,
@@ -175,7 +187,9 @@ export function OfficeStage({ agents, initialRuns }: Props) {
                 const stroke = nd.active
                   ? nd.color
                   : nd.justErr
-                    ? "var(--color-danger)"
+                    ? nd.interrupted
+                      ? "var(--color-warn)"
+                      : "var(--color-danger)"
                     : "var(--color-edge-strong)";
                 return (
                   <line
@@ -277,7 +291,9 @@ export function OfficeStage({ agents, initialRuns }: Props) {
                       nd.active
                         ? ""
                         : nd.justErr
-                          ? "text-danger"
+                          ? nd.interrupted
+                            ? "text-warn"
+                            : "text-danger"
                           : nd.justDone
                             ? "text-accent"
                             : "text-fg-dim",
@@ -287,7 +303,9 @@ export function OfficeStage({ agents, initialRuns }: Props) {
                     {nd.active
                       ? "working"
                       : nd.justErr
-                        ? "failed"
+                        ? nd.interrupted
+                          ? "interrupted"
+                          : "failed"
                         : nd.justDone
                           ? "returned"
                           : nd.lastClock
@@ -341,11 +359,13 @@ export function OfficeStage({ agents, initialRuns }: Props) {
                 <div
                   className={[
                     "mt-0.5 text-[10px] uppercase tracking-wider",
-                    r.status === "error"
-                      ? "text-danger"
-                      : r.status === "running"
-                        ? "text-accent"
-                        : "text-fg-dim",
+                    isInterrupted(r)
+                      ? "text-warn"
+                      : r.status === "error"
+                        ? "text-danger"
+                        : r.status === "running"
+                          ? "text-accent"
+                          : "text-fg-dim",
                   ].join(" ")}
                 >
                   {runDetail(r)}

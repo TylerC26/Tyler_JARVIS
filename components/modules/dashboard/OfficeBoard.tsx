@@ -33,9 +33,17 @@ function triggerTag(source: string) {
   return "chat";
 }
 
+// Reaped by the stale-run sweep (lib/db/core/agent-runs.ts) — the turn was
+// interrupted before it could report completion, not a real agent failure.
+function isInterrupted(r: AgentRun) {
+  return (
+    r.status === "error" && (r.result_summary?.startsWith("interrupted") ?? false)
+  );
+}
+
 function runDetail(r: AgentRun) {
   if (r.status === "running") return "running";
-  if (r.status === "error") return "failed";
+  if (r.status === "error") return isInterrupted(r) ? "interrupted" : "failed";
   const n = r.tool_calls_count ?? 0;
   return n === 0 ? "replied" : `${n} tool${n === 1 ? "" : "s"}`;
 }
@@ -86,6 +94,7 @@ export function OfficeBoard({ agents, initialRuns }: Props) {
           now - endedAt < SETTLE_MS;
         const justErr = settling && run?.status === "error";
         const justDone = settling && run?.status === "done";
+        const interrupted = run ? isInterrupted(run) : false;
 
         return {
           slug: a.slug,
@@ -94,6 +103,7 @@ export function OfficeBoard({ agents, initialRuns }: Props) {
           active,
           justDone,
           justErr,
+          interrupted,
           neverRan: !run,
           task: run?.task ?? null,
           lastClock: run ? clockHM(run.started_at) : null,
@@ -229,7 +239,9 @@ export function OfficeBoard({ agents, initialRuns }: Props) {
                   v.active
                     ? ""
                     : v.justErr
-                      ? "text-danger"
+                      ? v.interrupted
+                        ? "text-warn"
+                        : "text-danger"
                       : v.justDone
                         ? "text-accent"
                         : "text-fg-dim",
@@ -239,7 +251,9 @@ export function OfficeBoard({ agents, initialRuns }: Props) {
                 {v.active
                   ? "working"
                   : v.justErr
-                    ? "failed"
+                    ? v.interrupted
+                      ? "interrupted"
+                      : "failed"
                     : v.justDone
                       ? "returned"
                       : "idle"}
