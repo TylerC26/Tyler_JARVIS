@@ -23,8 +23,9 @@ export function ChatLauncher({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Hide on /chat where the page IS the chat surface
-  if (pathname === "/chat") return null;
+  // Hide where a chat surface already lives on the page: /chat is the chat
+  // itself, and /office embeds a permanent Jarvis chatbox.
+  if (pathname === "/chat" || pathname === "/office") return null;
 
   const live = configured.anthropic || configured.deepseek;
 
