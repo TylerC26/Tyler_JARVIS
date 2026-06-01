@@ -31,7 +31,18 @@ export default async function ChatPage({
     listMessages(activeSlug),
     activeAgent ? resolveAgentModelId(activeAgent) : Promise.resolve(null),
   ]);
-  const initialMessages = dbToUIMessages(dbMessages);
+  const initialMessages = dbToUIMessages(dbMessages, {
+    agent: activeAgent
+      ? {
+          slug: activeAgent.slug,
+          name: activeAgent.name,
+          color: activeAgent.color,
+        }
+      : null,
+    // History on /chat renders the full conversation — delegation hand-offs,
+    // agent replies, and tool cards — not just text.
+    richTools: true,
+  });
 
   const configured = {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),

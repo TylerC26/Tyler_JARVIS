@@ -251,6 +251,10 @@ export type ChatMessage = {
   tokens_out: number | null;
   // null = main Jarvis tab; otherwise scopes the row to one sub-agent thread.
   agent_slug: string | null;
+  // Who authored the row, independent of `role`. null = derive from role
+  // (user = owner, assistant = Jarvis); 'jarvis' = the orchestrator (e.g. a
+  // delegation handoff logged onto an agent thread); '<slug>' = that sub-agent.
+  sender: string | null;
 };
 
 // Dedupe ledger for the Telegram webhook — one row per processed update_id so
@@ -740,6 +744,7 @@ export type Database = {
           tokens_in?: number | null;
           tokens_out?: number | null;
           agent_slug?: string | null;
+          sender?: string | null;
           created_at?: string;
         };
         Update: Partial<ChatMessage>;

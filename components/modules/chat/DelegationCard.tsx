@@ -40,6 +40,7 @@ export function DelegationCard({ state, input, output }: Props) {
   const done = !running && !hasError;
 
   const agentName = out.agent_name ?? inp.agent_slug ?? "agent";
+  const agentSlug = out.agent_slug ?? inp.agent_slug;
   const agentColor = out.agent_color || ACCENT;
   const task = inp.task?.trim();
   const toolCalls = out.tool_calls ?? [];
@@ -220,6 +221,14 @@ export function DelegationCard({ state, input, output }: Props) {
               </span>
             ))}
           </div>
+          {agentSlug && (
+            <a
+              href={`/chat?agent=${encodeURIComponent(agentSlug)}`}
+              className="mt-1.5 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent"
+            >
+              view in {agentName} thread →
+            </a>
+          )}
         </div>
       )}
       {hasError && (

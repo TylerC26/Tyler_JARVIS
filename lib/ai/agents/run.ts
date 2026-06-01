@@ -15,12 +15,13 @@ import {
   recordModelUsage,
 } from "@/lib/chat/router";
 import { buildContextPrefix } from "@/lib/chat/system-prompts";
+import { appendMessage } from "@/lib/chat/persist";
 import {
   finishAgentRunCore,
   startAgentRunCore,
 } from "@/lib/db/core/agent-runs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
-import type { Agent } from "@/lib/db/types";
+import type { Agent, ChatToolCall } from "@/lib/db/types";
 
 export type AgentToolCallSummary = {
   name: string;
@@ -114,6 +115,108 @@ export type RunAgentOptions = {
   trigger?: string;
 };
 
+// Minimal shape of a generateText step we read from — same fields as the chat
+// turn's StepLike, kept local so run.ts doesn't depend on the chat-turn module.
+type RunStep = {
+  text?: string;
+  toolCalls?: (
+    | { toolCallId: string; toolName: string; input?: unknown }
+    | undefined
+  )[];
+  toolResults?: (
+    | { toolCallId: string; toolName: string; output?: unknown }
+    | undefined
+  )[];
+};
+
+// Log a delegated run onto the sub-agent's own /chat thread as a readable team
+// transcript: Jarvis's hand-off (a `user` row authored by 'jarvis'), then the
+// agent's reply plus each tool call/result authored by the agent. This is what
+// surfaces the Jarvis ↔ agent exchange "under each agent" — the conversational
+// companion to the Agent Ops Board's telemetry. Best-effort: a persistence
+// failure must never sink the delegation result the orchestrator is waiting on.
+async function logDelegationTurn(opts: {
+  agent: Agent;
+  task: string;
+  contextSummary?: string;
+  modelId: ChatModelId;
+  steps?: RunStep[];
+  resultText?: string;
+  error?: string;
+}): Promise<void> {
+  const { agent, task, contextSummary, modelId, steps, resultText, error } =
+    opts;
+  try {
+    // Jarvis hands the task to the agent. The directional "Jarvis → {agent}"
+    // framing is rendered from the sender; the body stays the literal task so
+    // the agent thread reads as a clean brief.
+    const handoff = contextSummary
+      ? `${task}\n\n— context from Jarvis: ${contextSummary}`
+      : task;
+    await appendMessage({
+      role: "user",
+      content: handoff,
+      agent_slug: agent.slug,
+      sender: "jarvis",
+    });
+
+    if (error) {
+      await appendMessage({
+        role: "assistant",
+        content: `⚠ Couldn't complete it: ${error}`,
+        model: modelId,
+        agent_slug: agent.slug,
+        sender: agent.slug,
+      });
+      return;
+    }
+
+    const toolCalls: ChatToolCall[] = [];
+    const toolResults: { id: string; name: string; result: unknown }[] = [];
+    for (const step of steps ?? []) {
+      for (const tc of step.toolCalls ?? []) {
+        if (!tc) continue;
+        toolCalls.push({
+          id: tc.toolCallId,
+          name: tc.toolName,
+          arguments: (tc.input ?? {}) as Record<string, unknown>,
+        });
+      }
+      for (const tr of step.toolResults ?? []) {
+        if (!tr) continue;
+        toolResults.push({
+          id: tr.toolCallId,
+          name: tr.toolName,
+          result: tr.output,
+        });
+      }
+    }
+
+    // The agent reports back to Jarvis. Persist the reply + its tool activity
+    // so the thread mirrors what the agent actually did, not just its summary.
+    await appendMessage({
+      role: "assistant",
+      content: resultText && resultText.length > 0 ? resultText : null,
+      tool_calls: toolCalls.length > 0 ? toolCalls : null,
+      model: modelId,
+      agent_slug: agent.slug,
+      sender: agent.slug,
+    });
+    for (const r of toolResults) {
+      await appendMessage({
+        role: "tool",
+        tool_call_id: r.id,
+        tool_name: r.name,
+        tool_result: r.result as Record<string, unknown>,
+        agent_slug: agent.slug,
+        sender: agent.slug,
+      });
+    }
+  } catch (e) {
+    console.warn(`[agents] delegation transcript persist failed:`, e);
+  }
+}
+
 export async function runAgent(
   agent: Agent,
   task: string,
@@ -135,9 +238,16 @@ export async function runAgent(
   const tools = getToolsForAgent(agent.tool_allowlist);
   const hasTools = Object.keys(tools).length > 0;
 
+  // Frame the run as a teammate hand-off so the agent's reply reads as a
+  // concise report back to Jarvis rather than a bare answer — this is what
+  // makes the logged transcript feel like a team working together.
+  const teamNote =
+    "You're part of Tyler's team, working under Jarvis (the orchestrator). " +
+    "Jarvis has handed you the task below — complete it with your tools, then " +
+    "give a concise report of what you did and the outcome.";
   const userBlock = contextSummary
-    ? `Context summary from orchestrator:\n${contextSummary}\n\nTask:\n${task}`
-    : `Task:\n${task}`;
+    ? `${teamNote}\n\nContext from Jarvis:\n${contextSummary}\n\nTask:\n${task}`
+    : `${teamNote}\n\nTask:\n${task}`;
 
   // Telemetry for the dashboard Agent Ops Board — best-effort, never throws.
   const runId = await startAgentRunCore({
@@ -177,6 +287,15 @@ export async function runAgent(
       resultSummary: text,
     });
 
+    await logDelegationTurn({
+      agent,
+      task,
+      contextSummary,
+      modelId: picked.modelId,
+      steps: result.steps as unknown as RunStep[],
+      resultText: text,
+    });
+
     return {
       ok: true,
       text,
@@ -185,6 +304,13 @@ export async function runAgent(
   } catch (e) {
     const error = e instanceof Error ? e.message : "Agent run failed.";
     await finishAgentRunCore(runId, { status: "error", resultSummary: error });
+    await logDelegationTurn({
+      agent,
+      task,
+      contextSummary,
+      modelId: picked.modelId,
+      error,
+    });
     return {
       ok: false,
       text: "",

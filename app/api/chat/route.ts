@@ -98,6 +98,9 @@ export async function POST(req: Request) {
           await stream.result.steps,
           stream.modelId,
           agent.slug,
+          // Stamp the agent as author so its direct-chat replies render under
+          // its own name, consistent with delegated runs.
+          agent.slug,
         );
         revalidateChatPaths();
       } catch (e) {

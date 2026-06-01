@@ -18,6 +18,9 @@ export type AppendInput = {
   tokens_out?: number | null;
   // null = main Jarvis thread; a slug scopes the row to one sub-agent thread.
   agent_slug?: string | null;
+  // Author identity for team transcripts. null = derive from role; 'jarvis' =
+  // the orchestrator; a slug = that sub-agent. See migration 0039.
+  sender?: string | null;
 };
 
 export async function appendMessage(
@@ -39,6 +42,7 @@ export async function appendMessage(
       tokens_in: input.tokens_in ?? null,
       tokens_out: input.tokens_out ?? null,
       agent_slug: input.agent_slug ?? null,
+      sender: input.sender ?? null,
     })
     .select()
     .single();

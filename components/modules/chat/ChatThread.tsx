@@ -71,7 +71,7 @@ export function ChatThread({ messages, pending, activeModel, agent }: Props) {
       className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
     >
       {messages.map((m) => (
-        <Message key={m.id} message={m} />
+        <Message key={m.id} message={m} agent={agent} />
       ))}
       {pending && (
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-dim">

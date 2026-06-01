@@ -59,6 +59,10 @@ export async function persistAssistantSteps(
   steps: StepLike[],
   model: ChatModel,
   agentSlug: string | null = null,
+  // Author identity stamped on the assistant + tool rows. null = derive from
+  // role (main Jarvis); a slug labels the rows as that sub-agent's so the
+  // thread reads as a named teammate rather than a generic "assistant".
+  sender: string | null = null,
 ): Promise<PersistedTurn> {
   const toolCalls: ChatToolCall[] = [];
   const toolResults: { id: string; name: string; result: unknown }[] = [];
@@ -90,6 +94,7 @@ export async function persistAssistantSteps(
     tool_calls: toolCalls.length > 0 ? toolCalls : null,
     model,
     agent_slug: agentSlug,
+    sender,
   });
 
   for (const r of toolResults) {
@@ -99,6 +104,7 @@ export async function persistAssistantSteps(
       tool_name: r.name,
       tool_result: r.result as Record<string, unknown>,
       agent_slug: agentSlug,
+      sender,
     });
   }
 
