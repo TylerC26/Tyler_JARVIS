@@ -35,21 +35,36 @@ export default async function DashboardPage() {
     ]);
 
   return (
-    <div className="crt-scanlines relative min-h-[calc(100dvh-8rem)] rounded-md border border-edge bg-base/40 px-4 py-3 md:px-6 md:py-4">
-      <div className="relative z-[2] flex flex-col gap-4">
-        <TerminalHeader
-          wifeShift={shifts[0]?.code ?? null}
-          eventCount={events.length}
-          taskCount={tasks.length}
-        />
-        <TerminalBrief brief={brief} />
-        <TerminalAgenda events={events} />
-        <TerminalTasks />
-        <TerminalOffice />
-        <TerminalSpend />
-        <TerminalRecent notes={notes.slice(0, 5)} ideas={ideas.slice(0, 5)} />
-        <TerminalPlaces places={places} />
-        <div className="mt-2 border-t border-edge pt-3">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-6">
+      <TerminalHeader
+        wifeShift={shifts[0]?.code ?? null}
+        eventCount={events.length}
+        taskCount={tasks.length}
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <div className="md:col-span-2 xl:col-span-3">
+          <TerminalBrief brief={brief} />
+        </div>
+        <div className="md:col-span-1 xl:col-span-3">
+          <TerminalAgenda events={events} />
+        </div>
+        <div className="md:col-span-1 xl:col-span-2">
+          <TerminalTasks />
+        </div>
+        <div className="md:col-span-2 xl:col-span-4">
+          <TerminalOffice />
+        </div>
+        <div className="md:col-span-1 xl:col-span-2">
+          <TerminalSpend />
+        </div>
+        <div className="md:col-span-1 xl:col-span-2">
+          <TerminalRecent notes={notes.slice(0, 5)} ideas={ideas.slice(0, 5)} />
+        </div>
+        <div className="md:col-span-2 xl:col-span-2">
+          <TerminalPlaces places={places} />
+        </div>
+        <div className="md:col-span-2 xl:col-span-6">
           <TerminalPrompt />
         </div>
       </div>

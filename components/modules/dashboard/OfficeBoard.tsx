@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { listRecentAgentRunsAction } from "@/app/(app)/agents/actions";
 import type { AgentRun } from "@/lib/db/types";
+import { Panel } from "./Panel";
 
 type OfficeAgent = { slug: string; name: string; color: string | null };
 
@@ -117,199 +118,152 @@ export function OfficeBoard({ agents, initialRuns }: Props) {
   const recent = runs.slice(0, 4);
 
   return (
-    <section className="font-mono text-[13px] leading-relaxed">
-      {/* header */}
-      <div className="flex items-center gap-2">
-        <span className="phosphor text-accent">office&gt;</span>
-        <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-          {agents.length} agent{agents.length === 1 ? "" : "s"}
-          {activeCount > 0 ? ` · ${activeCount} active` : ""}
-        </span>
-        <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-wider text-fg-dim">
+    <Panel
+      title="Agents"
+      count={agents.length}
+      action={{ href: "/office", label: "Office" }}
+      rightSlot={
+        <span className="flex items-center gap-1.5 text-[11px] text-fg-muted">
           <span
-            className={[
-              "size-1.5 rounded-full",
-              live ? "pulse-dot" : "",
-            ].join(" ")}
+            className={["size-1.5 rounded-full", live ? "pulse-dot" : ""].join(" ")}
             style={{
               background: live ? ACCENT : "var(--color-fg-dim)",
               boxShadow: live ? `0 0 6px ${ACCENT}` : undefined,
             }}
             aria-hidden
           />
-          {live ? "live" : "monitoring"}
+          {live ? `${activeCount} active` : "Monitoring"}
         </span>
-      </div>
-
-      {/* orchestrator hub */}
-      <div className="mt-2 flex items-center gap-2 pl-6">
-        <div
-          className="grid size-6 place-items-center rounded-sm border border-accent/40 bg-accent/5 text-[10px] text-accent"
-          aria-hidden
-        >
-          ◢◤
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {/* orchestrator */}
+        <div className="flex items-center gap-2.5">
+          <span
+            className="grid size-7 shrink-0 place-items-center rounded-lg border border-accent/30 bg-accent/5 text-xs font-semibold text-accent"
+            aria-hidden
+          >
+            J
+          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-medium text-fg">Jarvis</span>
+            <span className="text-[11px] text-fg-dim">Orchestrator</span>
+          </div>
         </div>
-        <span className="text-[11px] uppercase tracking-[0.15em] text-accent">
-          orchestrator
-        </span>
-        <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-          jarvis
-        </span>
-      </div>
 
-      {/* branches → agent nodes */}
-      {agents.length === 0 ? (
-        <div className="mt-1 pl-6 text-fg-dim">// no active agents.</div>
-      ) : (
-        <ul className="ml-9 mt-0.5 border-l border-edge-strong">
-          {views.map((v) => (
-            <li
-              key={v.slug}
-              className={[
-                "relative flex items-center gap-2 py-[3px]",
-                v.justDone || v.justErr ? "delegate-settle" : "",
-              ].join(" ")}
-            >
-              {/* horizontal branch connector off the spine */}
-              <div className="relative h-px w-10 shrink-0">
-                <div
-                  className={[
-                    "absolute inset-x-0 top-1/2 h-px -translate-y-1/2",
-                    v.active ? "delegate-pulse" : "",
-                  ].join(" ")}
-                  style={{
-                    background: v.active ? v.color : "var(--color-edge-strong)",
-                  }}
-                />
-                {v.active &&
-                  ["0s", "-0.6s"].map((delay) => (
+        {/* agent roster */}
+        {agents.length === 0 ? (
+          <div className="text-sm text-fg-dim">No active agents.</div>
+        ) : (
+          <ul className="ml-3.5 flex flex-col border-l border-edge pl-3.5">
+            {views.map((v) => (
+              <li
+                key={v.slug}
+                className={[
+                  "relative flex items-center gap-2.5 border-b border-edge/60 py-2 last:border-0",
+                  v.justDone || v.justErr ? "delegate-settle" : "",
+                ].join(" ")}
+              >
+                {/* status node */}
+                <span className="relative grid size-2.5 shrink-0 place-items-center">
+                  {v.active && (
                     <span
-                      key={delay}
-                      className="delegate-flow absolute top-1/2 size-1 -translate-y-1/2 rounded-full opacity-0"
-                      style={{
-                        background: v.color,
-                        boxShadow: `0 0 6px ${v.color}`,
-                        animationDelay: delay,
-                      }}
+                      className="delegate-ping absolute inset-0 rounded-full"
+                      style={{ background: v.color, opacity: 0.4 }}
                       aria-hidden
                     />
-                  ))}
-              </div>
-
-              {/* agent node */}
-              <div className="relative grid size-5 shrink-0 place-items-center">
-                {v.active && (
-                  <span
-                    className="delegate-ping absolute inset-0 rounded-sm"
-                    style={{ background: v.color, opacity: 0.4 }}
-                    aria-hidden
-                  />
-                )}
-                <div
-                  className="relative grid size-5 place-items-center rounded-sm border"
-                  style={{
-                    borderColor: `${v.color}66`,
-                    background: `${v.color}14`,
-                  }}
-                >
+                  )}
                   <span
                     className="size-2 rounded-full"
                     style={{
                       background: v.neverRan ? "var(--color-fg-dim)" : v.color,
-                      boxShadow: v.neverRan ? undefined : `0 0 6px ${v.color}`,
+                      boxShadow: v.active ? `0 0 6px ${v.color}` : undefined,
                     }}
                     aria-hidden
                   />
-                </div>
-              </div>
+                </span>
 
-              {/* name */}
-              <span
-                className="w-28 shrink-0 truncate text-[12px]"
-                style={{ color: v.active ? v.color : "var(--color-fg)" }}
-                title={v.name}
-              >
-                {v.name}
-              </span>
+                <span
+                  className="w-28 shrink-0 truncate text-sm"
+                  style={{ color: v.active ? v.color : "var(--color-fg)" }}
+                  title={v.name}
+                >
+                  {v.name}
+                </span>
 
-              {/* status */}
-              <span
-                className={[
-                  "text-[10px] uppercase tracking-wider",
-                  v.active
-                    ? ""
+                <span
+                  className={[
+                    "shrink-0 text-[11px] uppercase tracking-wide",
+                    v.active
+                      ? ""
+                      : v.justErr
+                        ? v.interrupted
+                          ? "text-warn"
+                          : "text-danger"
+                        : v.justDone
+                          ? "text-success"
+                          : "text-fg-dim",
+                  ].join(" ")}
+                  style={v.active ? { color: v.color } : undefined}
+                >
+                  {v.active
+                    ? "Working"
                     : v.justErr
                       ? v.interrupted
-                        ? "text-warn"
-                        : "text-danger"
+                        ? "Interrupted"
+                        : "Failed"
                       : v.justDone
-                        ? "text-accent"
-                        : "text-fg-dim",
-                ].join(" ")}
-                style={v.active ? { color: v.color } : undefined}
-              >
-                {v.active
-                  ? "working"
-                  : v.justErr
-                    ? v.interrupted
-                      ? "interrupted"
-                      : "failed"
-                    : v.justDone
-                      ? "returned"
-                      : "idle"}
-                {v.active && <span className="cursor-blink">_</span>}
-              </span>
+                        ? "Returned"
+                        : "Idle"}
+                </span>
 
-              {/* trailing: live task or last-fired time */}
-              {v.active && v.task ? (
-                <span className="ml-auto max-w-[42%] shrink truncate text-[10px] text-fg-muted">
-                  {v.task}
-                </span>
-              ) : (
-                <span className="ml-auto shrink-0 text-[10px] tabular text-fg-dim">
-                  {v.lastClock ?? "—"}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* recent activity log */}
-      {recent.length > 0 && (
-        <div className="mt-2 border-t border-edge pt-1.5">
-          <div className="text-[9px] uppercase tracking-[0.2em] text-fg-dim">
-            recent
-          </div>
-          <ul className="mt-0.5">
-            {recent.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-2 text-[11px] text-fg-muted"
-              >
-                <span className="w-10 shrink-0 tabular text-fg-dim">
-                  {clockHM(r.started_at)}
-                </span>
-                <span className="text-fg-dim" aria-hidden>
-                  ▸
-                </span>
-                <span
-                  className="shrink-0 truncate"
-                  style={{ color: r.agent_color || ACCENT }}
-                >
-                  {r.agent_name}
-                </span>
-                <span className="rounded-sm border border-edge px-1 text-[9px] uppercase tracking-wider text-fg-dim">
-                  {triggerTag(r.trigger_source)}
-                </span>
-                <span className="ml-auto shrink-0 text-fg-dim">
-                  {runDetail(r)}
-                </span>
+                {v.active && v.task ? (
+                  <span className="ml-auto max-w-[42%] shrink truncate text-[11px] text-fg-muted">
+                    {v.task}
+                  </span>
+                ) : (
+                  <span className="ml-auto shrink-0 text-[11px] tabular text-fg-dim">
+                    {v.lastClock ?? "—"}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
-        </div>
-      )}
-    </section>
+        )}
+
+        {/* recent activity */}
+        {recent.length > 0 && (
+          <div className="border-t border-edge pt-3">
+            <div className="mb-1.5 text-[11px] uppercase tracking-wide text-fg-dim">
+              Recent activity
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {recent.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center gap-2.5 text-sm text-fg-muted"
+                >
+                  <span className="w-10 shrink-0 text-xs tabular text-fg-dim">
+                    {clockHM(r.started_at)}
+                  </span>
+                  <span
+                    className="shrink-0 truncate text-sm"
+                    style={{ color: r.agent_color || ACCENT }}
+                  >
+                    {r.agent_name}
+                  </span>
+                  <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-dim">
+                    {triggerTag(r.trigger_source)}
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs text-fg-dim">
+                    {runDetail(r)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }

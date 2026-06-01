@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Idea, Note } from "@/lib/db/types";
+import { Panel } from "./Panel";
 
 type Row = {
   kind: "note" | "idea";
@@ -36,8 +37,8 @@ function toRows(notes: Note[], ideas: Idea[]): Row[] {
 }
 
 const KIND_TONE = {
-  note: "text-info",
-  idea: "text-warn",
+  note: "bg-info/10 text-info",
+  idea: "bg-warn/10 text-warn",
 } as const;
 
 export function TerminalRecent({
@@ -50,50 +51,42 @@ export function TerminalRecent({
   const rows = toRows(notes, ideas);
 
   return (
-    <section className="font-mono text-[13px] leading-relaxed">
-      <div className="flex items-center gap-2">
-        <span className="phosphor text-accent">recent&gt;</span>
-        <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-          {rows.length} capture{rows.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
-      {rows.length === 0 ? (
-        <div className="pl-6 text-fg-dim">
-          // nothing captured yet — drop a note or idea at the prompt below.
-        </div>
-      ) : (
-        <ul className="pl-6">
-          {rows.map((r) => {
-            const href = r.kind === "note" ? `/notes/${r.id}` : "/ideas";
-            return (
-              <li
-                key={`${r.kind}-${r.id}`}
-                className="flex items-baseline gap-2 text-fg-muted"
+    <Panel
+      title="Recent"
+      count={rows.length}
+      emptyState={
+        rows.length === 0
+          ? { show: true, label: "Nothing captured yet" }
+          : undefined
+      }
+    >
+      <ul className="flex flex-col">
+        {rows.map((r) => {
+          const href = r.kind === "note" ? `/notes/${r.id}` : "/ideas";
+          return (
+            <li
+              key={`${r.kind}-${r.id}`}
+              className="flex items-center gap-2.5 border-b border-edge/60 py-2 last:border-0"
+            >
+              <span
+                className={[
+                  "w-12 shrink-0 rounded-md py-0.5 text-center text-[10px] font-medium uppercase tracking-wide",
+                  KIND_TONE[r.kind],
+                ].join(" ")}
               >
-                <span className="w-3 shrink-0 text-fg-dim" aria-hidden>
-                  ·
-                </span>
-                <span
-                  className={[
-                    "w-12 shrink-0 text-[10px] uppercase tracking-wider",
-                    KIND_TONE[r.kind],
-                  ].join(" ")}
-                >
-                  [{r.kind}]
-                </span>
-                <Link
-                  href={href}
-                  className="flex-1 truncate hover:text-accent"
-                  title={r.text}
-                >
-                  {r.text}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+                {r.kind}
+              </span>
+              <Link
+                href={href}
+                className="flex-1 truncate text-sm text-fg-muted transition-colors hover:text-fg"
+                title={r.text}
+              >
+                {r.text}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }

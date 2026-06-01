@@ -1,65 +1,73 @@
-import Link from "next/link";
 import { startOfOwnerMonth } from "@/lib/date";
 import { getSpendSummaryCore } from "@/lib/db/core/usage";
+import { Panel } from "./Panel";
 
 function usd(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-const PROVIDER_TONE: Record<string, string> = {
-  anthropic: "text-warn",
-  deepseek: "text-info",
+const PROVIDER_LABEL: Record<string, string> = {
+  anthropic: "Claude",
+  deepseek: "DeepSeek",
 };
 
-const PROVIDER_LABEL: Record<string, string> = {
-  anthropic: "claude",
-  deepseek: "deepseek",
+const PROVIDER_BAR: Record<string, string> = {
+  anthropic: "var(--color-warn)",
+  deepseek: "var(--color-info)",
 };
 
 export async function TerminalSpend() {
   const summary = await getSpendSummaryCore(startOfOwnerMonth().toISOString());
   const totalCalls = summary.byProvider.reduce((s, p) => s + p.calls, 0);
+  const maxCost = summary.byProvider.reduce((m, p) => Math.max(m, p.cost_usd), 0);
 
   return (
-    <section className="font-mono text-[13px] leading-relaxed">
-      <div className="flex items-center gap-2">
-        <span className="phosphor text-accent">spend&gt;</span>
-        <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-          month-to-date
+    <Panel
+      title="Spend"
+      rightSlot={
+        <span className="text-[10px] uppercase tracking-wide text-fg-dim">
+          MTD
         </span>
-      </div>
-      <div className="flex flex-wrap items-baseline gap-x-3 pl-6 text-fg-muted">
-        <span>
-          <span className="text-fg-dim uppercase text-[10px] tracking-wider">
-            mtd
-          </span>{" "}
-          <span className="text-fg tabular">{usd(summary.total_usd)}</span>
-        </span>
-        {summary.byProvider.map((p) => (
-          <span key={p.provider} className="flex items-baseline gap-1">
-            <span className="text-fg-dim">·</span>
-            <span
-              className={[
-                "uppercase text-[10px] tracking-wider",
-                PROVIDER_TONE[p.provider] ?? "text-fg-dim",
-              ].join(" ")}
-            >
-              {PROVIDER_LABEL[p.provider] ?? p.provider}
-            </span>
-            <span className="tabular text-fg">{usd(p.cost_usd)}</span>
+      }
+      action={{ href: "/assistant", label: "Breakdown" }}
+      emptyState={
+        summary.byProvider.length === 0
+          ? { show: true, label: "No spend yet this month" }
+          : undefined
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-semibold tabular text-fg">
+            {usd(summary.total_usd)}
           </span>
-        ))}
-        <span className="text-fg-dim">·</span>
-        <span className="tabular text-fg-dim">
-          {totalCalls} call{totalCalls === 1 ? "" : "s"}
-        </span>
-        <Link
-          href="/assistant"
-          className="ml-auto text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent"
-        >
-          breakdown →
-        </Link>
+          <span className="text-xs text-fg-dim">
+            {totalCalls} call{totalCalls === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          {summary.byProvider.map((p) => (
+            <div key={p.provider} className="flex items-center gap-2.5">
+              <span className="w-16 shrink-0 text-xs text-fg-muted">
+                {PROVIDER_LABEL[p.provider] ?? p.provider}
+              </span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${maxCost > 0 ? Math.max(4, (p.cost_usd / maxCost) * 100) : 0}%`,
+                    background: PROVIDER_BAR[p.provider] ?? "var(--color-fg-dim)",
+                  }}
+                />
+              </div>
+              <span className="w-14 shrink-0 text-right text-xs tabular text-fg">
+                {usd(p.cost_usd)}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </Panel>
   );
 }

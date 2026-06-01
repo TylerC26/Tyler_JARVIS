@@ -19,6 +19,14 @@ type Props = {
   taskCount: number;
 };
 
+function greeting(hour: number): string {
+  if (hour < 5) return "Good night";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good night";
+}
+
 export function TerminalHeader({ wifeShift, eventCount, taskCount }: Props) {
   const [now, setNow] = useState<Date | null>(null);
 
@@ -28,42 +36,52 @@ export function TerminalHeader({ wifeShift, eventCount, taskCount }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const date = now ? fmtDate(now, "yyyy.MM.dd") : "----.--.--";
-  const dow = now ? fmtDate(now, "EEE").toUpperCase() : "—";
-  const time = now ? fmtDate(now, "HH:mm:ss") : "--:--:--";
+  const hour = now ? Number(fmtDate(now, "H")) : null;
+  const hello = hour == null ? "Hello" : greeting(hour);
+  const dateLine = now ? fmtDate(now, "EEEE, MMMM d") : " ";
+  const time = now ? fmtDate(now, "HH:mm") : "--:--";
+  const seconds = now ? fmtDate(now, "ss") : "--";
 
   return (
-    <header className="font-mono text-[12px] leading-relaxed text-fg-muted">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="phosphor text-accent">
-          ┌─ JARVIS · personal os
-        </span>
-        <span className="text-fg-dim">//</span>
-        <span className="text-fg tabular">{date}</span>
-        <span className="text-fg-dim">·</span>
-        <span className="uppercase tracking-[0.15em] text-fg-muted">
-          {dow}
-        </span>
-        <span className="text-fg-dim">·</span>
-        <span className="phosphor text-accent tabular">{time}</span>
-
-        <span className="ml-auto flex items-center gap-3 text-[11px] uppercase tracking-wider">
-          <span className="flex items-center gap-1 text-success">
-            <span className="pulse-dot">●</span> live
-          </span>
-          {wifeShift && (
-            <span className={WIFE_TONE[wifeShift]}>
-              wife:{wifeShift}
-            </span>
-          )}
-          <span className="text-fg-dim">
-            <span className="text-fg">{eventCount}</span> ev ·{" "}
-            <span className="text-fg">{taskCount}</span> tk
-          </span>
-        </span>
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">
+          {hello}, Tyler
+        </h1>
+        <p className="mt-1 text-sm text-fg-muted">{dateLine}</p>
       </div>
-      <div className="mt-1 text-fg-dim">
-        └─────────────────────────────────────────────────────────────
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-baseline gap-1 rounded-xl border border-edge bg-surface px-3.5 py-2">
+          <span className="text-xl font-medium tabular text-fg">{time}</span>
+          <span className="text-xs tabular text-fg-dim">:{seconds}</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2">
+          <span className="size-1.5 rounded-full bg-success pulse-dot" aria-hidden />
+          <span className="text-xs text-fg-muted">Live</span>
+        </div>
+
+        {wifeShift && (
+          <div className="flex items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2 text-xs">
+            <span className="text-fg-dim">Wife</span>
+            <span className={`font-medium ${WIFE_TONE[wifeShift]}`}>{wifeShift}</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2">
+          <span className="text-sm font-medium tabular text-fg">{eventCount}</span>
+          <span className="text-xs text-fg-muted">
+            event{eventCount === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2">
+          <span className="text-sm font-medium tabular text-fg">{taskCount}</span>
+          <span className="text-xs text-fg-muted">
+            task{taskCount === 1 ? "" : "s"}
+          </span>
+        </div>
       </div>
     </header>
   );
