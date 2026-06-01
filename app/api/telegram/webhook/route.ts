@@ -25,7 +25,11 @@ import {
 import type { TelegramUpdate } from "@/lib/telegram/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// The turn runs in after() and may delegate to a sub-agent (25–50s) before
+// Jarvis composes + sends its reply to Telegram. 60s killed the function mid-
+// delegation, so the reply never sent ("no feedback"). 300s fits the full
+// chain. (Telegram already got its fast 200 ack; this only bounds the bg work.)
+export const maxDuration = 300;
 
 const OK = new Response("ok", { status: 200 });
 

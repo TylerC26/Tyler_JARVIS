@@ -354,7 +354,7 @@ function renderAgentsBlock(agents: Agent[]): string {
   const lines = agents
     .map((a) => `  • ${a.slug} — ${a.description}`)
     .join("\n");
-  return `\n\nAgents available for delegation (${agents.length} active):\n${lines}\nCall delegate_to_agent({ agent_slug, task, context_summary? }) when one is the right specialist for the user's request.`;
+  return `\n\nAgents available for delegation (${agents.length} active):\n${lines}\nCall delegate_to_agent({ agent_slug, task, context_summary? }) when one is the right specialist for the user's request. After it returns you MUST close out with an explicit completion report to Tyler — lead with a ✓ and the agent's name ("✓ Planner finished."), concretely summarize what it did and the outcome, and offer a next step (or "✕ <Agent> couldn't finish — <reason>" on failure). Never end your turn on the tool call alone or leave Tyler unsure whether it's done.`;
 }
 
 function renderMemoryBlock(memories: MemoryEntry[]): string {

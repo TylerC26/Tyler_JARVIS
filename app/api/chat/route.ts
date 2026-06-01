@@ -22,7 +22,11 @@ import type { JarvisMessageMetadata, JarvisUIMessage } from "@/lib/chat/ui";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// A turn may run a sub-agent inline (delegate_to_agent) before the orchestrator
+// writes its completion report. Observed sub-agent runs take 25–50s, so 60s
+// left no room for the report — the function was killed first, dropping the
+// reply. 300s (Pro plan ceiling) gives the full chain room to finish + persist.
+export const maxDuration = 300;
 
 type IncomingBody = {
   messages: UIMessage[];

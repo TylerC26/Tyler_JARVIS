@@ -22,7 +22,10 @@ import { editInteractionResponse } from "@/lib/discord/client";
 import { verifyDiscordRequest } from "@/lib/discord/verify";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Deferred replies may run an orchestrator turn that delegates to a sub-agent
+// (25–50s) before the follow-up is sent. 300s matches the chat/webhook routes
+// so a delegation isn't killed mid-run.
+export const maxDuration = 300;
 
 type DiscordOption = {
   name: string;

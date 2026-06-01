@@ -15,7 +15,10 @@ import type { CronJob } from "@/lib/db/types";
 import { isTelegramConfigured, sendMessage } from "@/lib/telegram/client";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// A scheduled prompt runs a full orchestrator turn that may delegate to a
+// sub-agent (25–50s) before producing + sending its result. 300s keeps the
+// chain from being killed mid-delegation (matches the chat/webhook routes).
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // Vercel signs cron requests with the CRON_SECRET env var.
