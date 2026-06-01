@@ -15,6 +15,10 @@ import {
   recordModelUsage,
 } from "@/lib/chat/router";
 import { buildContextPrefix } from "@/lib/chat/system-prompts";
+import {
+  finishAgentRunCore,
+  startAgentRunCore,
+} from "@/lib/db/core/agent-runs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import type { Agent } from "@/lib/db/types";
 
@@ -103,10 +107,18 @@ export async function streamAgentResponse(
   return { result, modelId: picked.modelId };
 }
 
+export type RunAgentOptions = {
+  // Where the delegation originated, for the Agent Ops Board. Every delegation
+  // funnels through here regardless of trigger (web chat, Telegram webhook,
+  // cron), so this is the one place we stamp the source.
+  trigger?: string;
+};
+
 export async function runAgent(
   agent: Agent,
   task: string,
   contextSummary?: string,
+  opts: RunAgentOptions = {},
 ): Promise<AgentRunResult> {
   const picked = await pickModel(agent);
   if (!picked) {
@@ -126,6 +138,15 @@ export async function runAgent(
   const userBlock = contextSummary
     ? `Context summary from orchestrator:\n${contextSummary}\n\nTask:\n${task}`
     : `Task:\n${task}`;
+
+  // Telemetry for the dashboard Agent Ops Board — best-effort, never throws.
+  const runId = await startAgentRunCore({
+    agentSlug: agent.slug,
+    agentName: agent.name,
+    agentColor: agent.color,
+    trigger: opts.trigger ?? "chat",
+    task,
+  });
 
   try {
     const result = await generateText({
@@ -149,17 +170,26 @@ export async function runAgent(
       }
     }
 
+    const text = result.text.trim();
+    await finishAgentRunCore(runId, {
+      status: "done",
+      toolCalls: toolCalls.map((c) => c.name),
+      resultSummary: text,
+    });
+
     return {
       ok: true,
-      text: result.text.trim(),
+      text,
       tool_calls: toolCalls,
     };
   } catch (e) {
+    const error = e instanceof Error ? e.message : "Agent run failed.";
+    await finishAgentRunCore(runId, { status: "error", resultSummary: error });
     return {
       ok: false,
       text: "",
       tool_calls: [],
-      error: e instanceof Error ? e.message : "Agent run failed.",
+      error,
     };
   }
 }

@@ -1,6 +1,7 @@
 import { TerminalAgenda } from "@/components/modules/dashboard/TerminalAgenda";
 import { TerminalBrief } from "@/components/modules/dashboard/TerminalBrief";
 import { TerminalHeader } from "@/components/modules/dashboard/TerminalHeader";
+import { TerminalOffice } from "@/components/modules/dashboard/TerminalOffice";
 import { TerminalPlaces } from "@/components/modules/dashboard/TerminalPlaces";
 import { TerminalPrompt } from "@/components/modules/dashboard/TerminalPrompt";
 import { TerminalRecent } from "@/components/modules/dashboard/TerminalRecent";
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
         <TerminalBrief brief={brief} />
         <TerminalAgenda events={events} />
         <TerminalTasks />
+        <TerminalOffice />
         <TerminalSpend />
         <TerminalRecent notes={notes.slice(0, 5)} ideas={ideas.slice(0, 5)} />
         <TerminalPlaces places={places} />

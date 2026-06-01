@@ -133,6 +133,27 @@ body {
   animation: delegate-settle 0.3s ease-out both;
 }
 
+/* Office radar: data streaming along an active connector (any angle), drawn as
+   a flowing dash pattern from the orchestrator hub out to the agent node. */
+@keyframes office-flow {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+.office-flow {
+  animation: office-flow 0.5s linear infinite;
+}
+
+/* Slow ambient radar sweep behind the office node-graph. */
+@keyframes radar-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.radar-sweep {
+  animation: radar-sweep 8s linear infinite;
+}
+
 /* dense numerics everywhere */
 .tabular {
   font-variant-numeric: tabular-nums;

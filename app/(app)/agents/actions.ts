@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { draftAgentFromDescription } from "@/lib/ai/agents/draft";
+import { listRecentAgentRunsCore } from "@/lib/db/core/agent-runs";
 import {
   createAgentCore,
   deleteAgentCore,
@@ -43,4 +44,10 @@ export async function toggleAgentActiveAction(id: string, active: boolean) {
 // nothing — the UI drops the result into the review form to be saved.
 export async function draftAgentAction(description: string) {
   return draftAgentFromDescription(description);
+}
+
+// Live feed for the dashboard Agent Ops Board (TerminalOffice). The board
+// short-polls this so the node-graph lights up when an agent fires.
+export async function listRecentAgentRunsAction(limit = 14) {
+  return listRecentAgentRunsCore(limit);
 }

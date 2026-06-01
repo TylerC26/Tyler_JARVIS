@@ -145,6 +145,29 @@ export type Agent = {
   updated_at: string | null;
 };
 
+// Soft enums on the app side — the DB stores plain text so new values need no
+// migration (see migration 0038).
+export type AgentRunStatus = "running" | "done" | "error";
+export type AgentRunTrigger = "chat" | "telegram" | "cron" | "api";
+
+// One row per sub-agent invocation, written by runAgent(). Powers the
+// dashboard Agent Ops Board (TerminalOffice).
+export type AgentRun = {
+  id: string;
+  owner_id: string;
+  agent_slug: string;
+  agent_name: string;
+  agent_color: string | null;
+  trigger_source: string;
+  task: string | null;
+  status: AgentRunStatus;
+  tool_calls_count: number;
+  tool_calls: string[];
+  result_summary: string | null;
+  started_at: string;
+  ended_at: string | null;
+};
+
 // The conventional memory category set. The DB no longer constrains `kind`
 // (the CHECK was dropped in migration 0033) — this tuple is the single source
 // of truth and can be extended here with no migration. Ordered loosely from
@@ -603,6 +626,26 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Agent>;
+        Relationships: [];
+      };
+      agent_runs: {
+        Row: AgentRun;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          agent_slug: string;
+          agent_name: string;
+          agent_color?: string | null;
+          trigger_source?: string;
+          task?: string | null;
+          status?: AgentRunStatus;
+          tool_calls_count?: number;
+          tool_calls?: string[];
+          result_summary?: string | null;
+          started_at?: string;
+          ended_at?: string | null;
+        };
+        Update: Partial<AgentRun>;
         Relationships: [];
       };
       memory_entries: {

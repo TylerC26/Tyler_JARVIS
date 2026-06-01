@@ -47,6 +47,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/assistant", label: "Assistant", code: "AI ", glyph: "◊", status: "live" },
       { href: "/chat", label: "Chat", code: "CHT", glyph: "◢", status: "live" },
       { href: "/agents", label: "Agents", code: "AGT", glyph: "◔", status: "live" },
+      { href: "/office", label: "Office", code: "OFC", glyph: "⊞", status: "live" },
       { href: "/memory", label: "Memory", code: "MEM", glyph: "◐", status: "live" },
       { href: "/notes", label: "Notes", code: "NTS", glyph: "▢", status: "live" },
       { href: "/ideas", label: "Ideas", code: "IDE", glyph: "✺", status: "live" },
