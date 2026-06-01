@@ -811,7 +811,7 @@ export const generateBriefTool = tool({
 
 export const delegateToAgentTool = tool({
   description:
-    "Delegate a focused task to a sub-agent (Daily Planner, Scheduler, Finance Analyst, Quick Capture, or any custom agent the user has authored). Use this for specialized work where a dedicated prompt + tool subset will produce a sharper result than handling it inline. The agent runs in an isolated reasoning loop with only its allowlisted tools and returns a final text result that you should relay or summarize for the user. List of available agents lives at /agents — slugs are short kebab-case.",
+    "Delegate a focused task to a sub-agent (Daily Planner, Scheduler, Finance Analyst, Quick Capture, or any custom agent the user has authored). Use this for specialized work where a dedicated prompt + tool subset will produce a sharper result than handling it inline. The agent runs in an isolated reasoning loop with only its allowlisted tools and returns a final text result. After it returns you MUST report back to Tyler with an explicit completion report — lead with a ✓ and the agent's name, summarize concretely what they did and the outcome, and offer a next step (or ✕ and the reason if it failed). List of available agents lives at /agents — slugs are short kebab-case.",
   inputSchema: z.object({
     agent_slug: z
       .string()

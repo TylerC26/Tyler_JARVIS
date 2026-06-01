@@ -16,12 +16,14 @@ import {
 } from "@/lib/chat/router";
 import { buildContextPrefix } from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
+import { getTelegramContext } from "@/lib/chat/request-context";
 import {
   finishAgentRunCore,
   startAgentRunCore,
 } from "@/lib/db/core/agent-runs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import type { Agent, ChatToolCall } from "@/lib/db/types";
+import { isTelegramConfigured, sendMessage } from "@/lib/telegram/client";
 
 export type AgentToolCallSummary = {
   name: string;
@@ -128,6 +130,51 @@ type RunStep = {
     | undefined
   )[];
 };
+
+function clip(s: string, n: number): string {
+  const t = s.trim();
+  return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
+}
+
+// Proactively ping Tyler on Telegram when a delegated agent finishes, so he's
+// notified of the outcome even when he isn't watching /chat. Suppressed during
+// a live Telegram turn — there the orchestrator's own reply already lands in
+// that chat, so a separate ping would just double up. Best-effort: a send
+// failure never affects the delegation result.
+async function pingTelegramOnComplete(opts: {
+  agent: Agent;
+  task: string;
+  ok: boolean;
+  isTelegramTurn: boolean;
+  resultText?: string;
+  toolCount?: number;
+  error?: string;
+}): Promise<void> {
+  if (opts.isTelegramTurn || !isTelegramConfigured()) return;
+  const chatId = process.env.TELEGRAM_ALLOWED_CHAT_ID;
+  if (!chatId) return;
+  try {
+    const lines = [
+      opts.ok ? `✓ ${opts.agent.name} finished` : `✕ ${opts.agent.name} failed`,
+    ];
+    if (opts.task) lines.push(`task: ${clip(opts.task, 140)}`);
+    if (opts.ok) {
+      const n = opts.toolCount ?? 0;
+      lines.push(
+        opts.resultText && opts.resultText.length > 0
+          ? clip(opts.resultText, 600)
+          : n > 0
+            ? `done · ${n} tool${n === 1 ? "" : "s"}`
+            : "done",
+      );
+    } else {
+      lines.push(opts.error ?? "unknown error");
+    }
+    await sendMessage(Number(chatId), lines.join("\n"));
+  } catch (e) {
+    console.warn("[agents] telegram completion ping failed:", e);
+  }
+}
 
 // Log a delegated run onto the sub-agent's own /chat thread as a readable team
 // transcript: Jarvis's hand-off (a `user` row authored by 'jarvis'), then the
@@ -249,12 +296,18 @@ export async function runAgent(
     ? `${teamNote}\n\nContext from Jarvis:\n${contextSummary}\n\nTask:\n${task}`
     : `${teamNote}\n\nTask:\n${task}`;
 
+  // A live Telegram turn already routes the orchestrator's reply to that chat,
+  // so we skip the standalone completion ping there (and stamp the run's source
+  // accordingly); web-chat and cron delegations get the proactive ping.
+  const isTelegramTurn = Boolean(getTelegramContext());
+  const trigger = opts.trigger ?? (isTelegramTurn ? "telegram" : "chat");
+
   // Telemetry for the dashboard Agent Ops Board — best-effort, never throws.
   const runId = await startAgentRunCore({
     agentSlug: agent.slug,
     agentName: agent.name,
     agentColor: agent.color,
-    trigger: opts.trigger ?? "chat",
+    trigger,
     task,
   });
 
@@ -295,6 +348,14 @@ export async function runAgent(
       steps: result.steps as unknown as RunStep[],
       resultText: text,
     });
+    await pingTelegramOnComplete({
+      agent,
+      task,
+      ok: true,
+      isTelegramTurn,
+      resultText: text,
+      toolCount: toolCalls.length,
+    });
 
     return {
       ok: true,
@@ -309,6 +370,13 @@ export async function runAgent(
       task,
       contextSummary,
       modelId: picked.modelId,
+      error,
+    });
+    await pingTelegramOnComplete({
+      agent,
+      task,
+      ok: false,
+      isTelegramTurn,
       error,
     });
     return {
