@@ -16,6 +16,16 @@ export function ChatInput({ onSend, disabled, pending }: Props) {
     if (!disabled && !pending) ref.current?.focus();
   }, [disabled, pending]);
 
+  // Auto-grow the textarea to fit its content (capped by max-h-40, then it
+  // scrolls). Without this the rows={1} box stays one line tall and clips
+  // anything longer than what fits on that single line.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   function submit() {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
@@ -55,7 +65,7 @@ export function ChatInput({ onSend, disabled, pending }: Props) {
           enterKeyHint="send"
           inputMode="text"
           autoCorrect="on"
-          className="flex-1 resize-none bg-transparent font-mono text-sm text-fg placeholder:text-fg-dim outline-none disabled:cursor-not-allowed max-h-40"
+          className="flex-1 resize-none overflow-y-auto bg-transparent font-mono text-sm text-fg placeholder:text-fg-dim outline-none disabled:cursor-not-allowed max-h-40"
           style={{ minHeight: "20px" }}
         />
         <button
