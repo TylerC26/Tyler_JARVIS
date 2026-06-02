@@ -30,7 +30,7 @@ export default async function OfficePage() {
         title="Agent Office"
         subtitle="live orchestrator → agent activity"
       />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         {/* left column: radar on top, activity log under it */}
         <div className="min-w-0 lg:w-1/2">
           <OfficeStage
@@ -45,14 +45,17 @@ export default async function OfficePage() {
 
         {/* right column: permanent Jarvis chatbox — delegate from here and
             watch the radar light up to the left. */}
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-w-0 flex-1 flex-col lg:sticky lg:top-[4.5rem] lg:self-start">
           <div className="mb-2 flex items-center gap-2 font-mono">
             <span className="phosphor text-accent">jarvis&gt;</span>
             <span className="text-[10px] uppercase tracking-wider text-fg-dim">
               delegate from here — the office lights up to the left
             </span>
           </div>
-          <div className="h-[480px] md:h-[560px] lg:h-auto lg:min-h-[600px] lg:flex-1">
+          {/* Cap the chatbox to the window height so it never overflows the
+              viewport — messages scroll inside (ChatThread sticks to the
+              latest at the bottom) instead of growing the page. */}
+          <div className="h-[480px] md:h-[560px] lg:h-[calc(100dvh-13rem)] lg:min-h-[360px]">
             <ChatPanel
               initialMessages={initialMessages}
               configured={configured}
