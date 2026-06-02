@@ -30,31 +30,37 @@ export default async function OfficePage() {
         title="Agent Office"
         subtitle="live orchestrator → agent activity"
       />
-      <OfficeStage
-        agents={agents.map((a) => ({
-          slug: a.slug,
-          name: a.name,
-          color: a.color,
-        }))}
-        initialRuns={runs}
-      />
-
-      {/* Permanent Jarvis chatbox — delegate from here and watch the radar. */}
-      <section className="mt-4">
-        <div className="mb-2 flex items-center gap-2 font-mono">
-          <span className="phosphor text-accent">jarvis&gt;</span>
-          <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-            delegate from here — the office lights up above
-          </span>
-        </div>
-        <div className="h-[480px] md:h-[560px]">
-          <ChatPanel
-            initialMessages={initialMessages}
-            configured={configured}
-            variant="page"
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+        {/* left column: radar on top, activity log under it */}
+        <div className="min-w-0 lg:w-1/2">
+          <OfficeStage
+            agents={agents.map((a) => ({
+              slug: a.slug,
+              name: a.name,
+              color: a.color,
+            }))}
+            initialRuns={runs}
           />
         </div>
-      </section>
+
+        {/* right column: permanent Jarvis chatbox — delegate from here and
+            watch the radar light up to the left. */}
+        <section className="flex min-w-0 flex-1 flex-col">
+          <div className="mb-2 flex items-center gap-2 font-mono">
+            <span className="phosphor text-accent">jarvis&gt;</span>
+            <span className="text-[10px] uppercase tracking-wider text-fg-dim">
+              delegate from here — the office lights up to the left
+            </span>
+          </div>
+          <div className="h-[480px] md:h-[560px] lg:h-auto lg:min-h-[600px] lg:flex-1">
+            <ChatPanel
+              initialMessages={initialMessages}
+              configured={configured}
+              variant="page"
+            />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

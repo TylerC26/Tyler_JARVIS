@@ -122,7 +122,7 @@ export function OfficeStage({ agents, initialRuns }: Props) {
   const recent = runs.slice(0, 8);
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    <div className="flex flex-col gap-4">
       {/* radar stage */}
       <div className="crt-scanlines relative min-w-0 flex-1 rounded-md border border-edge bg-base/40 p-4 md:p-6">
         {/* status strip */}
@@ -321,7 +321,7 @@ export function OfficeStage({ agents, initialRuns }: Props) {
       </div>
 
       {/* activity feed */}
-      <div className="w-full shrink-0 rounded-md border border-edge bg-base/40 p-4 lg:w-72">
+      <div className="w-full rounded-md border border-edge bg-base/40 p-4">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
           activity log
         </div>
