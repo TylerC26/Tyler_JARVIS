@@ -17,9 +17,14 @@ export function getOwnerId(): string {
 // regardless of any browser's local timezone.
 //
 // OWNER_TZ is server-only; NEXT_PUBLIC_OWNER_TZ is inlined into the client
-// bundle. Set both to the same value. Falls back to UTC if neither is set.
+// bundle AT BUILD TIME. Set both to the same value. The fallback is the
+// owner's home zone (Asia/Hong_Kong), NOT UTC: this is a single-user app and
+// a UTC fallback silently shifts every clock 8h whenever a build/runtime is
+// missing the env var (e.g. NEXT_PUBLIC_OWNER_TZ absent from the Vercel build
+// → the client clock bakes in UTC). Defaulting to HKT makes that failure mode
+// impossible; the env vars still override for travel/relocation.
 export function getOwnerTz(): string {
   return (
-    process.env.OWNER_TZ ?? process.env.NEXT_PUBLIC_OWNER_TZ ?? "UTC"
+    process.env.OWNER_TZ ?? process.env.NEXT_PUBLIC_OWNER_TZ ?? "Asia/Hong_Kong"
   );
 }

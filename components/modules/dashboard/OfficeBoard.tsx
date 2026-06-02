@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { listRecentAgentRunsAction } from "@/app/(app)/agents/actions";
 import type { AgentRun } from "@/lib/db/types";
+import { fmtDate } from "@/lib/date";
 import { Panel } from "./Panel";
 
 type OfficeAgent = { slug: string; name: string; color: string | null };
@@ -18,13 +19,8 @@ const POLL_MS = 2500;
 // only ever catches in its `done` state still flashes an activation.
 const SETTLE_MS = 6000;
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 function clockHM(iso: string) {
-  const d = new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return fmtDate(iso, "HH:mm");
 }
 
 function triggerTag(source: string) {

@@ -3,15 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Event } from "@/lib/db/types";
+import { fmtDate } from "@/lib/date";
 import { Panel } from "./Panel";
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 function hhmm(iso: string) {
-  const d = new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return fmtDate(iso, "HH:mm");
 }
 
 function minsUntil(iso: string, now: Date) {
