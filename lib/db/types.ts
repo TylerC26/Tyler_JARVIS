@@ -141,6 +141,9 @@ export type Agent = {
   color: string | null;
   active: boolean;
   source: AgentSource;
+  // Telegram forum topic this agent is bound to, so the owner can chat with it
+  // directly in its own thread. null = not bound yet (see migration 0040).
+  telegram_topic_id: number | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -626,6 +629,7 @@ export type Database = {
           color?: string | null;
           active?: boolean;
           source?: AgentSource;
+          telegram_topic_id?: number | null;
           created_at?: string;
           updated_at?: string | null;
         };

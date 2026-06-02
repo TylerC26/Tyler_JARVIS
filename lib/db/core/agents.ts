@@ -74,6 +74,47 @@ export async function getAgentCore(
   return (data as Agent | null) ?? null;
 }
 
+// Resolve the agent bound to a Telegram forum topic. Used by the webhook to
+// route a topic message to its agent (null = topic isn't bound to one).
+export async function getAgentByTopicCore(
+  topicId: number,
+): Promise<Agent | null> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .eq("telegram_topic_id", topicId)
+    .maybeSingle();
+  return (data as Agent | null) ?? null;
+}
+
+// Bind an agent to a Telegram forum topic. Used by the topic setup script after
+// it creates the topic via the Bot API.
+export async function setAgentTopicCore(
+  id: string,
+  topicId: number | null,
+): Promise<CoreResult<Agent>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Agent id is required." };
+
+  const { data, error } = await supabase
+    .from("agents")
+    .update({
+      telegram_topic_id: topicId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as Agent };
+}
+
 export async function createAgentCore(
   input: CreateAgentInput,
 ): Promise<CoreResult<Agent>> {

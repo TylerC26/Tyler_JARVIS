@@ -29,6 +29,12 @@ export type TelegramMessage = {
   photo?: TelegramPhotoSize[];
   date: number;
   reply_to_message?: TelegramMessage;
+  // Forum (Topics) routing. In a forum supergroup, messages posted in a topic
+  // carry the topic's thread id (the id of its opening message); General-topic
+  // messages omit it. The webhook maps this id → an agent. `is_topic_message`
+  // is Telegram's explicit "this came from a non-General topic" flag.
+  message_thread_id?: number;
+  is_topic_message?: boolean;
 };
 
 export type TelegramUpdate = {

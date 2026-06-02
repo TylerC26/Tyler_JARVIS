@@ -6,10 +6,11 @@
 
 import { revalidatePath } from "next/cache";
 import type { ModelMessage } from "ai";
+import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
 import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
 import { runSkillProposer } from "@/lib/ai/skills/propose";
-import type { ChatToolCall } from "@/lib/db/types";
+import type { Agent, ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
 import {
   requestContext,
@@ -241,4 +242,49 @@ async function runChatTurnInner(
   void runSkillJudge(latestUserText, assistantText);
 
   return { assistantText, route: model };
+}
+
+export type RunAgentChatTurnResult = {
+  assistantText: string;
+  modelId: ChatModel;
+};
+
+// Non-streaming direct chat with a single sub-agent, scoped to that agent's
+// thread. This is the conversational counterpart to runAgent() (the orchestrator
+// hand-off): there's no Jarvis in the loop, the owner talks to the agent
+// directly, and the agent answers against its own system_prompt + allowlisted
+// tools with its own running history. Used by the Telegram per-agent topic
+// chats — the web /chat agent tabs use streamAgentResponse directly to stream.
+// Returns null when no model is configured for the agent.
+export async function runAgentChatTurn(
+  agent: Agent,
+  // Full history for THIS agent's thread, including the new user turn.
+  modelMessages: ModelMessage[],
+  latestUserText: string,
+): Promise<RunAgentChatTurnResult | null> {
+  // Persist the owner's message onto the agent's thread (sender null = owner).
+  await appendMessage({
+    role: "user",
+    content: latestUserText,
+    agent_slug: agent.slug,
+  });
+
+  const streamed = await streamAgentResponse(agent, modelMessages, latestUserText);
+  if (!streamed) return null;
+
+  // Nothing pipes the stream to a response here, so drain it so `.steps` settle.
+  await streamed.result.consumeStream();
+  const steps = (await streamed.result.steps) as StepLike[];
+
+  // Stamp both agent_slug and sender with the agent so its rows render as the
+  // named teammate in the thread, identical to a delegated transcript.
+  const { text: assistantText } = await persistAssistantSteps(
+    steps,
+    streamed.modelId,
+    agent.slug,
+    agent.slug,
+  );
+
+  revalidateChatPaths();
+  return { assistantText, modelId: streamed.modelId };
 }

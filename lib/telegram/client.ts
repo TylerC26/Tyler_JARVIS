@@ -78,11 +78,15 @@ export async function sendMessage(
   chatId: number | string,
   text: string,
   replyToMessageId?: number,
+  // Forum topic to post into. Omit for private chats / a group's General topic.
+  // Must be set on every chunk or trailing chunks land in General instead.
+  messageThreadId?: number,
 ): Promise<TelegramResult<void>> {
   const body = text.trim() || "(empty response)";
   let isFirst = true;
   for (const chunk of chunkText(body)) {
     const payload: Record<string, unknown> = { chat_id: chatId, text: chunk };
+    if (messageThreadId) payload.message_thread_id = messageThreadId;
     if (replyToMessageId && isFirst) {
       payload.reply_parameters = { message_id: replyToMessageId };
     }
@@ -96,12 +100,42 @@ export async function sendMessage(
 export async function sendChatAction(
   chatId: number | string,
   action: "typing" = "typing",
+  messageThreadId?: number,
 ): Promise<TelegramResult<void>> {
-  const res = await tgFetch<unknown>("sendChatAction", {
-    chat_id: chatId,
-    action,
-  });
+  const payload: Record<string, unknown> = { chat_id: chatId, action };
+  if (messageThreadId) payload.message_thread_id = messageThreadId;
+  const res = await tgFetch<unknown>("sendChatAction", payload);
   return res.ok ? { ok: true, data: undefined } : res;
+}
+
+// Telegram's fixed forum-topic icon palette (createForumTopic rejects any other
+// color). Callers pass an index; we map it onto a palette slot so each agent's
+// topic gets a distinct, valid color.
+export const FORUM_TOPIC_COLORS = [
+  0x6fb9f0, // blue
+  0xffd67e, // yellow
+  0xcb86db, // purple
+  0x8eee98, // green
+  0xff93b2, // pink
+  0xfb6f5f, // red
+] as const;
+
+export type ForumTopic = {
+  message_thread_id: number;
+  name: string;
+};
+
+// Create a forum topic in a Topics-enabled supergroup. The bot must be an admin
+// with the can_manage_topics right. Returns the new topic's thread id, which we
+// persist on the agent so the webhook can route messages back to it.
+export async function createForumTopic(
+  chatId: number | string,
+  name: string,
+  iconColor?: number,
+): Promise<TelegramResult<ForumTopic>> {
+  const payload: Record<string, unknown> = { chat_id: chatId, name };
+  if (iconColor !== undefined) payload.icon_color = iconColor;
+  return tgFetch<ForumTopic>("createForumTopic", payload);
 }
 
 // One-time registration: point Telegram at our webhook URL and lock it to a
