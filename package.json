@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "telegram:setup": "tsx scripts/setup-telegram-webhook.ts",
-    "telegram:topics": "tsx scripts/setup-telegram-topics.ts",
+    "telegram:agent-bot": "tsx scripts/setup-telegram-agent-bot.ts",
     "agent:start": "tsx scripts/mac-agent/index.ts",
     "agent:install": "tsx scripts/mac-agent/install.ts"
   },

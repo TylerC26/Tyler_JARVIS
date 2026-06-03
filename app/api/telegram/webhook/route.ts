@@ -3,12 +3,15 @@
 // tool-heavy) orchestration in after() so Telegram's retry timer isn't coupled
 // to Claude's latency. The reply is sent back via the Bot API, not this response.
 //
-// Two surfaces feed this one endpoint:
-//   - The owner's private DM with the bot (TELEGRAM_ALLOWED_CHAT_ID) → Jarvis.
-//   - A Topics-enabled "HQ" group (TELEGRAM_GROUP_CHAT_ID), where each forum
-//     topic is bound to a sub-agent (agents.telegram_topic_id). A message in an
-//     agent's topic runs THAT agent directly and replies into the topic; the
-//     group's General topic (no message_thread_id) falls through to Jarvis.
+// Each agent has its own Telegram bot (migration 0041), and all bots POST to
+// this single endpoint. The X-Telegram-Bot-Api-Secret-Token header identifies
+// which bot the update belongs to:
+//   - Header == TELEGRAM_WEBHOOK_SECRET env → Jarvis (orchestrator).
+//   - Header == an agent's telegram_webhook_secret → that sub-agent.
+// Telegram itself does the in-group dispatch: with privacy mode ON, each bot
+// only receives messages that @-mention it, reply to its messages, or use a
+// /command@its_username, so a "send to Daily Planner" in a multi-bot group
+// simply doesn't reach the other bots.
 
 import {
   convertToModelMessages,
@@ -19,7 +22,8 @@ import { after } from "next/server";
 import { listMessages } from "@/lib/chat/persist";
 import { runAgentChatTurn, runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
-import { getAgentByTopicCore } from "@/lib/db/core/agents";
+import { getAgentByWebhookSecretCore } from "@/lib/db/core/agents";
+import type { Agent } from "@/lib/db/types";
 import { claimUpdate } from "@/lib/telegram/dedupe";
 import { detectPostUrl } from "@/lib/places/fetch-post";
 import { uploadMealPhoto } from "@/lib/meals/storage";
@@ -42,13 +46,18 @@ export const maxDuration = 300;
 const OK = new Response("ok", { status: 200 });
 
 export async function POST(req: Request) {
-  // 1. Verify the secret token Telegram echoes back from setWebhook.
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (
-    !secret ||
-    req.headers.get("x-telegram-bot-api-secret-token") !== secret
-  ) {
-    return new Response("unauthorized", { status: 401 });
+  // 1. Resolve the addressee from the secret header. Jarvis matches the env
+  //    secret; sub-agents match their per-bot DB secret. Anything else is junk.
+  const incomingSecret = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
+  const jarvisSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!incomingSecret) return new Response("unauthorized", { status: 401 });
+
+  let agent: Agent | null = null;
+  if (jarvisSecret && incomingSecret === jarvisSecret) {
+    agent = null; // Jarvis path.
+  } else {
+    agent = await getAgentByWebhookSecretCore(incomingSecret);
+    if (!agent) return new Response("unauthorized", { status: 401 });
   }
 
   // 2. Parse. Malformed input → 200 so Telegram doesn't retry it forever.
@@ -61,14 +70,15 @@ export async function POST(req: Request) {
   }
 
   // 3. Only handle text and photo messages — ignore stickers, edits, joins,
-  //    and forum service messages (topic created/closed), which carry no text.
+  //    and service messages, which carry no text.
   const message = update.message;
   const hasText = !!message?.text?.trim();
   const hasPhoto = !!message?.photo?.length;
   if (!message || (!hasText && !hasPhoto)) return OK;
 
   // 4. Single-user allowlist — accept the owner's DM and the HQ group; silently
-  //    ignore anything else.
+  //    ignore anything else. (Group ID stays env-scoped: one HQ group hosts all
+  //    bots; the per-agent identity is the bot itself, not a topic in here.)
   const dmChatId = process.env.TELEGRAM_ALLOWED_CHAT_ID;
   const groupChatId = process.env.TELEGRAM_GROUP_CHAT_ID;
   const incoming = String(message.chat.id);
@@ -79,24 +89,26 @@ export async function POST(req: Request) {
     return OK;
   }
 
+  // Sub-agents only address the group; the owner DM stays Jarvis-only.
+  if (agent && !isGroup) {
+    console.warn(
+      `[telegram] webhook: agent ${agent.slug} message in non-group chat`,
+    );
+    return OK;
+  }
+
   // 5. Dedupe — Telegram retries deliver the same update_id.
   const fresh = await claimUpdate(update.update_id);
   if (!fresh) return OK;
 
-  // 6. Hand off the slow work and acknowledge immediately.
+  // 6. Hand off the slow work and acknowledge immediately. Each bot replies
+  //    with its own token (sub-agent bot, or env default for Jarvis).
   const chatId = message.chat.id;
-  // Replies must go back into the same forum topic; undefined = DM / General.
-  const replyThreadId = isGroup ? message.message_thread_id : undefined;
+  const botToken = agent?.telegram_bot_token ?? null;
+
   after(async () => {
     try {
-      // Resolve the addressee: an agent bound to this topic, or Jarvis. Only
-      // non-General group topics carry a thread id to map.
-      const agent =
-        isGroup && message.message_thread_id
-          ? await getAgentByTopicCore(message.message_thread_id)
-          : null;
-
-      await sendChatAction(chatId, "typing", replyThreadId);
+      await sendChatAction(chatId, "typing", { botToken });
 
       // History comes from the addressed thread: the agent's own thread, or the
       // main Jarvis thread (agent_slug = null).
@@ -117,9 +129,11 @@ export async function POST(req: Request) {
         const caption = message.caption?.trim() ?? "";
         const captionPrompt = caption || "What's in this image?";
 
-        const fileResult = await getFile(largest.file_id);
+        // File ids are scoped to the receiving bot's token — use the same one
+        // for both getFile and downloadFile.
+        const fileResult = await getFile(largest.file_id, { botToken });
         const imageBuffer = fileResult.ok
-          ? await downloadFile(fileResult.data.file_path)
+          ? await downloadFile(fileResult.data.file_path, { botToken })
           : null;
 
         if (imageBuffer) {
@@ -179,7 +193,7 @@ export async function POST(req: Request) {
 
       let assistantText: string;
       if (agent) {
-        // Direct chat with the topic's agent — its own prompt, tools, history.
+        // Direct chat with the addressed agent — its own prompt, tools, history.
         const res = await runAgentChatTurn(agent, modelMessages, latestUserText);
         assistantText = res
           ? res.assistantText || "(no text response)"
@@ -195,19 +209,16 @@ export async function POST(req: Request) {
         assistantText = out.assistantText || "(no text response)";
       }
 
-      await sendMessage(
-        chatId,
-        assistantText,
-        message.message_id,
-        replyThreadId,
-      );
+      await sendMessage(chatId, assistantText, {
+        replyToMessageId: message.message_id,
+        botToken,
+      });
     } catch (e) {
       console.error("[telegram] turn failed:", e);
       await sendMessage(
         chatId,
         "Sorry — something went wrong handling that.",
-        undefined,
-        replyThreadId,
+        { botToken },
       );
     }
   });

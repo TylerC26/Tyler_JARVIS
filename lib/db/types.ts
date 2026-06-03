@@ -141,9 +141,13 @@ export type Agent = {
   color: string | null;
   active: boolean;
   source: AgentSource;
-  // Telegram forum topic this agent is bound to, so the owner can chat with it
-  // directly in its own thread. null = not bound yet (see migration 0040).
-  telegram_topic_id: number | null;
+  // Per-agent Telegram bot identity (migration 0041, replaces 0040's topic id).
+  // Each sub-agent is its own @BotFather bot in the group; the webhook routes
+  // by which bot's secret arrived in the X-Telegram-Bot-Api-Secret-Token header.
+  // All three are NULL until scripts/setup-telegram-agent-bot.ts provisions it.
+  telegram_bot_token: string | null;
+  telegram_bot_username: string | null;
+  telegram_webhook_secret: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -629,7 +633,9 @@ export type Database = {
           color?: string | null;
           active?: boolean;
           source?: AgentSource;
-          telegram_topic_id?: number | null;
+          telegram_bot_token?: string | null;
+          telegram_bot_username?: string | null;
+          telegram_webhook_secret?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };

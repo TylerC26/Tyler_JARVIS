@@ -74,27 +74,57 @@ export async function getAgentCore(
   return (data as Agent | null) ?? null;
 }
 
-// Resolve the agent bound to a Telegram forum topic. Used by the webhook to
-// route a topic message to its agent (null = topic isn't bound to one).
-export async function getAgentByTopicCore(
-  topicId: number,
+// Resolve the agent that owns a given Telegram webhook secret. Used by the
+// inbound webhook: Telegram echoes the per-bot secret in the
+// X-Telegram-Bot-Api-Secret-Token header, and that secret identifies which
+// agent's bot received the update (null = no match → 401 in the webhook).
+// Secret is globally unique (see migration 0041's partial unique index), so we
+// intentionally don't scope by owner_id here.
+export async function getAgentByWebhookSecretCore(
+  secret: string,
 ): Promise<Agent | null> {
+  if (!secret) return null;
   const supabase = await getSupabaseServer();
   if (!supabase) return null;
   const { data } = await supabase
     .from("agents")
     .select("*")
-    .eq("owner_id", getOwnerId())
-    .eq("telegram_topic_id", topicId)
+    .eq("telegram_webhook_secret", secret)
     .maybeSingle();
   return (data as Agent | null) ?? null;
 }
 
-// Bind an agent to a Telegram forum topic. Used by the topic setup script after
-// it creates the topic via the Bot API.
-export async function setAgentTopicCore(
+// Resolve an agent by its Telegram bot username (case-insensitive). Useful
+// when Jarvis wants to reason about a @mention in the group transcript (e.g.
+// "the user addressed @daily_planner_bot, route to that agent"). Username is
+// globally unique on the lower(...) index from migration 0041.
+export async function getAgentByBotUsernameCore(
+  username: string,
+): Promise<Agent | null> {
+  if (!username) return null;
+  const supabase = await getSupabaseServer();
+  if (!supabase) return null;
+  const clean = username.replace(/^@/, "").toLowerCase();
+  const { data } = await supabase
+    .from("agents")
+    .select("*")
+    .ilike("telegram_bot_username", clean)
+    .maybeSingle();
+  return (data as Agent | null) ?? null;
+}
+
+// Bind a Telegram bot identity to an agent. Used by
+// scripts/setup-telegram-agent-bot.ts after it validates the token with getMe
+// and registers the bot's webhook.
+export type AgentBotIdentity = {
+  token: string;
+  username: string;
+  secret: string;
+};
+
+export async function setAgentBotCore(
   id: string,
-  topicId: number | null,
+  identity: AgentBotIdentity | null,
 ): Promise<CoreResult<Agent>> {
   const supabase = await getSupabaseServer();
   if (!supabase) return { ok: false, error: "Supabase not configured." };
@@ -103,7 +133,9 @@ export async function setAgentTopicCore(
   const { data, error } = await supabase
     .from("agents")
     .update({
-      telegram_topic_id: topicId,
+      telegram_bot_token: identity?.token ?? null,
+      telegram_bot_username: identity?.username ?? null,
+      telegram_webhook_secret: identity?.secret ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("owner_id", getOwnerId())

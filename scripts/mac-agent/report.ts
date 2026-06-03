@@ -56,7 +56,9 @@ export async function reportSuccess(task: RepoTask): Promise<void> {
   }
 
   const body = lines.join("\n");
-  const res = await sendMessage(chat, body, task.telegram_message_id ?? undefined);
+  const res = await sendMessage(chat, body, {
+    replyToMessageId: task.telegram_message_id ?? undefined,
+  });
   if (!res.ok) log.warn("telegram report failed", { error: res.error });
 }
 
@@ -70,6 +72,8 @@ export async function reportFailure(task: RepoTask): Promise<void> {
   if (task.branch) lines.push(`Branch left in place: ${task.branch}`);
 
   const body = lines.join("\n");
-  const res = await sendMessage(chat, body, task.telegram_message_id ?? undefined);
+  const res = await sendMessage(chat, body, {
+    replyToMessageId: task.telegram_message_id ?? undefined,
+  });
   if (!res.ok) log.warn("telegram report failed", { error: res.error });
 }

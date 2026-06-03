@@ -1,6 +1,8 @@
-// Minimal Telegram Bot API wrapper used by the inbound webhook + setup script.
-// Mirrors lib/github/client.ts: a tiny REST shim, env-based auth, and a
-// discriminated-union result type. Set TELEGRAM_BOT_TOKEN to enable it.
+// Minimal Telegram Bot API wrapper used by the inbound webhook + setup scripts.
+// Mirrors lib/github/client.ts: a tiny REST shim and a discriminated-union
+// result type. Every call takes an optional `botToken` so callers can speak as
+// a specific bot (Jarvis from env, or any sub-agent's bot token from the DB —
+// see migration 0041). When omitted, falls back to TELEGRAM_BOT_TOKEN.
 
 const API = "https://api.telegram.org";
 
@@ -11,20 +13,21 @@ export type TelegramResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-function botToken(): string | null {
-  return process.env.TELEGRAM_BOT_TOKEN ?? null;
+function resolveToken(override?: string | null): string | null {
+  return override ?? process.env.TELEGRAM_BOT_TOKEN ?? null;
 }
 
 export function isTelegramConfigured(): boolean {
-  return Boolean(botToken());
+  return Boolean(resolveToken());
 }
 
 async function tgFetch<T>(
   method: string,
   body: Record<string, unknown>,
+  botToken?: string | null,
 ): Promise<TelegramResult<T>> {
-  const token = botToken();
-  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN not configured." };
+  const token = resolveToken(botToken);
+  if (!token) return { ok: false, error: "Telegram bot token not configured." };
 
   let res: Response;
   try {
@@ -71,101 +74,114 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
+export type SendMessageOptions = {
+  // Set when replying to a specific message in the chat (Telegram renders a
+  // quote header). Only applied to the first chunk so it doesn't repeat.
+  replyToMessageId?: number;
+  // Per-agent bot token; omit to use TELEGRAM_BOT_TOKEN (Jarvis).
+  botToken?: string | null;
+};
+
 // Send a (possibly long) plain-text message. No parse_mode for v1 — Telegram's
 // MarkdownV2 requires escaping nearly every punctuation char and Claude emits
 // freeform markdown, so plain text is the robust default.
 export async function sendMessage(
   chatId: number | string,
   text: string,
-  replyToMessageId?: number,
-  // Forum topic to post into. Omit for private chats / a group's General topic.
-  // Must be set on every chunk or trailing chunks land in General instead.
-  messageThreadId?: number,
+  options: SendMessageOptions = {},
 ): Promise<TelegramResult<void>> {
   const body = text.trim() || "(empty response)";
   let isFirst = true;
   for (const chunk of chunkText(body)) {
     const payload: Record<string, unknown> = { chat_id: chatId, text: chunk };
-    if (messageThreadId) payload.message_thread_id = messageThreadId;
-    if (replyToMessageId && isFirst) {
-      payload.reply_parameters = { message_id: replyToMessageId };
+    if (options.replyToMessageId && isFirst) {
+      payload.reply_parameters = { message_id: options.replyToMessageId };
     }
-    const res = await tgFetch<unknown>("sendMessage", payload);
+    const res = await tgFetch<unknown>("sendMessage", payload, options.botToken);
     if (!res.ok) return res;
     isFirst = false;
   }
   return { ok: true, data: undefined };
 }
 
+export type SendChatActionOptions = {
+  botToken?: string | null;
+};
+
 export async function sendChatAction(
   chatId: number | string,
   action: "typing" = "typing",
-  messageThreadId?: number,
+  options: SendChatActionOptions = {},
 ): Promise<TelegramResult<void>> {
   const payload: Record<string, unknown> = { chat_id: chatId, action };
-  if (messageThreadId) payload.message_thread_id = messageThreadId;
-  const res = await tgFetch<unknown>("sendChatAction", payload);
+  const res = await tgFetch<unknown>("sendChatAction", payload, options.botToken);
   return res.ok ? { ok: true, data: undefined } : res;
-}
-
-// Telegram's fixed forum-topic icon palette (createForumTopic rejects any other
-// color). Callers pass an index; we map it onto a palette slot so each agent's
-// topic gets a distinct, valid color.
-export const FORUM_TOPIC_COLORS = [
-  0x6fb9f0, // blue
-  0xffd67e, // yellow
-  0xcb86db, // purple
-  0x8eee98, // green
-  0xff93b2, // pink
-  0xfb6f5f, // red
-] as const;
-
-export type ForumTopic = {
-  message_thread_id: number;
-  name: string;
-};
-
-// Create a forum topic in a Topics-enabled supergroup. The bot must be an admin
-// with the can_manage_topics right. Returns the new topic's thread id, which we
-// persist on the agent so the webhook can route messages back to it.
-export async function createForumTopic(
-  chatId: number | string,
-  name: string,
-  iconColor?: number,
-): Promise<TelegramResult<ForumTopic>> {
-  const payload: Record<string, unknown> = { chat_id: chatId, name };
-  if (iconColor !== undefined) payload.icon_color = iconColor;
-  return tgFetch<ForumTopic>("createForumTopic", payload);
 }
 
 // One-time registration: point Telegram at our webhook URL and lock it to a
 // secret token (echoed back in the X-Telegram-Bot-Api-Secret-Token header).
+// Pass `botToken` to register a sub-agent's bot; omit for Jarvis.
+export type SetWebhookOptions = {
+  botToken?: string | null;
+};
+
 export async function setWebhook(
   url: string,
   secret: string,
+  options: SetWebhookOptions = {},
 ): Promise<TelegramResult<unknown>> {
-  return tgFetch<unknown>("setWebhook", {
-    url,
-    secret_token: secret,
-    allowed_updates: ["message"],
-  });
+  return tgFetch<unknown>(
+    "setWebhook",
+    { url, secret_token: secret, allowed_updates: ["message"] },
+    options.botToken,
+  );
 }
 
-export async function deleteWebhook(): Promise<TelegramResult<unknown>> {
-  return tgFetch<unknown>("deleteWebhook", {});
+export async function deleteWebhook(
+  options: SetWebhookOptions = {},
+): Promise<TelegramResult<unknown>> {
+  return tgFetch<unknown>("deleteWebhook", {}, options.botToken);
 }
 
-// Resolve a file_id to a file_path that can be used to download it.
+// Identify the bot a token belongs to. Used by the setup script to capture the
+// @username so we can persist it on the agent row.
+export type TelegramBotIdentity = {
+  id: number;
+  username: string;
+  first_name: string;
+};
+
+export async function getMe(
+  options: SetWebhookOptions = {},
+): Promise<TelegramResult<TelegramBotIdentity>> {
+  return tgFetch<TelegramBotIdentity>("getMe", {}, options.botToken);
+}
+
+// Resolve a file_id to a file_path that can be used to download it. File
+// references are scoped to the bot that received them, so pass the same token
+// that handled the inbound update.
+export type FileFetchOptions = {
+  botToken?: string | null;
+};
+
 export async function getFile(
   fileId: string,
+  options: FileFetchOptions = {},
 ): Promise<TelegramResult<{ file_path: string }>> {
-  return tgFetch<{ file_path: string }>("getFile", { file_id: fileId });
+  return tgFetch<{ file_path: string }>(
+    "getFile",
+    { file_id: fileId },
+    options.botToken,
+  );
 }
 
 // Download a file by its file_path and return raw bytes as a Buffer.
 // Returns null on any network or auth failure.
-export async function downloadFile(filePath: string): Promise<Buffer | null> {
-  const token = botToken();
+export async function downloadFile(
+  filePath: string,
+  options: FileFetchOptions = {},
+): Promise<Buffer | null> {
+  const token = resolveToken(options.botToken);
   if (!token) return null;
   try {
     const res = await fetch(`${API}/file/bot${token}/${filePath}`, {
