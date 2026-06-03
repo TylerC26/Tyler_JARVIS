@@ -76,23 +76,18 @@ export async function POST(req: Request) {
   const hasPhoto = !!message?.photo?.length;
   if (!message || (!hasText && !hasPhoto)) return OK;
 
-  // 4. Single-user allowlist — accept the owner's DM and the HQ group; silently
-  //    ignore anything else. (Group ID stays env-scoped: one HQ group hosts all
-  //    bots; the per-agent identity is the bot itself, not a topic in here.)
+  // 4. Owner allowlist — accept the owner's 1:1 chat with any bot and the HQ
+  //    group; silently ignore anything else. Telegram sets chat.id to the
+  //    other party's user id in a private chat, so TELEGRAM_ALLOWED_CHAT_ID
+  //    (the owner's user id) matches every owner↔bot DM, not just Jarvis's.
   const dmChatId = process.env.TELEGRAM_ALLOWED_CHAT_ID;
   const groupChatId = process.env.TELEGRAM_GROUP_CHAT_ID;
   const incoming = String(message.chat.id);
   const isDM = !!dmChatId && incoming === dmChatId;
   const isGroup = !!groupChatId && incoming === groupChatId;
   if (!isDM && !isGroup) {
-    console.warn(`[telegram] webhook: rejected chat id ${message.chat.id}`);
-    return OK;
-  }
-
-  // Sub-agents only address the group; the owner DM stays Jarvis-only.
-  if (agent && !isGroup) {
     console.warn(
-      `[telegram] webhook: agent ${agent.slug} message in non-group chat`,
+      `[telegram] webhook: rejected chat id ${message.chat.id} (agent=${agent?.slug ?? "jarvis"})`,
     );
     return OK;
   }
