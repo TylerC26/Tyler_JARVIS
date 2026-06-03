@@ -143,14 +143,24 @@ export async function POST(req: Request) {
       }
     } else {
       const all = await listAgentsCore({ activeOnly: true });
-      const mentionedAgent = all.find(
-        (a) =>
-          a.telegram_bot_username &&
-          text.includes(`@${a.telegram_bot_username.toLowerCase()}`),
-      );
-      if (mentionedAgent) {
+      const replyAuthorId = message.reply_to_message?.from?.id?.toString();
+      // Drop when the user is talking to a specific sub-agent, by either
+      // signal: @-mentioning its username, OR replying to one of its messages.
+      // Without the reply check Jarvis would double-respond on every "tap to
+      // reply" thread continuation.
+      const addressedAgent = all.find((a) => {
+        if (!a.telegram_bot_username) return false;
+        const mentioned = text.includes(
+          `@${a.telegram_bot_username.toLowerCase()}`,
+        );
+        const replied =
+          !!replyAuthorId &&
+          a.telegram_bot_token?.split(":")[0] === replyAuthorId;
+        return mentioned || replied;
+      });
+      if (addressedAgent) {
         console.log(
-          `[telegram] webhook: dropping Jarvis update — group message mentions @${mentionedAgent.telegram_bot_username} (sub-agent will handle)`,
+          `[telegram] webhook: dropping Jarvis update — group message addressed to @${addressedAgent.telegram_bot_username} (sub-agent will handle)`,
         );
         return OK;
       }
