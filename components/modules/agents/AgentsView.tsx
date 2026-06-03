@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import {
   createAgentAction,
   deleteAgentAction,
+  disconnectAgentTelegramBotAction,
   draftAgentAction,
+  provisionAgentTelegramBotAction,
   toggleAgentActiveAction,
   updateAgentAction,
 } from "@/app/(app)/agents/actions";
@@ -22,6 +24,16 @@ type Editing =
   | { kind: "closed" }
   | { kind: "create"; phase: "describe" | "review" }
   | { kind: "edit"; agent: Agent };
+
+// Telegram connect flow runs in its own modal so it doesn't compete with the
+// main create/edit form. "connect" is the paste-token step (used for both
+// first-time bind AND reprovision — pasting a fresh token rotates everything);
+// "success" is a confirmation view that tells the user to add the bot to the
+// HQ group (the one Telegram-side step we can't do for them).
+type TelegramEditing =
+  | { kind: "closed" }
+  | { kind: "connect"; agent: Agent }
+  | { kind: "success"; agent: Agent; username: string };
 
 type FormState = {
   name: string;
@@ -58,6 +70,10 @@ export function AgentsView({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [tg, setTg] = useState<TelegramEditing>({ kind: "closed" });
+  const [tgToken, setTgToken] = useState("");
+  const [tgError, setTgError] = useState<string | null>(null);
+  const [tgPending, setTgPending] = useState(false);
 
   useEffect(() => {
     setAgents(initialAgents);
@@ -89,6 +105,86 @@ export function AgentsView({
     setForm(EMPTY_FORM);
     setDescribeText("");
     setError(null);
+  }
+
+  function openTelegramConnect(agent: Agent) {
+    setTgToken("");
+    setTgError(null);
+    setTg({ kind: "connect", agent });
+  }
+
+  function closeTelegram() {
+    setTg({ kind: "closed" });
+    setTgToken("");
+    setTgError(null);
+  }
+
+  async function provisionTelegram() {
+    if (tg.kind !== "connect" || tgPending) return;
+    const token = tgToken.trim();
+    if (!token) {
+      setTgError("Paste the token from @BotFather.");
+      return;
+    }
+    setTgError(null);
+    setTgPending(true);
+    try {
+      const res = await provisionAgentTelegramBotAction(tg.agent.id, token);
+      if (!res.ok) {
+        setTgError(res.error);
+        return;
+      }
+      // Optimistic local update — the server revalidates /agents but the modal
+      // closes from this view's state so it needs the chip to flip immediately.
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === tg.agent.id
+            ? {
+                ...a,
+                telegram_bot_username: res.data.username,
+                // Server stored the real token + secret; UI doesn't need them.
+                telegram_bot_token: "set",
+                telegram_webhook_secret: "set",
+              }
+            : a,
+        ),
+      );
+      setTg({ kind: "success", agent: tg.agent, username: res.data.username });
+    } finally {
+      setTgPending(false);
+    }
+  }
+
+  async function disconnectTelegram(agent: Agent) {
+    if (
+      !confirm(
+        `Disconnect @${agent.telegram_bot_username} from ${agent.name}? The bot stays in BotFather, but stops receiving updates here.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(agent.id);
+    try {
+      const res = await disconnectAgentTelegramBotAction(agent.id);
+      if (!res.ok) {
+        alert(res.error);
+        return;
+      }
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === agent.id
+            ? {
+                ...a,
+                telegram_bot_token: null,
+                telegram_bot_username: null,
+                telegram_webhook_secret: null,
+              }
+            : a,
+        ),
+      );
+    } finally {
+      setBusyId(null);
+    }
   }
 
   function toggleTool(name: string) {
@@ -256,6 +352,41 @@ export function AgentsView({
     </>
   );
 
+  const tgAgent = tg.kind !== "closed" ? tg.agent : null;
+  const tgReprovisioning = !!tgAgent?.telegram_bot_username;
+  const tgModalTitle =
+    tg.kind === "success"
+      ? `Connected · @${tg.username}`
+      : tgReprovisioning
+        ? `Reprovision · ${tgAgent?.name}`
+        : `Connect Telegram · ${tgAgent?.name ?? ""}`;
+  const tgModalSubtitle =
+    tg.kind === "success" ? "one step left" : "paste BotFather token";
+
+  const tgFooter =
+    tg.kind === "success" ? (
+      <Button variant="primary" onClick={closeTelegram}>
+        done
+      </Button>
+    ) : (
+      <>
+        <Button variant="ghost" onClick={closeTelegram} disabled={tgPending}>
+          cancel
+        </Button>
+        <Button
+          variant="primary"
+          onClick={provisionTelegram}
+          disabled={tgPending || !tgToken.trim()}
+        >
+          {tgPending
+            ? "provisioning…"
+            : tgReprovisioning
+              ? "reprovision"
+              : "connect"}
+        </Button>
+      </>
+    );
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -321,6 +452,48 @@ export function AgentsView({
                       {t}
                     </span>
                   ))
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 font-mono text-[10px]">
+                <span className="uppercase tracking-wider text-fg-dim">tg</span>
+                {a.telegram_bot_username ? (
+                  <>
+                    <a
+                      href={`https://t.me/${a.telegram_bot_username}`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-accent hover:bg-accent/20"
+                    >
+                      @{a.telegram_bot_username}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => openTelegramConnect(a)}
+                      className="text-fg-dim underline decoration-dotted underline-offset-2 hover:text-fg"
+                    >
+                      reprovision
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === a.id}
+                      onClick={() => disconnectTelegram(a)}
+                      className="text-fg-dim underline decoration-dotted underline-offset-2 hover:text-danger disabled:opacity-50"
+                    >
+                      disconnect
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-fg-dim">not connected</span>
+                    <button
+                      type="button"
+                      onClick={() => openTelegramConnect(a)}
+                      className="rounded-sm border border-edge bg-surface-2 px-1.5 py-0.5 text-fg-muted hover:text-fg hover:border-edge-strong"
+                    >
+                      + connect bot
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -524,6 +697,98 @@ export function AgentsView({
                 </Field>
               </div>
             </>
+          )}
+        </div>
+      </AddItemModal>
+
+      <AddItemModal
+        open={tg.kind !== "closed"}
+        onClose={closeTelegram}
+        title={tgModalTitle}
+        subtitle={tgModalSubtitle}
+        footer={tgFooter}
+      >
+        <div className="flex flex-col gap-3">
+          {tgError && (
+            <div className="rounded-sm border border-danger/40 bg-danger/10 px-2 py-1.5 font-mono text-[11px] text-danger">
+              {tgError}
+            </div>
+          )}
+
+          {tg.kind === "connect" && (
+            <>
+              <ol className="flex flex-col gap-1 rounded-sm border border-edge bg-surface-2/50 p-3 font-mono text-[11px] leading-relaxed text-fg-muted">
+                <li>
+                  1.{" "}
+                  <a
+                    href="https://t.me/BotFather"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-accent underline decoration-dotted underline-offset-2 hover:opacity-80"
+                  >
+                    @BotFather
+                  </a>{" "}
+                  → /newbot → pick a name + @username.
+                </li>
+                <li>2. Copy the token it gives you.</li>
+                <li>3. Paste it below — the rest is automatic.</li>
+                <li>
+                  4. After this succeeds, add the bot to your HQ group
+                  (Telegram only allows that from the group's add-member UI).
+                </li>
+              </ol>
+              <Field
+                label="bot token"
+                hint="Format: 1234567890:ABCdef… — never commit this anywhere."
+              >
+                <Input
+                  type="password"
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={tgToken}
+                  placeholder="paste from @BotFather"
+                  onChange={(e) => setTgToken(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      provisionTelegram();
+                    }
+                  }}
+                />
+              </Field>
+              {tgReprovisioning && tgAgent?.telegram_bot_username && (
+                <p className="font-mono text-[11px] text-fg-dim">
+                  // currently bound to @{tgAgent.telegram_bot_username} —
+                  pasting a new token rotates the secret and re-registers the
+                  webhook. The old token stops working.
+                </p>
+              )}
+            </>
+          )}
+
+          {tg.kind === "success" && (
+            <div className="flex flex-col gap-3 rounded-sm border border-accent/40 bg-accent/10 p-3 font-mono text-[11px] leading-relaxed text-fg">
+              <p>
+                ✓{" "}
+                <a
+                  href={`https://t.me/${tg.username}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-accent underline decoration-dotted underline-offset-2 hover:opacity-80"
+                >
+                  @{tg.username}
+                </a>{" "}
+                is wired up. Webhook secret stored on the agent row.
+              </p>
+              <p className="text-fg-muted">
+                One step left — open your HQ group in Telegram, tap the title
+                → Add Member → search{" "}
+                <span className="text-fg">@{tg.username}</span> → add. Privacy
+                mode is on by default, so it'll only see messages that @-mention
+                it or reply to its own.
+              </p>
+            </div>
           )}
         </div>
       </AddItemModal>
