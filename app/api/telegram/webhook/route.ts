@@ -115,24 +115,45 @@ export async function POST(req: Request) {
   const fresh = await claimUpdate(update.update_id);
   if (!fresh) return OK;
 
-  // 5b. Jarvis-in-group + @-mention coexistence. With Jarvis privacy mode OFF,
-  //     it sees every group message — including ones explicitly addressed to a
-  //     sub-agent. The sub-agent will respond via its own webhook, so Jarvis
-  //     drops these to avoid a duplicate reply. Sub-agents themselves are
-  //     unaffected; this only short-circuits the Jarvis path.
-  if (!agent && isGroup && hasText) {
+  // 5b. Group routing coexistence. ALL bots in the HQ group run with privacy
+  //     mode OFF (BotFather → Bot Settings → Group Privacy → Disable), because
+  //     Telegram's privacy filter silently drops @-mentions in basic (non-
+  //     supergroup) chats — bots never see them. With privacy off every bot's
+  //     webhook fires for every group message, so we filter here:
+  //       - Jarvis: drop when the text @-mentions a different sub-agent
+  //         (that sub-agent will handle it, no duplicate reply).
+  //       - Sub-agent: drop unless the text @-mentions THIS agent OR the
+  //         message is a reply to one of this agent's own prior messages.
+  //         Otherwise four bots reply to every casual group line.
+  if (isGroup && hasText) {
     const text = message.text!.toLowerCase();
-    const all = await listAgentsCore({ activeOnly: true });
-    const mentionedAgent = all.find(
-      (a) =>
-        a.telegram_bot_username &&
-        text.includes(`@${a.telegram_bot_username.toLowerCase()}`),
-    );
-    if (mentionedAgent) {
-      console.log(
-        `[telegram] webhook: dropping Jarvis update — group message mentions @${mentionedAgent.telegram_bot_username} (sub-agent will handle)`,
+    if (agent) {
+      const ownUsername = agent.telegram_bot_username?.toLowerCase();
+      const ownBotId = agent.telegram_bot_token?.split(":")[0];
+      const mentionsSelf =
+        !!ownUsername && text.includes(`@${ownUsername}`);
+      const repliesToSelf =
+        !!ownBotId &&
+        message.reply_to_message?.from?.id?.toString() === ownBotId;
+      if (!mentionsSelf && !repliesToSelf) {
+        console.log(
+          `[telegram] webhook: dropping ${agent.slug} group update — not addressed (need @${ownUsername} or reply to its message)`,
+        );
+        return OK;
+      }
+    } else {
+      const all = await listAgentsCore({ activeOnly: true });
+      const mentionedAgent = all.find(
+        (a) =>
+          a.telegram_bot_username &&
+          text.includes(`@${a.telegram_bot_username.toLowerCase()}`),
       );
-      return OK;
+      if (mentionedAgent) {
+        console.log(
+          `[telegram] webhook: dropping Jarvis update — group message mentions @${mentionedAgent.telegram_bot_username} (sub-agent will handle)`,
+        );
+        return OK;
+      }
     }
   }
 
