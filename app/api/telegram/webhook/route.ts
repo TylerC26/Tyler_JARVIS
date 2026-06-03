@@ -289,13 +289,17 @@ export async function POST(req: Request) {
         );
       }
 
-      // Mirror DM (or any non-group) conversations into the HQ group so the
-      // group stays a complete activity log for every agent — not just the
-      // ones called there directly. Posts from the same bot that just replied
-      // so the group sees its name/avatar and reads naturally. Skipped when
-      // the source IS the group already (would double-post) or when no group
-      // is configured. Best-effort: a failure (bot not in group, etc.) is
-      // logged but not surfaced to the user.
+      // Cross-surface mirror so both the HQ group and each agent's DM stay a
+      // complete record of the conversation.
+      //   DM → HQ: any non-group turn (Jarvis or sub-agent) posts a mirror to
+      //   the HQ group from the same bot, so the group becomes a single
+      //   activity log.
+      //   HQ → DM: when a sub-agent answers an @mention/reply in the HQ
+      //   group, also post the exchange into the user's DM with that bot so
+      //   the DM thread stays in sync. Skipped for Jarvis because Jarvis IS
+      //   the default HQ voice — mirroring every HQ line to its DM would
+      //   spam. Best-effort either way: a failure (bot not in chat, user
+      //   hasn't /started it, etc.) is logged but not surfaced to the user.
       if (!isGroup && groupChatId) {
         const senderLabel = agent
           ? `@${agent.telegram_bot_username ?? agent.slug}`
@@ -305,6 +309,14 @@ export async function POST(req: Request) {
         if (!mirrored.ok) {
           console.warn(
             `[telegram] webhook: mirror to HQ failed (${senderLabel}): ${mirrored.error}`,
+          );
+        }
+      } else if (isGroup && agent && dmChatId) {
+        const mirror = `💬 from HQ\n> ${truncate(latestUserText, 240)}\n\n${assistantText}`;
+        const mirrored = await sendMessage(dmChatId, mirror, { botToken });
+        if (!mirrored.ok) {
+          console.warn(
+            `[telegram] webhook: mirror to DM failed (${agent.slug}): ${mirrored.error}`,
           );
         }
       }
