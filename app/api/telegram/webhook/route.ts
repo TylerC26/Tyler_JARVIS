@@ -135,6 +135,11 @@ export async function POST(req: Request) {
       const repliesToSelf =
         !!ownBotId &&
         message.reply_to_message?.from?.id?.toString() === ownBotId;
+      // Diagnostic: log every sub-agent group decision so we can see when a
+      // bot keeps responding to messages that weren't addressed to it.
+      console.log(
+        `[telegram] webhook: sub-agent filter ${agent.slug} — own=@${ownUsername} mentionsSelf=${mentionsSelf} repliesToSelf=${repliesToSelf} text=${JSON.stringify(text.slice(0, 200))}`,
+      );
       if (!mentionsSelf && !repliesToSelf) {
         console.log(
           `[telegram] webhook: dropping ${agent.slug} group update — not addressed (need @${ownUsername} or reply to its message)`,
