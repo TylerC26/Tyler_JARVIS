@@ -8,10 +8,12 @@
 // which bot the update belongs to:
 //   - Header == TELEGRAM_WEBHOOK_SECRET env → Jarvis (orchestrator).
 //   - Header == an agent's telegram_webhook_secret → that sub-agent.
-// Telegram itself does the in-group dispatch: with privacy mode ON, each bot
-// only receives messages that @-mention it, reply to its messages, or use a
-// /command@its_username, so a "send to Daily Planner" in a multi-bot group
-// simply doesn't reach the other bots.
+//
+// In the HQ group, Jarvis runs with privacy mode OFF (so it can act as the
+// default voice on un-mentioned messages); sub-agents run with privacy mode ON
+// (so they only fire when explicitly addressed via @mention / reply / command).
+// When Jarvis sees a group message that explicitly @-mentions a sub-agent, it
+// drops the update so only the sub-agent replies — no duplicate posts.
 
 import {
   convertToModelMessages,
@@ -22,7 +24,10 @@ import { after } from "next/server";
 import { listMessages } from "@/lib/chat/persist";
 import { runAgentChatTurn, runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
-import { getAgentByWebhookSecretCore } from "@/lib/db/core/agents";
+import {
+  getAgentByWebhookSecretCore,
+  listAgentsCore,
+} from "@/lib/db/core/agents";
 import type { Agent } from "@/lib/db/types";
 import { claimUpdate } from "@/lib/telegram/dedupe";
 import { detectPostUrl } from "@/lib/places/fetch-post";
@@ -44,6 +49,11 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const OK = new Response("ok", { status: 200 });
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
 
 export async function POST(req: Request) {
   // 1. Resolve the addressee from the secret header. Jarvis matches the env
@@ -85,16 +95,46 @@ export async function POST(req: Request) {
   const incoming = String(message.chat.id);
   const isDM = !!dmChatId && incoming === dmChatId;
   const isGroup = !!groupChatId && incoming === groupChatId;
+
+  // Always log the routing decision so we can diagnose env / membership issues
+  // (e.g. "the bots are in a different group than TELEGRAM_GROUP_CHAT_ID").
+  console.log(
+    `[telegram] webhook: chat=${message.chat.id} type=${message.chat.type} agent=${agent?.slug ?? "jarvis"} isDM=${isDM} isGroup=${isGroup}`,
+  );
+
   if (!isDM && !isGroup) {
     console.warn(
-      `[telegram] webhook: rejected chat id ${message.chat.id} (agent=${agent?.slug ?? "jarvis"})`,
+      `[telegram] webhook: rejected chat id ${message.chat.id} (agent=${agent?.slug ?? "jarvis"}) — does not match TELEGRAM_ALLOWED_CHAT_ID (${dmChatId ?? "unset"}) or TELEGRAM_GROUP_CHAT_ID (${groupChatId ?? "unset"})`,
     );
     return OK;
   }
 
-  // 5. Dedupe — Telegram retries deliver the same update_id.
+  // 5. Dedupe — Telegram retries deliver the same update_id. Each bot has its
+  //    own update_id stream so Jarvis's and a sub-agent's parallel updates are
+  //    independent here (correct: both bots independently dedupe their own).
   const fresh = await claimUpdate(update.update_id);
   if (!fresh) return OK;
+
+  // 5b. Jarvis-in-group + @-mention coexistence. With Jarvis privacy mode OFF,
+  //     it sees every group message — including ones explicitly addressed to a
+  //     sub-agent. The sub-agent will respond via its own webhook, so Jarvis
+  //     drops these to avoid a duplicate reply. Sub-agents themselves are
+  //     unaffected; this only short-circuits the Jarvis path.
+  if (!agent && isGroup && hasText) {
+    const text = message.text!.toLowerCase();
+    const all = await listAgentsCore({ activeOnly: true });
+    const mentionedAgent = all.find(
+      (a) =>
+        a.telegram_bot_username &&
+        text.includes(`@${a.telegram_bot_username.toLowerCase()}`),
+    );
+    if (mentionedAgent) {
+      console.log(
+        `[telegram] webhook: dropping Jarvis update — group message mentions @${mentionedAgent.telegram_bot_username} (sub-agent will handle)`,
+      );
+      return OK;
+    }
+  }
 
   // 6. Hand off the slow work and acknowledge immediately. Each bot replies
   //    with its own token (sub-agent bot, or env default for Jarvis).
@@ -208,6 +248,26 @@ export async function POST(req: Request) {
         replyToMessageId: message.message_id,
         botToken,
       });
+
+      // Mirror DM (or any non-group) conversations into the HQ group so the
+      // group stays a complete activity log for every agent — not just the
+      // ones called there directly. Posts from the same bot that just replied
+      // so the group sees its name/avatar and reads naturally. Skipped when
+      // the source IS the group already (would double-post) or when no group
+      // is configured. Best-effort: a failure (bot not in group, etc.) is
+      // logged but not surfaced to the user.
+      if (!isGroup && groupChatId) {
+        const senderLabel = agent
+          ? `@${agent.telegram_bot_username ?? agent.slug}`
+          : "Jarvis";
+        const mirror = `💬 from DM · ${senderLabel}\n> ${truncate(latestUserText, 240)}\n\n${assistantText}`;
+        const mirrored = await sendMessage(groupChatId, mirror, { botToken });
+        if (!mirrored.ok) {
+          console.warn(
+            `[telegram] webhook: mirror to HQ failed (${senderLabel}): ${mirrored.error}`,
+          );
+        }
+      }
     } catch (e) {
       console.error("[telegram] turn failed:", e);
       await sendMessage(
