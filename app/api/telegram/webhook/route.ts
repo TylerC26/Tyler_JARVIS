@@ -244,10 +244,19 @@ export async function POST(req: Request) {
         assistantText = out.assistantText || "(no text response)";
       }
 
-      await sendMessage(chatId, assistantText, {
+      const sent = await sendMessage(chatId, assistantText, {
         replyToMessageId: message.message_id,
         botToken,
       });
+      if (!sent.ok) {
+        // The Bot API result is a structured {ok,error}, not a throw — without
+        // this log a failed primary send (e.g. user never tapped /start, bot
+        // blocked, chat closed) is invisible: the mirror to HQ still posts, so
+        // the symptom reads as "agent replies in HQ but not in DM".
+        console.error(
+          `[telegram] webhook: primary send failed (chat=${chatId} agent=${agent?.slug ?? "jarvis"}): ${sent.error}`,
+        );
+      }
 
       // Mirror DM (or any non-group) conversations into the HQ group so the
       // group stays a complete activity log for every agent — not just the
