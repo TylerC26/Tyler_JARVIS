@@ -1,34 +1,41 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createMeetingAction } from "@/app/(app)/meetings/actions";
 import { Button } from "@/components/ui/Button";
-import { useLiveTranscription } from "@/lib/meetings/useLiveTranscription";
+import { useLiveTranscription, type LiveStatus } from "@/lib/meetings/useLiveTranscription";
+import { useTauriTranscription } from "@/lib/meetings/useTauriTranscription";
 import type { MeetingSource } from "@/lib/db/types";
 import { LiveTranscript } from "./LiveTranscript";
 
-// Are we running inside the Tauri desktop shell? When true the desktop app can
-// (Milestone C) capture native system audio; until that lands the browser mic
-// path below is used everywhere.
+// Shared shape of both transcription hooks.
+type TranscriptionApi = {
+  status: LiveStatus;
+  transcript: string;
+  finalText: string;
+  interim: string;
+  error: string | null;
+  start: (language?: string) => Promise<void>;
+  stop: () => Promise<string>;
+};
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI__" in window;
 }
 
-export function RecordController() {
+// Wraps a transcription hook with the create-meeting → record → finalize flow.
+function useRecorderActions(tx: TranscriptionApi, source: MeetingSource) {
   const router = useRouter();
-  const { status, finalText, interim, error, start, stop } =
-    useLiveTranscription();
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const recording = status === "recording" || status === "connecting";
+  const recording = tx.status === "recording" || tx.status === "connecting";
 
-  async function handleStart() {
+  async function start() {
     setLocalError(null);
-    const source: MeetingSource = isTauriRuntime() ? "desktop" : "browser";
     const created = await createMeetingAction({ source });
     if (!created.ok) {
       setLocalError(created.error);
@@ -36,11 +43,11 @@ export function RecordController() {
     }
     setMeetingId(created.data.id);
     startedAtRef.current = Date.now();
-    await start();
+    await tx.start();
   }
 
-  async function handleStop() {
-    const transcript = await stop();
+  async function stop() {
+    const transcript = await tx.stop();
     const id = meetingId;
     if (!id) return;
     setFinalizing(true);
@@ -66,8 +73,38 @@ export function RecordController() {
     }
   }
 
-  const shownError = localError ?? error;
+  return {
+    recording,
+    finalizing,
+    error: localError ?? tx.error,
+    start,
+    stop,
+  };
+}
 
+type UiProps = {
+  status: LiveStatus;
+  recording: boolean;
+  finalizing: boolean;
+  error: string | null;
+  finalText: string;
+  interim: string;
+  hint: string;
+  onStart: () => void;
+  onStop: () => void;
+};
+
+function RecorderUI({
+  status,
+  recording,
+  finalizing,
+  error,
+  finalText,
+  interim,
+  hint,
+  onStart,
+  onStop,
+}: UiProps) {
   return (
     <div className="rounded-sm border border-edge bg-surface-2/40 p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -89,7 +126,7 @@ export function RecordController() {
           <Button
             variant="danger"
             size="sm"
-            onClick={handleStop}
+            onClick={onStop}
             disabled={finalizing}
           >
             ■ stop & summarize
@@ -98,7 +135,7 @@ export function RecordController() {
           <Button
             variant="primary"
             size="sm"
-            onClick={handleStart}
+            onClick={onStart}
             disabled={finalizing}
           >
             ● record
@@ -107,20 +144,64 @@ export function RecordController() {
       </div>
 
       {!recording && !finalizing && (
-        <p className="font-mono text-[11px] text-fg-dim leading-relaxed">
-          {isTauriRuntime()
-            ? "Captures your mic now; native system audio (Zoom/Teams) lands with the desktop capture update."
-            : "Records this device's mic and transcribes live. For virtual-call audio (the other participants), use the desktop app."}
-        </p>
+        <p className="font-mono text-[11px] text-fg-dim leading-relaxed">{hint}</p>
       )}
 
       {(recording || finalText || interim) && (
         <LiveTranscript finalText={finalText} interim={interim} />
       )}
 
-      {shownError && (
-        <p className="font-mono text-[11px] text-danger">{shownError}</p>
-      )}
+      {error && <p className="font-mono text-[11px] text-danger">{error}</p>}
     </div>
   );
+}
+
+// Browser path: WebAudio mic capture → OpenAI realtime WS.
+function BrowserRecorder() {
+  const tx = useLiveTranscription();
+  const ctl = useRecorderActions(tx, "browser");
+  return (
+    <RecorderUI
+      status={tx.status}
+      recording={ctl.recording}
+      finalizing={ctl.finalizing}
+      error={ctl.error}
+      finalText={tx.finalText}
+      interim={tx.interim}
+      hint="Records this device's mic and transcribes live. For virtual-call audio (the other participants), use the desktop app."
+      onStart={ctl.start}
+      onStop={ctl.stop}
+    />
+  );
+}
+
+// Desktop path: native mic + system-audio capture in Rust → OpenAI realtime WS.
+function TauriRecorder() {
+  const tx = useTauriTranscription();
+  const ctl = useRecorderActions(tx, "desktop");
+  return (
+    <RecorderUI
+      status={tx.status}
+      recording={ctl.recording}
+      finalizing={ctl.finalizing}
+      error={ctl.error}
+      finalText={tx.finalText}
+      interim={tx.interim}
+      hint="Captures your mic and system audio (Zoom/Teams and anything playing) natively, then transcribes live."
+      onStart={ctl.start}
+      onStop={ctl.stop}
+    />
+  );
+}
+
+export function RecordController() {
+  // Runtime is only known client-side after mount; default to browser to avoid a
+  // hydration mismatch, then switch if we detect the Tauri shell.
+  const [runtime, setRuntime] = useState<"browser" | "tauri" | null>(null);
+  useEffect(() => {
+    setRuntime(isTauriRuntime() ? "tauri" : "browser");
+  }, []);
+
+  if (runtime === null) return null;
+  return runtime === "tauri" ? <TauriRecorder /> : <BrowserRecorder />;
 }
