@@ -9,6 +9,8 @@ type Props = {
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Widen the dialog for two-column (details + description) layouts. */
+  wide?: boolean;
 };
 
 export function AddItemModal({
@@ -18,6 +20,7 @@ export function AddItemModal({
   subtitle,
   children,
   footer,
+  wide = false,
 }: Props) {
   useEffect(() => {
     if (!open) return;
@@ -43,7 +46,8 @@ export function AddItemModal({
       />
       <div
         className={[
-          "relative w-full max-w-2xl max-h-[90dvh]",
+          "relative w-full max-h-[90dvh]",
+          wide ? "max-w-4xl" : "max-w-2xl",
           "rounded-md border border-edge bg-surface shadow-2xl",
           "flex flex-col",
         ].join(" ")}

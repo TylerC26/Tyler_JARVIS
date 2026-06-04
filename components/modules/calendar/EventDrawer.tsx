@@ -39,6 +39,7 @@ export function EventDrawer({
     <AddItemModal
       open={open}
       onClose={onClose}
+      wide
       title={mode === "create" ? "New Event" : "Edit Event"}
       subtitle={mode === "create" ? "schedule" : "modify"}
       footer={

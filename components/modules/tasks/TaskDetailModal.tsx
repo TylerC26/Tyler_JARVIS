@@ -70,6 +70,7 @@ export function TaskDetailModal({
   return (
     <AddItemModal
       open
+      wide
       onClose={onClose}
       title={task.title}
       subtitle={project ? `task · ${project.name}` : "task"}
@@ -92,53 +93,59 @@ export function TaskDetailModal({
         </>
       }
     >
-      <form id="task-detail-form" action={onSave} className="flex flex-col gap-4">
-        <Field label="Title">
-          <Input name="title" defaultValue={task.title} required />
-        </Field>
-        <Field label="Description" hint="optional">
+      <form
+        id="task-detail-form"
+        action={onSave}
+        className="grid gap-4 md:grid-cols-2 md:gap-5"
+      >
+        <div className="flex flex-col gap-4">
+          <Field label="Title">
+            <Input name="title" defaultValue={task.title} required />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Status">
+              <Select name="status" defaultValue={task.status}>
+                <option value="todo">Open</option>
+                <option value="done">Done</option>
+              </Select>
+            </Field>
+            <Field label="Priority">
+              <Select name="priority" defaultValue={String(task.priority)}>
+                <option value="1">P1 — critical</option>
+                <option value="2">P2 — high</option>
+                <option value="3">P3 — normal</option>
+                <option value="4">P4 — low</option>
+              </Select>
+            </Field>
+          </div>
+          <Field label="Due">
+            <Input
+              name="due_at"
+              type="datetime-local"
+              defaultValue={toLocalInputValue(task.due_at)}
+            />
+          </Field>
+          {project && (
+            <div className="rounded-sm border border-edge bg-surface/40 px-3 py-2 font-mono text-[11px] text-fg-muted">
+              <span className="text-fg-dim">project · </span>
+              <Link
+                href={`/projects/${project.slug}`}
+                className="text-accent hover:underline"
+              >
+                {project.name}
+              </Link>
+            </div>
+          )}
+        </div>
+        <Field label="Description" hint="optional" className="min-h-[240px] md:h-full">
           <Textarea
             name="description"
-            rows={4}
             defaultValue={task.description ?? ""}
+            className="flex-1 resize-none"
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Status">
-            <Select name="status" defaultValue={task.status}>
-              <option value="todo">Open</option>
-              <option value="done">Done</option>
-            </Select>
-          </Field>
-          <Field label="Priority">
-            <Select name="priority" defaultValue={String(task.priority)}>
-              <option value="1">P1 — critical</option>
-              <option value="2">P2 — high</option>
-              <option value="3">P3 — normal</option>
-              <option value="4">P4 — low</option>
-            </Select>
-          </Field>
-        </div>
-        <Field label="Due">
-          <Input
-            name="due_at"
-            type="datetime-local"
-            defaultValue={toLocalInputValue(task.due_at)}
-          />
-        </Field>
-        {project && (
-          <div className="rounded-sm border border-edge bg-surface/40 px-3 py-2 font-mono text-[11px] text-fg-muted">
-            <span className="text-fg-dim">project · </span>
-            <Link
-              href={`/projects/${project.slug}`}
-              className="text-accent hover:underline"
-            >
-              {project.name}
-            </Link>
-          </div>
-        )}
         {error && (
-          <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+          <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
             ! {error}
           </div>
         )}

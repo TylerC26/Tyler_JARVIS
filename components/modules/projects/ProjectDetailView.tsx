@@ -259,6 +259,7 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           setEditingMilestone(null);
           setMilestoneError(null);
         }}
+        wide
         title={editingMilestone === "new" ? "New Milestone" : "Edit Milestone"}
         subtitle="big rock"
         footer={
@@ -297,43 +298,49 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           </>
         }
       >
-        <form id="milestone-form" action={onSaveMilestone} className="flex flex-col gap-4">
-          <Field label="Title">
-            <Input
-              name="title"
-              autoFocus
-              required
-              defaultValue={
-                editingMilestone && editingMilestone !== "new"
-                  ? editingMilestone.title
-                  : ""
-              }
-            />
-          </Field>
-          <Field label="Description" hint="optional">
+        <form
+          id="milestone-form"
+          action={onSaveMilestone}
+          className="grid gap-4 md:grid-cols-2 md:gap-5"
+        >
+          <div className="flex flex-col gap-4">
+            <Field label="Title">
+              <Input
+                name="title"
+                autoFocus
+                required
+                defaultValue={
+                  editingMilestone && editingMilestone !== "new"
+                    ? editingMilestone.title
+                    : ""
+                }
+              />
+            </Field>
+            <Field label="Target date" hint="optional">
+              <Input
+                name="target_date"
+                type="date"
+                defaultValue={
+                  editingMilestone && editingMilestone !== "new"
+                    ? editingMilestone.target_date ?? ""
+                    : ""
+                }
+              />
+            </Field>
+          </div>
+          <Field label="Description" hint="optional" className="min-h-[240px] md:h-full">
             <Textarea
               name="description"
-              rows={3}
               defaultValue={
                 editingMilestone && editingMilestone !== "new"
                   ? editingMilestone.description ?? ""
                   : ""
               }
-            />
-          </Field>
-          <Field label="Target date" hint="optional">
-            <Input
-              name="target_date"
-              type="date"
-              defaultValue={
-                editingMilestone && editingMilestone !== "new"
-                  ? editingMilestone.target_date ?? ""
-                  : ""
-              }
+              className="flex-1 resize-none"
             />
           </Field>
           {milestoneError && (
-            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
               ! {milestoneError}
             </div>
           )}
@@ -346,6 +353,7 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           setEditingProject(false);
           setProjectError(null);
         }}
+        wide
         title="Edit Project"
         subtitle="project metadata"
         footer={
@@ -370,56 +378,72 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           </>
         }
       >
-        <form id="project-edit-form" action={onSaveProject} className="flex flex-col gap-4">
-          <Field label="Name">
-            <Input name="name" defaultValue={project.name} required />
-          </Field>
-          <Field label="Description">
-            <Textarea name="description" rows={3} defaultValue={project.description ?? ""} />
-          </Field>
-          <Field label="Category" hint="work projects vs other ventures">
-            <Select name="category" defaultValue={project.category}>
-              <option value="work">Work</option>
-              <option value="other">Others</option>
-            </Select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
-              <Select name="status" defaultValue={project.status}>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+        <form
+          id="project-edit-form"
+          action={onSaveProject}
+          className="grid gap-4 md:grid-cols-2 md:gap-5"
+        >
+          <div className="flex flex-col gap-4">
+            <Field label="Name">
+              <Input name="name" defaultValue={project.name} required />
+            </Field>
+            <Field label="Category" hint="work projects vs other ventures">
+              <Select name="category" defaultValue={project.category}>
+                <option value="work">Work</option>
+                <option value="other">Others</option>
               </Select>
             </Field>
-            <Field label="Color">
-              <Input name="color" defaultValue={project.color ?? ""} />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Status">
+                <Select name="status" defaultValue={project.status}>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Color">
+                <Input name="color" defaultValue={project.color ?? ""} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Started">
+                <Input name="started_at" type="date" defaultValue={project.started_at ?? ""} />
+              </Field>
+              <Field label="Target date">
+                <Input name="target_date" type="date" defaultValue={project.target_date ?? ""} />
+              </Field>
+            </div>
+            <Field
+              label="GitHub repo"
+              hint="optional · Jarvis can read README / files / commits"
+            >
+              <Input
+                name="github_repo_url"
+                defaultValue={project.github_repo_url ?? ""}
+                placeholder="https://github.com/owner/repo"
+              />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Started">
-              <Input name="started_at" type="date" defaultValue={project.started_at ?? ""} />
+          <div className="flex flex-col gap-4">
+            <Field label="Description" className="min-h-[160px] md:flex-1">
+              <Textarea
+                name="description"
+                defaultValue={project.description ?? ""}
+                className="flex-1 resize-none"
+              />
             </Field>
-            <Field label="Target date">
-              <Input name="target_date" type="date" defaultValue={project.target_date ?? ""} />
+            <Field label="Notes" hint="freeform; shown on this page" className="min-h-[160px] md:flex-1">
+              <Textarea
+                name="notes"
+                defaultValue={project.notes ?? ""}
+                className="flex-1 resize-none"
+              />
             </Field>
           </div>
-          <Field
-            label="GitHub repo"
-            hint="optional · Jarvis can read README / files / commits"
-          >
-            <Input
-              name="github_repo_url"
-              defaultValue={project.github_repo_url ?? ""}
-              placeholder="https://github.com/owner/repo"
-            />
-          </Field>
-          <Field label="Notes" hint="freeform; shown on this page">
-            <Textarea name="notes" rows={6} defaultValue={project.notes ?? ""} />
-          </Field>
           {projectError && (
-            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
               ! {projectError}
             </div>
           )}

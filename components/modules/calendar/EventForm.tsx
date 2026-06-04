@@ -68,7 +68,7 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
   return (
     <form
       id={formId}
-      className="flex flex-col gap-4"
+      className="grid gap-4 md:grid-cols-2 md:gap-5"
       onSubmit={async (e) => {
         e.preventDefault();
         // Ensure ISO output
@@ -77,82 +77,85 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
         await onSubmit({ ...values, starts_at: isoStart, ends_at: isoEnd });
       }}
     >
-      <Field label="Title">
-        <Input
-          name="title"
-          value={values.title}
-          onChange={(e) => update("title", e.target.value)}
-          required
-          autoFocus
-        />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Starts">
+      <div className="flex flex-col gap-4">
+        <Field label="Title">
           <Input
-            name="starts_at"
-            type="datetime-local"
-            value={values.starts_at}
-            onChange={(e) => update("starts_at", e.target.value)}
+            name="title"
+            value={values.title}
+            onChange={(e) => update("title", e.target.value)}
             required
+            autoFocus
           />
         </Field>
-        <Field label="Ends">
-          <Input
-            name="ends_at"
-            type="datetime-local"
-            value={values.ends_at}
-            onChange={(e) => update("ends_at", e.target.value)}
-            required
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Starts">
+            <Input
+              name="starts_at"
+              type="datetime-local"
+              value={values.starts_at}
+              onChange={(e) => update("starts_at", e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Ends">
+            <Input
+              name="ends_at"
+              type="datetime-local"
+              value={values.ends_at}
+              onChange={(e) => update("ends_at", e.target.value)}
+              required
+            />
+          </Field>
+        </div>
+        <Field label="Category">
+          <CategoryPicker
+            value={values.category}
+            onChange={(next) => update("category", next)}
           />
         </Field>
+        <Field label="Linked task">
+          <select
+            name="task_id"
+            value={values.task_id ?? ""}
+            onChange={(e) => update("task_id", e.target.value || null)}
+            className="w-full rounded-sm border border-edge bg-surface px-2 py-1.5 font-mono text-[12px] text-fg outline-none focus:border-accent"
+          >
+            <option value="">— none —</option>
+            {tasks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.status === "done" ? "✓ " : ""}
+                {t.title}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Location">
+          <Input
+            name="location"
+            value={values.location ?? ""}
+            onChange={(e) => update("location", e.target.value || null)}
+            placeholder="optional"
+          />
+        </Field>
+        <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+          <input
+            type="checkbox"
+            checked={values.all_day}
+            onChange={(e) => update("all_day", e.target.checked)}
+            className="size-4 accent-accent"
+          />
+          all day
+        </label>
       </div>
-      <Field label="Category">
-        <CategoryPicker
-          value={values.category}
-          onChange={(next) => update("category", next)}
-        />
-      </Field>
-      <Field label="Linked task">
-        <select
-          name="task_id"
-          value={values.task_id ?? ""}
-          onChange={(e) => update("task_id", e.target.value || null)}
-          className="w-full rounded-sm border border-edge bg-surface px-2 py-1.5 font-mono text-[12px] text-fg outline-none focus:border-accent"
-        >
-          <option value="">— none —</option>
-          {tasks.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.status === "done" ? "✓ " : ""}
-              {t.title}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Location">
-        <Input
-          name="location"
-          value={values.location ?? ""}
-          onChange={(e) => update("location", e.target.value || null)}
-          placeholder="optional"
-        />
-      </Field>
-      <Field label="Description">
+      <Field label="Description" className="min-h-[240px] md:h-full">
         <Textarea
           name="description"
           value={values.description ?? ""}
           onChange={(e) => update("description", e.target.value || null)}
           placeholder="optional"
+          className="flex-1 resize-none"
         />
       </Field>
-      <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-        <input
-          type="checkbox"
-          checked={values.all_day}
-          onChange={(e) => update("all_day", e.target.checked)}
-          className="size-4 accent-accent"
-        />
-        all day
-      </label>
     </form>
   );
 }

@@ -188,6 +188,7 @@ export function TasksView({
 
       <AddItemModal
         open={open}
+        wide
         onClose={() => {
           setOpen(false);
           setError(null);
@@ -209,26 +210,36 @@ export function TasksView({
           </>
         }
       >
-        <form ref={formRef} action={onSubmit} className="flex flex-col gap-4">
-          <Field label="Title">
-            <Input name="title" autoFocus required />
-          </Field>
-          <Field label="Description">
-            <Textarea name="description" placeholder="optional" />
-          </Field>
-          <Field label="Priority">
-            <Select name="priority" defaultValue="3">
-              <option value="1">P1 — critical</option>
-              <option value="2">P2 — high</option>
-              <option value="3">P3 — normal</option>
-              <option value="4">P4 — low</option>
-            </Select>
-          </Field>
-          <Field label="Due Date">
-            <Input name="due_at" type="datetime-local" />
+        <form
+          ref={formRef}
+          action={onSubmit}
+          className="grid gap-4 md:grid-cols-2 md:gap-5"
+        >
+          <div className="flex flex-col gap-4">
+            <Field label="Title">
+              <Input name="title" autoFocus required />
+            </Field>
+            <Field label="Priority">
+              <Select name="priority" defaultValue="3">
+                <option value="1">P1 — critical</option>
+                <option value="2">P2 — high</option>
+                <option value="3">P3 — normal</option>
+                <option value="4">P4 — low</option>
+              </Select>
+            </Field>
+            <Field label="Due Date">
+              <Input name="due_at" type="datetime-local" />
+            </Field>
+          </div>
+          <Field label="Description" className="min-h-[240px] md:h-full">
+            <Textarea
+              name="description"
+              placeholder="optional"
+              className="flex-1 resize-none"
+            />
           </Field>
           {error && (
-            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
               ! {error}
             </div>
           )}

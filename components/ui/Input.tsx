@@ -64,14 +64,16 @@ export function Field({
   htmlFor,
   children,
   hint,
+  className = "",
 }: {
   label: string;
   htmlFor?: string;
   children: React.ReactNode;
   hint?: string;
+  className?: string;
 }) {
   return (
-    <label htmlFor={htmlFor} className="flex flex-col gap-1.5">
+    <label htmlFor={htmlFor} className={["flex flex-col gap-1.5", className].join(" ")}>
       <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {label}
       </span>

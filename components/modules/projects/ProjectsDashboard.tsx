@@ -236,6 +236,7 @@ export function ProjectsDashboard({
 
       <AddItemModal
         open={open}
+        wide
         onClose={() => setOpen(false)}
         title="New Project"
         subtitle="side hustle"
@@ -258,55 +259,61 @@ export function ProjectsDashboard({
         <form
           id="new-project-form"
           action={onCreate}
-          className="flex flex-col gap-4"
+          className="grid gap-4 md:grid-cols-2 md:gap-5"
         >
-          <Field label="Name">
-            <Input name="name" placeholder="e.g. Lemon Lab" autoFocus required />
-          </Field>
-          <Field label="Description" hint="optional one-liner">
+          <div className="flex flex-col gap-4">
+            <Field label="Name">
+              <Input name="name" placeholder="e.g. Lemon Lab" autoFocus required />
+            </Field>
+            <Field label="Category" hint="work projects vs other ventures">
+              <Select
+                name="category"
+                defaultValue={category === "all" ? "other" : category}
+              >
+                <option value="work">Work</option>
+                <option value="other">Others</option>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Status">
+                <Select name="status" defaultValue="active">
+                  <option value="idea">Idea</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="archived">Archived</option>
+                </Select>
+              </Field>
+              <Field label="Target date" hint="optional soft deadline">
+                <Input name="target_date" type="date" />
+              </Field>
+            </div>
+            <Field label="Color" hint="optional accent color (any CSS color)">
+              <Input name="color" placeholder="e.g. #facc15" />
+            </Field>
+            <Field
+              label="GitHub repo"
+              hint="optional · Jarvis can read README / files / commits"
+            >
+              <Input
+                name="github_repo_url"
+                placeholder="https://github.com/owner/repo"
+              />
+            </Field>
+          </div>
+          <Field
+            label="Description"
+            hint="optional one-liner"
+            className="min-h-[240px] md:h-full"
+          >
             <Textarea
               name="description"
               placeholder="what this project is about"
-              rows={3}
-            />
-          </Field>
-          <Field label="Category" hint="work projects vs other ventures">
-            <Select
-              name="category"
-              defaultValue={category === "all" ? "other" : category}
-            >
-              <option value="work">Work</option>
-              <option value="other">Others</option>
-            </Select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
-              <Select name="status" defaultValue="active">
-                <option value="idea">Idea</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="shipped">Shipped</option>
-                <option value="archived">Archived</option>
-              </Select>
-            </Field>
-            <Field label="Target date" hint="optional soft deadline">
-              <Input name="target_date" type="date" />
-            </Field>
-          </div>
-          <Field label="Color" hint="optional accent color (any CSS color)">
-            <Input name="color" placeholder="e.g. #facc15" />
-          </Field>
-          <Field
-            label="GitHub repo"
-            hint="optional · Jarvis can read README / files / commits"
-          >
-            <Input
-              name="github_repo_url"
-              placeholder="https://github.com/owner/repo"
+              className="flex-1 resize-none"
             />
           </Field>
           {error && (
-            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
               ! {error}
             </div>
           )}
