@@ -103,6 +103,18 @@ export function useLiveTranscription() {
       setStatus("connecting");
 
       try {
+        // navigator.mediaDevices is undefined on insecure (non-https) pages and
+        // in webviews that don't expose media capture (e.g. the Tauri/WKWebView
+        // desktop shell without native mic permission). Fail clearly instead of
+        // throwing "undefined is not an object".
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error(
+            typeof window !== "undefined" && window.isSecureContext === false
+              ? "Microphone capture needs a secure (https) page."
+              : "Microphone capture isn't available here. In the desktop app this needs native mic permission (part of the upcoming native-audio update) — for now record from a browser (Chrome/Safari) on the deployed site.",
+          );
+        }
+
         const tokenRes = await fetch("/api/meetings/realtime-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
