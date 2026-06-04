@@ -22,7 +22,10 @@ type TranscriptionApi = {
 };
 
 function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+  if (typeof window === "undefined") return false;
+  // __TAURI_INTERNALS__ is injected by the Tauri core (reliably, and early);
+  // __TAURI__ is the global API sugar (withGlobalTauri). Accept either.
+  return "__TAURI__" in window || "__TAURI_INTERNALS__" in window;
 }
 
 // Wraps a transcription hook with the create-meeting → record → finalize flow.
@@ -239,8 +242,8 @@ export function RecordController() {
       if (cancelled) return;
       if (isTauriRuntime()) {
         setRuntime("tauri");
-      } else if (tries++ < 30) {
-        setTimeout(tick, 100); // retry for ~3s
+      } else if (tries++ < 50) {
+        setTimeout(tick, 200); // keep retrying for ~10s (harmless in a browser)
       }
     };
     tick();

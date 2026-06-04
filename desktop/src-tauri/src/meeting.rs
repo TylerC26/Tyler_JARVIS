@@ -392,7 +392,12 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
             });
 
             // Sender: every 20 ms, mix a frame and append it to the input buffer.
+            // gpt-realtime-whisper has no server VAD, so we manually commit the
+            // buffer every ~1.5 s of audio — that's what makes the model actually
+            // transcribe a segment (otherwise audio just accumulates, no captions).
             let mut ticker = tokio::time::interval(Duration::from_millis(20));
+            let mut appended_since_commit = false;
+            let mut audio_ticks: u32 = 0;
             loop {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -409,8 +414,31 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
                 if write.send(Message::Text(payload.into())).await.is_err() {
                     break;
                 }
+                appended_since_commit = true;
+                audio_ticks += 1;
+                if audio_ticks >= 75 {
+                    audio_ticks = 0;
+                    if write
+                        .send(Message::Text(
+                            "{\"type\":\"input_audio_buffer.commit\"}".into(),
+                        ))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                    appended_since_commit = false;
+                }
             }
 
+            // Flush any trailing audio so the last segment gets transcribed.
+            if appended_since_commit {
+                let _ = write
+                    .send(Message::Text(
+                        "{\"type\":\"input_audio_buffer.commit\"}".into(),
+                    ))
+                    .await;
+            }
             let _ = write.send(Message::Close(None)).await;
             reader.abort();
         });

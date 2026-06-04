@@ -66,10 +66,16 @@ export function useLiveTranscription() {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const procRef = useRef<ScriptProcessorNode | null>(null);
+  const commitTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appendedRef = useRef(false);
   const finalRef = useRef("");
   const interimRef = useRef("");
 
   const cleanup = useCallback(() => {
+    if (commitTimerRef.current !== null) {
+      clearInterval(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
     try {
       procRef.current?.disconnect();
     } catch {
@@ -158,6 +164,7 @@ export function useLiveTranscription() {
 
         ws.onopen = () => {
           setStatus("recording");
+          appendedRef.current = false;
           source.connect(proc);
           proc.connect(sink);
           sink.connect(ctx.destination);
@@ -177,7 +184,16 @@ export function useLiveTranscription() {
                 audio: floatTo16BitPCMBase64(ch),
               }),
             );
+            appendedRef.current = true;
           };
+          // gpt-realtime-whisper has no server VAD — commit the buffer every
+          // ~1.5s so it actually transcribes segments (not just on stop).
+          commitTimerRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN && appendedRef.current) {
+              ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+              appendedRef.current = false;
+            }
+          }, 1500);
         };
 
         ws.onmessage = (ev: MessageEvent) => {

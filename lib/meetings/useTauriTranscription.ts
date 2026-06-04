@@ -122,7 +122,8 @@ export function useTauriTranscription() {
             captureSystem: true,
           },
         });
-        setStatus("recording");
+        // Stay "connecting" until Rust emits meeting-status connected (WS open),
+        // so a stuck "connecting…" surfaces a WebSocket that never connected.
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to start capture.");
         setStatus("error");
