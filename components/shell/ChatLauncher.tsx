@@ -10,6 +10,8 @@ export function ChatLauncher({
   configured: { anthropic: boolean; deepseek: boolean };
 }) {
   const [open, setOpen] = useState(false);
+  const [render, setRender] = useState(false); // stays mounted through slide-out
+  const [shown, setShown] = useState(false); // drives the slide transform
   const pathname = usePathname();
 
   useEffect(() => {
@@ -23,6 +25,20 @@ export function ChatLauncher({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Drive the docked-bar slide. On open: mount immediately, then flip `shown`
+  // on the next frame so the transform animates in from off-screen. On close:
+  // slide out first, then unmount once the transition has run.
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      const id = requestAnimationFrame(() => setShown(true));
+      return () => cancelAnimationFrame(id);
+    }
+    setShown(false);
+    const id = setTimeout(() => setRender(false), 200);
+    return () => clearTimeout(id);
+  }, [open]);
+
   // Hide where a chat surface already lives on the page: /chat is the chat
   // itself, and /office embeds a permanent Jarvis chatbox.
   if (pathname === "/chat" || pathname === "/office") return null;
@@ -31,7 +47,7 @@ export function ChatLauncher({
 
   return (
     <>
-      {!open && (
+      {!render && (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -64,28 +80,37 @@ export function ChatLauncher({
           </span>
         </button>
       )}
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-          style={{
-            paddingTop: "max(1rem, env(safe-area-inset-top))",
-            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-          }}
-        >
+      {render && (
+        <>
+          {/* Tap-scrim to close — only below lg, where the bar overlays page
+              content. On desktop the bar is docked and the page stays usable. */}
           <button
             type="button"
             aria-label="Close chat"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className={[
+              "fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-200 lg:hidden",
+              shown ? "opacity-100" : "opacity-0",
+            ].join(" ")}
           />
-          <div className="relative w-full max-w-3xl h-[85dvh] max-h-[800px] shadow-2xl">
+          <div
+            className={[
+              "fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] shadow-2xl shadow-black/40",
+              "transition-transform duration-200 ease-out",
+              shown ? "translate-x-0" : "translate-x-full",
+            ].join(" ")}
+            style={{
+              paddingTop: "env(safe-area-inset-top)",
+              paddingBottom: "env(safe-area-inset-bottom)",
+            }}
+          >
             <ChatPanel
               configured={configured}
               variant="drawer"
               onClose={() => setOpen(false)}
             />
           </div>
-        </div>
+        </>
       )}
     </>
   );

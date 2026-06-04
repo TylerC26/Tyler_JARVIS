@@ -104,7 +104,12 @@ export function ChatPanel({
   return (
     <div
       className={[
-        "flex flex-col h-full bg-base/95 rounded-md border border-edge overflow-hidden",
+        "flex flex-col h-full bg-base/95 overflow-hidden",
+        // Docked right-bar (launcher) is flush to the screen edge: no rounding,
+        // just a left divider. The page variant stays a rounded card.
+        variant === "drawer"
+          ? "border-l border-edge"
+          : "rounded-md border border-edge",
       ].join(" ")}
     >
       <header className="flex items-center justify-between border-b border-edge px-4 py-2.5">
