@@ -9,7 +9,10 @@
     "telegram:setup": "tsx scripts/setup-telegram-webhook.ts",
     "telegram:agent-bot": "tsx scripts/setup-telegram-agent-bot.ts",
     "agent:start": "tsx scripts/mac-agent/index.ts",
-    "agent:install": "tsx scripts/mac-agent/install.ts"
+    "agent:install": "tsx scripts/mac-agent/install.ts",
+    "desktop:dev": "cd desktop && PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
+    "desktop:build": "cd desktop && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
+    "desktop:icon": "cd desktop && tauri icon"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.76",
@@ -30,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

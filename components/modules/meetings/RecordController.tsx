@@ -195,13 +195,31 @@ function TauriRecorder() {
 }
 
 export function RecordController() {
-  // Runtime is only known client-side after mount; default to browser to avoid a
-  // hydration mismatch, then switch if we detect the Tauri shell.
-  const [runtime, setRuntime] = useState<"browser" | "tauri" | null>(null);
+  // Default to the browser recorder (also avoids a hydration mismatch), then
+  // upgrade to native if we detect the Tauri shell. On a remotely-loaded page
+  // Tauri injects window.__TAURI__ around load time, so a one-shot check at mount
+  // can miss it — poll briefly until it appears (or give up and stay browser).
+  const [runtime, setRuntime] = useState<"browser" | "tauri">("browser");
   useEffect(() => {
-    setRuntime(isTauriRuntime() ? "tauri" : "browser");
+    if (isTauriRuntime()) {
+      setRuntime("tauri");
+      return;
+    }
+    let cancelled = false;
+    let tries = 0;
+    const tick = () => {
+      if (cancelled) return;
+      if (isTauriRuntime()) {
+        setRuntime("tauri");
+      } else if (tries++ < 30) {
+        setTimeout(tick, 100); // retry for ~3s
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (runtime === null) return null;
   return runtime === "tauri" ? <TauriRecorder /> : <BrowserRecorder />;
 }
