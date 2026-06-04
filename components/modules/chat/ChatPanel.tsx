@@ -177,11 +177,13 @@ export function ChatPanel({
               setVersion((v) => v + 1);
             }}
           />
+          {/* Close affordance only matters for the below-lg slide-over; the
+              lg+ rail is permanent, so hide it there. */}
           {variant === "drawer" && onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="grid h-11 w-11 place-items-center rounded-sm border border-edge font-mono text-base leading-none text-fg-muted hover:text-fg active:bg-accent/15"
+              className="grid h-11 w-11 place-items-center rounded-sm border border-edge font-mono text-base leading-none text-fg-muted hover:text-fg active:bg-accent/15 lg:hidden"
               aria-label="Close"
             >
               ×
