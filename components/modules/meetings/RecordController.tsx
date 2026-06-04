@@ -15,6 +15,7 @@ type TranscriptionApi = {
   transcript: string;
   finalText: string;
   interim: string;
+  level: number;
   error: string | null;
   start: (language?: string) => Promise<void>;
   stop: () => Promise<string>;
@@ -89,10 +90,32 @@ type UiProps = {
   error: string | null;
   finalText: string;
   interim: string;
+  level: number;
   hint: string;
   onStart: () => void;
   onStop: () => void;
 };
+
+// Live input-level meter: shows that audio is actually being captured. `level`
+// is a 0..1 peak amplitude; speech sits low so we apply gain for visibility.
+function AudioMeter({ level }: { level: number }) {
+  const pct = Math.max(2, Math.min(100, Math.round(level * 180)));
+  const color =
+    pct > 80 ? "bg-danger" : pct > 45 ? "bg-warn" : "bg-success";
+  return (
+    <div className="flex items-center gap-2" aria-label="input level">
+      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-dim">
+        audio in
+      </span>
+      <div className="h-2 flex-1 rounded-sm bg-edge/50 overflow-hidden">
+        <div
+          className={`h-full ${color} transition-[width] duration-100`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function RecorderUI({
   status,
@@ -101,6 +124,7 @@ function RecorderUI({
   error,
   finalText,
   interim,
+  level,
   hint,
   onStart,
   onStop,
@@ -147,6 +171,8 @@ function RecorderUI({
         <p className="font-mono text-[11px] text-fg-dim leading-relaxed">{hint}</p>
       )}
 
+      {recording && <AudioMeter level={level} />}
+
       {(recording || finalText || interim) && (
         <LiveTranscript finalText={finalText} interim={interim} />
       )}
@@ -168,6 +194,7 @@ function BrowserRecorder() {
       error={ctl.error}
       finalText={tx.finalText}
       interim={tx.interim}
+      level={tx.level}
       hint="Records this device's mic and transcribes live. For virtual-call audio (the other participants), use the desktop app."
       onStart={ctl.start}
       onStop={ctl.stop}
@@ -187,6 +214,7 @@ function TauriRecorder() {
       error={ctl.error}
       finalText={tx.finalText}
       interim={tx.interim}
+      level={tx.level}
       hint="Captures your mic and system audio (Zoom/Teams and anything playing) natively, then transcribes live."
       onStart={ctl.start}
       onStop={ctl.stop}

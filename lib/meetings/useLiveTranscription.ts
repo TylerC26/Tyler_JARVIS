@@ -59,6 +59,7 @@ export function useLiveTranscription() {
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
+  const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -98,6 +99,7 @@ export function useLiveTranscription() {
       setError(null);
       setFinalText("");
       setInterim("");
+      setLevel(0);
       finalRef.current = "";
       interimRef.current = "";
       setStatus("connecting");
@@ -161,11 +163,19 @@ export function useLiveTranscription() {
           sink.connect(ctx.destination);
           proc.onaudioprocess = (e: AudioProcessingEvent) => {
             if (ws.readyState !== WebSocket.OPEN) return;
-            const pcm = floatTo16BitPCMBase64(
-              e.inputBuffer.getChannelData(0),
-            );
+            const ch = e.inputBuffer.getChannelData(0);
+            // Peak amplitude (0..1) for the live input-level meter.
+            let peak = 0;
+            for (let i = 0; i < ch.length; i++) {
+              const a = Math.abs(ch[i]);
+              if (a > peak) peak = a;
+            }
+            setLevel(peak);
             ws.send(
-              JSON.stringify({ type: "input_audio_buffer.append", audio: pcm }),
+              JSON.stringify({
+                type: "input_audio_buffer.append",
+                audio: floatTo16BitPCMBase64(ch),
+              }),
             );
           };
         };
@@ -223,6 +233,7 @@ export function useLiveTranscription() {
       }
     }
     cleanup();
+    setLevel(0);
     setStatus("idle");
     return [finalRef.current, interimRef.current]
       .filter(Boolean)
@@ -232,5 +243,5 @@ export function useLiveTranscription() {
 
   const transcript = (finalText + (interim ? ` ${interim}` : "")).trim();
 
-  return { status, transcript, finalText, interim, error, start, stop };
+  return { status, transcript, finalText, interim, level, error, start, stop };
 }

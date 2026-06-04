@@ -66,6 +66,10 @@ struct StatusPayload {
 struct ErrorPayload {
     message: String,
 }
+#[derive(Clone, Serialize)]
+struct LevelPayload {
+    level: f32,
+}
 
 pub struct Session {
     stop: Arc<AtomicBool>,
@@ -358,7 +362,10 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
             });
 
             // Sender: every 20 ms, mix a frame and append it to the input buffer.
+            // Also emit a throttled peak level (~every 100 ms) for the UI meter.
             let mut ticker = tokio::time::interval(Duration::from_millis(20));
+            let mut level_peak: f32 = 0.0;
+            let mut level_ticks: u32 = 0;
             loop {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -368,6 +375,22 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
                 if frame.is_empty() {
                     continue;
                 }
+
+                // Running peak amplitude (0..1) so the webview can show that
+                // audio is actually being captured.
+                let peak = frame
+                    .iter()
+                    .map(|s| (*s as i32).unsigned_abs() as f32)
+                    .fold(0.0_f32, f32::max)
+                    / 32768.0;
+                level_peak = level_peak.max(peak);
+                level_ticks += 1;
+                if level_ticks >= 5 {
+                    let _ = app.emit("meeting-level", LevelPayload { level: level_peak });
+                    level_peak = 0.0;
+                    level_ticks = 0;
+                }
+
                 let payload = format!(
                     "{{\"type\":\"input_audio_buffer.append\",\"audio\":\"{}\"}}",
                     pcm16_to_base64(&frame)

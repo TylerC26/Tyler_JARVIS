@@ -33,6 +33,7 @@ export function useTauriTranscription() {
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
+  const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const finalRef = useRef("");
@@ -55,6 +56,7 @@ export function useTauriTranscription() {
       setError(null);
       setFinalText("");
       setInterim("");
+      setLevel(0);
       finalRef.current = "";
       interimRef.current = "";
       setStatus("connecting");
@@ -106,7 +108,11 @@ export function useTauriTranscription() {
           const p = e.payload as { status?: string };
           if (p.status === "connected") setStatus("recording");
         });
-        unlistenRef.current = [unT, unE, unS];
+        const unL = await t.event.listen("meeting-level", (e) => {
+          const p = e.payload as { level?: number };
+          setLevel(typeof p.level === "number" ? p.level : 0);
+        });
+        unlistenRef.current = [unT, unE, unS, unL];
 
         await t.core.invoke("start_meeting_capture", {
           opts: {
@@ -135,6 +141,7 @@ export function useTauriTranscription() {
       /* noop */
     }
     cleanupListeners();
+    setLevel(0);
     setStatus("idle");
     return [finalRef.current, interimRef.current]
       .filter(Boolean)
@@ -144,5 +151,5 @@ export function useTauriTranscription() {
 
   const transcript = (finalText + (interim ? ` ${interim}` : "")).trim();
 
-  return { status, transcript, finalText, interim, error, start, stop };
+  return { status, transcript, finalText, interim, level, error, start, stop };
 }
