@@ -8,6 +8,7 @@ import {
   deleteMeetingAction,
 } from "@/app/(app)/meetings/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Meeting, MeetingStatus } from "@/lib/db/types";
@@ -64,10 +65,14 @@ export function MeetingsView({ initialMeetings }: Props) {
   }
 
   async function handleDelete(m: Meeting) {
-    if (!confirm(`Delete "${m.title || "untitled meeting"}"?`)) return;
+    const ok = await confirmDialog(
+      `Delete "${m.title || "untitled meeting"}"?`,
+      { title: "delete meeting", confirmText: "delete" },
+    );
+    if (!ok) return;
     const result = await deleteMeetingAction(m.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setMeetings((prev) => prev.filter((x) => x.id !== m.id));

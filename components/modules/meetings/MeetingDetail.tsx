@@ -8,6 +8,7 @@ import {
   renameMeetingAction,
 } from "@/app/(app)/meetings/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Meeting } from "@/lib/db/types";
 import { StatusPill, fmtAge, fmtDuration } from "./meetingUi";
@@ -31,10 +32,14 @@ export function MeetingDetail({ meeting: initial }: { meeting: Meeting }) {
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${meeting.title || "untitled meeting"}"?`)) return;
+    const ok = await confirmDialog(
+      `Delete "${meeting.title || "untitled meeting"}"?`,
+      { title: "delete meeting", confirmText: "delete" },
+    );
+    if (!ok) return;
     const r = await deleteMeetingAction(meeting.id);
     if (!r.ok) {
-      alert(r.error);
+      await alertDialog(r.error, { title: "delete failed" });
       return;
     }
     router.push("/meetings");

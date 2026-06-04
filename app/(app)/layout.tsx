@@ -1,6 +1,7 @@
 import { ChatLauncher } from "@/components/shell/ChatLauncher";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
+import { ConfirmHost } from "@/components/ui/ConfirmDialog";
 
 export default function AppLayout({
   children,
@@ -22,6 +23,7 @@ export default function AppLayout({
         </main>
       </div>
       <ChatLauncher configured={configured} />
+      <ConfirmHost />
     </div>
   );
 }
