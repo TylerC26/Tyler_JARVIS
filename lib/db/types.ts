@@ -24,6 +24,10 @@ export type ProjectStatus =
   | "shipped"
   | "archived";
 
+// Top-level bucket so the dashboard can separate day-job "work" projects from
+// "other" (side-hustle / personal) ventures. See migration 0042.
+export type ProjectCategory = "work" | "other";
+
 export type Project = {
   id: string;
   owner_id: string;
@@ -31,6 +35,7 @@ export type Project = {
   slug: string;
   description: string | null;
   status: ProjectStatus;
+  category: ProjectCategory;
   color: string | null;
   started_at: string | null;
   target_date: string | null;
@@ -710,6 +715,7 @@ export type Database = {
           slug: string;
           description?: string | null;
           status?: ProjectStatus;
+          category?: ProjectCategory;
           color?: string | null;
           started_at?: string | null;
           target_date?: string | null;

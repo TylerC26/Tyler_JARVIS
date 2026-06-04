@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createProjectAction } from "@/app/(app)/projects/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
@@ -9,9 +10,10 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
-import type { ProjectStatus } from "@/lib/db/types";
+import type { ProjectCategory, ProjectStatus } from "@/lib/db/types";
 
 type Filter = ProjectStatus | "all";
+type CategoryFilter = ProjectCategory | "all";
 
 const FILTER_TABS: { key: Filter; label: string }[] = [
   { key: "active", label: "Active" },
@@ -21,6 +23,22 @@ const FILTER_TABS: { key: Filter; label: string }[] = [
   { key: "archived", label: "Archived" },
   { key: "all", label: "All" },
 ];
+
+// Top-level section split. "All" is the projects home you return to.
+const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
+  { key: "work", label: "Work" },
+  { key: "other", label: "Others" },
+  { key: "all", label: "All" },
+];
+
+const CATEGORY_LABEL: Record<ProjectCategory, string> = {
+  work: "Work",
+  other: "Other",
+};
+
+function parseCategory(raw: string | null): CategoryFilter {
+  return raw === "work" || raw === "other" || raw === "all" ? raw : "all";
+}
 
 const STATUS_TONE: Record<ProjectStatus, "neutral" | "accent" | "success" | "warn"> = {
   idea: "neutral",
@@ -51,6 +69,10 @@ export function ProjectsDashboard({
 }: {
   initialProjects: ProjectSummary[];
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const category = parseCategory(searchParams.get("cat"));
+
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
   const [filter, setFilter] = useState<Filter>("active");
   const [open, setOpen] = useState(false);
@@ -61,8 +83,25 @@ export function ProjectsDashboard({
     setProjects(initialProjects);
   }, [initialProjects]);
 
+  // The category lives in the URL (?cat=work) so each section is linkable and
+  // "All" navigates back to the bare /projects home.
+  function selectCategory(next: CategoryFilter) {
+    router.replace(next === "all" ? "/projects" : `/projects?cat=${next}`, {
+      scroll: false,
+    });
+  }
+
+  const byCategory =
+    category === "all"
+      ? projects
+      : projects.filter((p) => p.category === category);
   const filtered =
-    filter === "all" ? projects : projects.filter((p) => p.status === filter);
+    filter === "all"
+      ? byCategory
+      : byCategory.filter((p) => p.status === filter);
+
+  const sectionLabel =
+    category === "all" ? "all ventures" : `${CATEGORY_LABEL[category]} projects`;
 
   async function onCreate(formData: FormData) {
     setError(null);
@@ -74,6 +113,7 @@ export function ProjectsDashboard({
           ((formData.get("description") as string | null)?.trim() || null) ??
           null,
         status: (formData.get("status") as ProjectStatus) ?? "active",
+        category: (formData.get("category") as ProjectCategory) ?? "other",
         target_date:
           ((formData.get("target_date") as string | null)?.trim() || null) ??
           null,
@@ -113,13 +153,44 @@ export function ProjectsDashboard({
       <PageHeader
         code="PRJ"
         title="Projects"
-        subtitle="side-business dashboard · tasks + milestones per venture"
+        subtitle={`${sectionLabel} · tasks + milestones per venture`}
         actions={
           <Button variant="primary" onClick={() => setOpen(true)}>
             + NEW PROJECT
           </Button>
         }
       />
+
+      {/* Top-level section split: Work vs Others. "All" is the home view. */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-1 rounded-md border border-edge bg-surface/40 p-1">
+          {CATEGORY_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => selectCategory(t.key)}
+              className={[
+                "rounded-sm px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors",
+                category === t.key
+                  ? "bg-accent/15 text-accent"
+                  : "text-fg-muted hover:text-fg",
+              ].join(" ")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {category !== "all" && (
+          <button
+            type="button"
+            onClick={() => selectCategory("all")}
+            className="whitespace-nowrap font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent"
+          >
+            ← all projects
+          </button>
+        )}
+      </div>
 
       <div className="mb-4 flex items-center gap-1 border-b border-edge overflow-x-auto">
         {FILTER_TABS.map((t) => (
@@ -199,6 +270,15 @@ export function ProjectsDashboard({
               rows={3}
             />
           </Field>
+          <Field label="Category" hint="work projects vs other ventures">
+            <Select
+              name="category"
+              defaultValue={category === "all" ? "other" : category}
+            >
+              <option value="work">Work</option>
+              <option value="other">Others</option>
+            </Select>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
               <Select name="status" defaultValue="active">
@@ -263,12 +343,17 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         </StatusBadge>
       </div>
 
-      <div className="pl-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-        {since !== null
-          ? `${since}d in flight`
-          : project.target_date
-            ? `target ${fmtDate(project.target_date)}`
-            : "no dates set"}
+      <div className="flex items-center gap-2 pl-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+        <span className="rounded-sm border border-edge px-1.5 py-0.5 text-fg-muted">
+          {CATEGORY_LABEL[project.category]}
+        </span>
+        <span>
+          {since !== null
+            ? `${since}d in flight`
+            : project.target_date
+              ? `target ${fmtDate(project.target_date)}`
+              : "no dates set"}
+        </span>
       </div>
 
       <ProgressRow

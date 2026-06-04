@@ -1,12 +1,18 @@
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import type { Project, ProjectMilestone, ProjectStatus } from "@/lib/db/types";
+import type {
+  Project,
+  ProjectCategory,
+  ProjectMilestone,
+  ProjectStatus,
+} from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
 
 export type CreateProjectInput = {
   name: string;
   description?: string | null;
   status?: ProjectStatus;
+  category?: ProjectCategory;
   color?: string | null;
   started_at?: string | null;
   target_date?: string | null;
@@ -21,6 +27,7 @@ export type UpdateProjectInput = Partial<
     | "name"
     | "description"
     | "status"
+    | "category"
     | "color"
     | "started_at"
     | "target_date"
@@ -77,7 +84,10 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 export async function listProjectsCore(
-  opts: { status?: ProjectStatus | "all" } = {},
+  opts: {
+    status?: ProjectStatus | "all";
+    category?: ProjectCategory | "all";
+  } = {},
 ): Promise<Project[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
@@ -88,6 +98,8 @@ export async function listProjectsCore(
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
   if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.category && opts.category !== "all")
+    q = q.eq("category", opts.category);
   const { data } = await q;
   return (data as Project[] | null) ?? [];
 }
@@ -160,6 +172,7 @@ export async function createProjectCore(
       slug,
       description: input.description ?? null,
       status: input.status ?? "active",
+      category: input.category ?? "other",
       color: input.color ?? null,
       started_at: input.started_at ?? null,
       target_date: input.target_date ?? null,
@@ -190,6 +203,7 @@ export async function updateProjectCore(
   }
   if (patch.description !== undefined) updates.description = patch.description;
   if (patch.status !== undefined) updates.status = patch.status;
+  if (patch.category !== undefined) updates.category = patch.category;
   if (patch.color !== undefined) updates.color = patch.color;
   if (patch.started_at !== undefined) updates.started_at = patch.started_at;
   if (patch.target_date !== undefined) updates.target_date = patch.target_date;

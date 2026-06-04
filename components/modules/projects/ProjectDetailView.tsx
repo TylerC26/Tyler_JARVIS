@@ -17,7 +17,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectTaskBoard } from "./ProjectTaskBoard";
 import { RoadmapStrip } from "./RoadmapStrip";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
-import type { ProjectMilestone, ProjectStatus, Task } from "@/lib/db/types";
+import type {
+  ProjectCategory,
+  ProjectMilestone,
+  ProjectStatus,
+  Task,
+} from "@/lib/db/types";
 
 const STATUS_OPTIONS: ProjectStatus[] = [
   "idea",
@@ -128,6 +133,7 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         name: ((formData.get("name") as string | null) ?? "").trim(),
         description: ((formData.get("description") as string | null) ?? "").trim() || null,
         status: (formData.get("status") as ProjectStatus) ?? project.status,
+        category: (formData.get("category") as ProjectCategory) ?? project.category,
         started_at: ((formData.get("started_at") as string | null) ?? "").trim() || null,
         target_date: ((formData.get("target_date") as string | null) ?? "").trim() || null,
         color: ((formData.get("color") as string | null) ?? "").trim() || null,
@@ -370,6 +376,12 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           </Field>
           <Field label="Description">
             <Textarea name="description" rows={3} defaultValue={project.description ?? ""} />
+          </Field>
+          <Field label="Category" hint="work projects vs other ventures">
+            <Select name="category" defaultValue={project.category}>
+              <option value="work">Work</option>
+              <option value="other">Others</option>
+            </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
