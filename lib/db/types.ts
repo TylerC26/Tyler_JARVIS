@@ -375,39 +375,6 @@ export type Note = {
   updated_at: string | null;
 };
 
-// Meetings: live-transcribed meetings captured by the desktop app (native audio
-// via Tauri) or the browser mic, then summarized into a note + memory on stop.
-// status drives the UI state machine; source records which capture path made it.
-// Both are soft enums (no DB CHECK, cf. PLACE_CATEGORIES) so new values ship
-// without a migration.
-export const MEETING_STATUSES = [
-  "recording",
-  "transcribing",
-  "summarizing",
-  "done",
-  "failed",
-] as const;
-export type MeetingStatus = (typeof MEETING_STATUSES)[number];
-
-export type MeetingSource = "desktop" | "browser" | "upload";
-
-export type Meeting = {
-  id: string;
-  owner_id: string;
-  title: string;
-  status: MeetingStatus;
-  source: MeetingSource;
-  started_at: string;
-  ended_at: string | null;
-  duration_ms: number | null;
-  transcript: string;
-  summary: string;
-  note_id: string | null;
-  recording_url: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
 // Places: spots (restaurants/cafes/bars/activities) Tyler wants to visit,
 // captured from forwarded Instagram/Threads posts or added manually. The DB
 // does not constrain category/source/status — these tuples are the single
@@ -964,27 +931,6 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<Note>;
-        Relationships: [];
-      };
-      meetings: {
-        Row: Meeting;
-        Insert: {
-          id?: string;
-          owner_id: string;
-          title?: string;
-          status?: MeetingStatus;
-          source?: MeetingSource;
-          started_at?: string;
-          ended_at?: string | null;
-          duration_ms?: number | null;
-          transcript?: string;
-          summary?: string;
-          note_id?: string | null;
-          recording_url?: string | null;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Update: Partial<Meeting>;
         Relationships: [];
       };
       places: {
