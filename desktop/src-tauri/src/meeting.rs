@@ -154,6 +154,27 @@ fn push_capped(q: &Queue, samples: &[i16]) {
     }
 }
 
+// Track the loudest sample seen since the last meter emit. Updated directly by
+// the capture callbacks so the level reflects raw mic/system audio, independent
+// of whether the OpenAI WebSocket connected.
+type Level = Arc<Mutex<f32>>;
+
+fn update_peak(level: &Level, samples: &[i16]) {
+    let mut peak = 0.0_f32;
+    for s in samples {
+        let a = (*s as i32).unsigned_abs() as f32 / 32768.0;
+        if a > peak {
+            peak = a;
+        }
+    }
+    if peak > 0.0 {
+        let mut g = level.lock().unwrap();
+        if peak > *g {
+            *g = peak;
+        }
+    }
+}
+
 fn pop_n(q: &Queue, n: usize) -> Vec<i16> {
     let mut g = q.lock().unwrap();
     let take = n.min(g.len());
@@ -186,7 +207,7 @@ fn pcm16_to_base64(frame: &[i16]) -> String {
 
 // ---------- capture threads ----------
 
-fn run_mic(q: Queue, stop: Arc<AtomicBool>) -> Result<(), String> {
+fn run_mic(q: Queue, level: Level, stop: Arc<AtomicBool>) -> Result<(), String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     let host = cpal::default_host();
     let device = host
@@ -203,11 +224,14 @@ fn run_mic(q: Queue, stop: Arc<AtomicBool>) -> Result<(), String> {
     let stream = match supported.sample_format() {
         cpal::SampleFormat::F32 => {
             let q = q.clone();
+            let level = level.clone();
             device.build_input_stream(
                 &config,
                 move |data: &[f32], _: &_| {
                     let mono = downmix_interleaved(data, channels);
-                    push_capped(&q, &resample_to_i16(&mono, in_rate));
+                    let pcm = resample_to_i16(&mono, in_rate);
+                    update_peak(&level, &pcm);
+                    push_capped(&q, &pcm);
                 },
                 err_fn,
                 None,
@@ -215,12 +239,15 @@ fn run_mic(q: Queue, stop: Arc<AtomicBool>) -> Result<(), String> {
         }
         cpal::SampleFormat::I16 => {
             let q = q.clone();
+            let level = level.clone();
             device.build_input_stream(
                 &config,
                 move |data: &[i16], _: &_| {
                     let f: Vec<f32> = data.iter().map(|s| *s as f32 / 32768.0).collect();
                     let mono = downmix_interleaved(&f, channels);
-                    push_capped(&q, &resample_to_i16(&mono, in_rate));
+                    let pcm = resample_to_i16(&mono, in_rate);
+                    update_peak(&level, &pcm);
+                    push_capped(&q, &pcm);
                 },
                 err_fn,
                 None,
@@ -238,14 +265,17 @@ fn run_mic(q: Queue, stop: Arc<AtomicBool>) -> Result<(), String> {
     Ok(())
 }
 
-fn run_system(q: Queue, stop: Arc<AtomicBool>) -> Result<(), String> {
+fn run_system(q: Queue, level: Level, stop: Arc<AtomicBool>) -> Result<(), String> {
     use ruhear::{rucallback, RUBuffers, RUHear};
     let q2 = q.clone();
+    let level2 = level.clone();
     // ruhear delivers 48 kHz multichannel f32 on macOS (RUBuffers = Vec<Vec<f32>>,
     // one Vec per channel). rucallback! wraps the closure in Arc<Mutex<…>>;
     // RUHear::new takes that.
     let cb = rucallback!(move |data: RUBuffers| {
-        push_capped(&q2, &downmix_resample_planar(&data, 48_000));
+        let pcm = downmix_resample_planar(&data, 48_000);
+        update_peak(&level2, &pcm);
+        push_capped(&q2, &pcm);
     });
     let mut rh = RUHear::new(cb);
     let _ = rh.start();
@@ -362,10 +392,7 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
             });
 
             // Sender: every 20 ms, mix a frame and append it to the input buffer.
-            // Also emit a throttled peak level (~every 100 ms) for the UI meter.
             let mut ticker = tokio::time::interval(Duration::from_millis(20));
-            let mut level_peak: f32 = 0.0;
-            let mut level_ticks: u32 = 0;
             loop {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -375,22 +402,6 @@ fn spawn_ws(app: AppHandle, opts_token: String, ws_url: String, sys_q: Queue, mi
                 if frame.is_empty() {
                     continue;
                 }
-
-                // Running peak amplitude (0..1) so the webview can show that
-                // audio is actually being captured.
-                let peak = frame
-                    .iter()
-                    .map(|s| (*s as i32).unsigned_abs() as f32)
-                    .fold(0.0_f32, f32::max)
-                    / 32768.0;
-                level_peak = level_peak.max(peak);
-                level_ticks += 1;
-                if level_ticks >= 5 {
-                    let _ = app.emit("meeting-level", LevelPayload { level: level_peak });
-                    level_peak = 0.0;
-                    level_ticks = 0;
-                }
-
                 let payload = format!(
                     "{{\"type\":\"input_audio_buffer.append\",\"audio\":\"{}\"}}",
                     pcm16_to_base64(&frame)
@@ -429,6 +440,9 @@ pub fn start_meeting_capture(
     let stop = Arc::new(AtomicBool::new(false));
     let sys_q: Queue = Arc::new(Mutex::new(VecDeque::new()));
     let mic_q: Queue = Arc::new(Mutex::new(VecDeque::new()));
+    // Shared peak amplitude, updated by the capture callbacks and emitted to the
+    // UI by its own thread below — independent of the WebSocket.
+    let level: Level = Arc::new(Mutex::new(0.0_f32));
 
     spawn_ws(
         app.clone(),
@@ -439,22 +453,44 @@ pub fn start_meeting_capture(
         stop.clone(),
     );
 
-    if opts.capture_mic {
-        let q = mic_q.clone();
+    // Input-level meter: emit the peak-since-last-tick every 100 ms so the user
+    // can see audio is being captured even before captions (or if the WS fails).
+    {
+        let level = level.clone();
         let stop = stop.clone();
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(e) = run_mic(q, stop) {
+            while !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(100));
+                let v = {
+                    let mut g = level.lock().unwrap();
+                    let v = *g;
+                    *g = 0.0;
+                    v
+                };
+                let _ = app.emit("meeting-level", LevelPayload { level: v });
+            }
+        });
+    }
+
+    if opts.capture_mic {
+        let q = mic_q.clone();
+        let level = level.clone();
+        let stop = stop.clone();
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Err(e) = run_mic(q, level, stop) {
                 emit_error(&app, format!("mic: {e}"));
             }
         });
     }
     if opts.capture_system {
         let q = sys_q.clone();
+        let level = level.clone();
         let stop = stop.clone();
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(e) = run_system(q, stop) {
+            if let Err(e) = run_system(q, level, stop) {
                 emit_error(&app, format!("system audio: {e}"));
             }
         });
