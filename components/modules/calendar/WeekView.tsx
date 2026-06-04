@@ -71,7 +71,13 @@ export function WeekView({
   );
 
   function handleSlotClick(day: Date, e: React.MouseEvent<HTMLDivElement>) {
-    const colRect = e.currentTarget.getBoundingClientRect();
+    // Measure relative to the day column, not e.currentTarget: the click
+    // usually lands on an hour-gridline child whose rect spans only that one
+    // hour, so its top would make timeForY think every click is in the first
+    // visible hour. closest("[data-day]") resolves to the column either way.
+    const col = e.currentTarget.closest<HTMLElement>("[data-day]");
+    if (!col) return;
+    const colRect = col.getBoundingClientRect();
     const y = e.clientY - colRect.top;
     const time = timeForY(y, day);
     onCreateAt(time);
