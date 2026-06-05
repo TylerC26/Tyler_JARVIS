@@ -19,6 +19,9 @@ type Props = {
   activeAgent: ActiveAgent | null;
   initialMessages: JarvisUIMessage[];
   configured: { anthropic: boolean; deepseek: boolean };
+  // Seeded message (e.g. from a calendar "take notes" deep-link) the active
+  // panel should auto-send once on mount. Main Jarvis thread only.
+  initialPrompt?: string | null;
 };
 
 const ACCENT = "#00d9ff";
@@ -28,6 +31,7 @@ export function ChatWorkspace({
   activeAgent,
   initialMessages,
   configured,
+  initialPrompt = null,
 }: Props) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -97,6 +101,7 @@ export function ChatWorkspace({
           configured={configured}
           variant="page"
           agent={activeAgent}
+          initialPrompt={initialPrompt}
         />
       </div>
     </div>

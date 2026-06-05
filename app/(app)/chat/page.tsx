@@ -10,13 +10,13 @@ export const dynamic = "force-dynamic";
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ agent?: string }>;
+  searchParams: Promise<{ agent?: string; prompt?: string }>;
 }) {
   // Seed the default agents on first ever load so the sidebar is never empty
   // (mirrors the /agents page — idempotent, no-ops once any agent exists).
   await seedDefaultAgentsCore();
 
-  const [{ agent: agentParam }, agents] = await Promise.all([
+  const [{ agent: agentParam, prompt: promptParam }, agents] = await Promise.all([
     searchParams,
     listActiveAgents(),
   ]);
@@ -71,6 +71,10 @@ export default async function ChatPage({
         }
         initialMessages={initialMessages}
         configured={configured}
+        // A "take notes" deep-link from a calendar work event lands here with a
+        // seeded kick-off message that auto-sends into the active thread
+        // (Claudia / work-assistant, set via the agent param on the same link).
+        initialPrompt={promptParam ?? null}
       />
     </div>
   );

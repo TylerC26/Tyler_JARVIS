@@ -18,6 +18,9 @@ type Props = {
   // When set, this panel is a direct sub-agent thread rather than main Jarvis:
   // turns stream against the agent's own prompt + tools, no classifier routing.
   agent?: ActiveAgent | null;
+  // Seeded message to auto-send once on mount (e.g. a calendar "take notes"
+  // deep-link). Ignored for sub-agent threads.
+  initialPrompt?: string | null;
 };
 
 type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
@@ -28,6 +31,7 @@ export function ChatPanel({
   variant = "page",
   onClose,
   agent = null,
+  initialPrompt = null,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
@@ -82,6 +86,24 @@ export function ChatPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [variant, onClose]);
+
+  // Auto-send a seeded kick-off message exactly once when arriving via a
+  // deep-link (e.g. a calendar work event's "take notes" button →
+  // /chat?agent=work-assistant&prompt=…). Works for whichever thread the link
+  // targets (main or a sub-agent like Claudia), and only once a model is
+  // actually configured. After firing, strip just the prompt param — keeping
+  // the agent param — so a refresh/back-nav doesn't replay it but still lands
+  // on the right thread.
+  const kickoffSent = useRef(false);
+  useEffect(() => {
+    if (kickoffSent.current) return;
+    if (!initialPrompt || inputDisabled) return;
+    kickoffSent.current = true;
+    sendMessage({ text: initialPrompt });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("prompt");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [initialPrompt, inputDisabled, sendMessage]);
 
   // When a chat turn finishes (status transitions out of streaming/submitted),
   // call router.refresh() so any server components on the current route
