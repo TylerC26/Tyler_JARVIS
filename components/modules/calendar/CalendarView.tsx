@@ -14,7 +14,13 @@ import {
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CategoryKey } from "@/lib/calendar/categories";
 import { monthRange, weekRange } from "@/lib/calendar/grid";
-import type { Event, WifeShift, WifeShiftCode } from "@/lib/db/types";
+import type {
+  Event,
+  WfhStatus,
+  WfhStatusCode,
+  WifeShift,
+  WifeShiftCode,
+} from "@/lib/db/types";
 import { CalendarToolbar, type ViewMode } from "./CalendarToolbar";
 import { EventDrawer } from "./EventDrawer";
 import type { EventFormValues } from "./EventForm";
@@ -24,6 +30,7 @@ import { WeekView } from "./WeekView";
 import { WifeRosterUploader } from "./WifeRosterUploader";
 
 export type WifeShiftMap = Record<string, WifeShiftCode>;
+export type WfhStatusMap = Record<string, WfhStatusCode>;
 
 type DrawerState =
   | { kind: "closed" }
@@ -33,6 +40,7 @@ type DrawerState =
 type Props = {
   initialEvents: Event[];
   initialWifeShifts: WifeShift[];
+  initialWfhStatus: WfhStatus[];
   initialCursor: string;
   visionEnabled: boolean;
 };
@@ -43,15 +51,25 @@ function toShiftMap(shifts: WifeShift[]): WifeShiftMap {
   return out;
 }
 
+function toWfhMap(rows: WfhStatus[]): WfhStatusMap {
+  const out: WfhStatusMap = {};
+  for (const r of rows) out[r.status_date] = r.status;
+  return out;
+}
+
 export function CalendarView({
   initialEvents,
   initialWifeShifts,
+  initialWfhStatus,
   initialCursor,
   visionEnabled,
 }: Props) {
   const [events, setEvents] = useState<Event[]>(initialEvents);
   const [wifeShifts, setWifeShifts] = useState<WifeShiftMap>(() =>
     toShiftMap(initialWifeShifts),
+  );
+  const [wfhStatus, setWfhStatus] = useState<WfhStatusMap>(() =>
+    toWfhMap(initialWfhStatus),
   );
   const [cursor, setCursor] = useState<Date>(() => new Date(initialCursor));
   const [view, setView] = useState<ViewMode>("week");
@@ -69,23 +87,27 @@ export function CalendarView({
     const rangeStart = view === "month" ? addDays(start, -7) : start;
     const rangeEnd = view === "month" ? addDays(end, 7) : end;
     (async () => {
-      const { events: nextEvents, wifeShifts: nextShifts } =
-        await listCalendarRangeAction(
-          rangeStart.toISOString(),
-          rangeEnd.toISOString(),
-          format(rangeStart, "yyyy-MM-dd"),
-          format(rangeEnd, "yyyy-MM-dd"),
-        );
+      const {
+        events: nextEvents,
+        wifeShifts: nextShifts,
+        wfhStatus: nextWfh,
+      } = await listCalendarRangeAction(
+        rangeStart.toISOString(),
+        rangeEnd.toISOString(),
+        format(rangeStart, "yyyy-MM-dd"),
+        format(rangeEnd, "yyyy-MM-dd"),
+      );
       if (cancelled) return;
       setEvents(nextEvents);
       setWifeShifts(toShiftMap(nextShifts));
+      setWfhStatus(toWfhMap(nextWfh));
     })().catch((err) => {
       console.error("[calendar] range fetch failed:", err);
     });
     return () => {
       cancelled = true;
     };
-  }, [cursor, view, initialEvents, initialWifeShifts]);
+  }, [cursor, view, initialEvents, initialWifeShifts, initialWfhStatus]);
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "closed" });
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [drawerPending, setDrawerPending] = useState(false);
@@ -238,6 +260,7 @@ export function CalendarView({
           cursor={cursor}
           events={events}
           wifeShifts={wifeShifts}
+          wfhStatus={wfhStatus}
           onSelectEvent={openEdit}
           onCreateAt={openCreateAt}
           onMove={handleMove}
@@ -247,6 +270,7 @@ export function CalendarView({
           cursor={cursor}
           events={events}
           wifeShifts={wifeShifts}
+          wfhStatus={wfhStatus}
           onSelectEvent={openEdit}
           onCreateAt={openCreateAt}
         />

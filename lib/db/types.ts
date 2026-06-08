@@ -10,6 +10,7 @@ export type Task = {
   description: string | null;
   status: TaskStatus;
   priority: number;
+  important: boolean;
   due_at: string | null;
   completed_at: string | null;
   project_id: string | null;
@@ -97,6 +98,31 @@ export type WifeShift = {
   shift_date: string; // YYYY-MM-DD
   code: WifeShiftCode;
   raw_label: string | null;
+  note: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
+// Tyler's per-day work location, shown as a calendar day-header badge. Set by
+// the assistant agent via the set_wfh_status / clear_wfh_status tools.
+//   wfh    = Working from home
+//   office = In the office
+//   pto    = Paid time off / leave
+//   out    = Out of office (travelling, offsite, away)
+export type WfhStatusCode = "wfh" | "office" | "pto" | "out";
+
+export const WFH_STATUS_CODES: WfhStatusCode[] = [
+  "wfh",
+  "office",
+  "pto",
+  "out",
+];
+
+export type WfhStatus = {
+  owner_id: string;
+  status_date: string; // YYYY-MM-DD
+  status: WfhStatusCode;
   note: string | null;
   source: string;
   created_at: string;
@@ -560,6 +586,7 @@ export type Database = {
           description?: string | null;
           status?: TaskStatus;
           priority?: number;
+          important?: boolean;
           due_at?: string | null;
           completed_at?: string | null;
           project_id?: string | null;
@@ -605,6 +632,20 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<WifeShift>;
+        Relationships: [];
+      };
+      wfh_status: {
+        Row: WfhStatus;
+        Insert: {
+          owner_id: string;
+          status_date: string;
+          status: WfhStatusCode;
+          note?: string | null;
+          source?: string;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<WfhStatus>;
         Relationships: [];
       };
       skills: {

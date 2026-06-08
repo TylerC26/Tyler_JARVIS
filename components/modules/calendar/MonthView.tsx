@@ -10,13 +10,15 @@ import {
   spansMultipleDays,
 } from "@/lib/calendar/grid";
 import type { Event } from "@/lib/db/types";
-import type { WifeShiftMap } from "./CalendarView";
+import type { WfhStatusMap, WifeShiftMap } from "./CalendarView";
+import { WfhStatusBadge } from "./WfhStatusBadge";
 import { WifeShiftBadge } from "./WifeShiftBadge";
 
 type Props = {
   cursor: Date;
   events: Event[];
   wifeShifts: WifeShiftMap;
+  wfhStatus: WfhStatusMap;
   onSelectEvent: (event: Event) => void;
   onCreateAt: (starts_at: Date) => void;
 };
@@ -30,6 +32,7 @@ export function MonthView({
   cursor,
   events,
   wifeShifts,
+  wfhStatus,
   onSelectEvent,
   onCreateAt,
 }: Props) {
@@ -102,19 +105,24 @@ export function MonthView({
                         inMonth ? "bg-transparent" : "bg-surface-2/30 text-fg-dim",
                       ].join(" ")}
                     >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={[
-                            "font-mono text-[11px] tabular",
-                            isToday(day)
-                              ? "rounded-sm bg-accent/20 text-accent px-1"
-                              : inMonth
-                                ? "text-fg"
-                                : "text-fg-dim",
-                          ].join(" ")}
-                        >
-                          {format(day, "d")}
-                        </span>
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex min-w-0 items-center gap-1">
+                          <span
+                            className={[
+                              "font-mono text-[11px] tabular",
+                              isToday(day)
+                                ? "rounded-sm bg-accent/20 text-accent px-1"
+                                : inMonth
+                                  ? "text-fg"
+                                  : "text-fg-dim",
+                            ].join(" ")}
+                          >
+                            {format(day, "d")}
+                          </span>
+                          <WfhStatusBadge
+                            status={wfhStatus[format(day, "yyyy-MM-dd")]}
+                          />
+                        </div>
                         <WifeShiftBadge
                           code={wifeShifts[format(day, "yyyy-MM-dd")]}
                         />

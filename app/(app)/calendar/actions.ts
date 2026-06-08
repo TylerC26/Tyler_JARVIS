@@ -17,6 +17,7 @@ import {
   type WifeShiftInput,
 } from "@/lib/db/core/wife-shifts";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
+import { listWfhStatusInRangeCore } from "@/lib/db/core/wfh-status";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/lib/db/types";
 
@@ -141,9 +142,10 @@ export async function listCalendarRangeAction(
   startDate: string,
   endDate: string,
 ) {
-  const [events, wifeShifts] = await Promise.all([
+  const [events, wifeShifts, wfhStatus] = await Promise.all([
     listEventsInRangeCore(startIso, endIso),
     listWifeShiftsInRangeCore(startDate, endDate),
+    listWfhStatusInRangeCore(startDate, endDate),
   ]);
-  return { events, wifeShifts };
+  return { events, wifeShifts, wfhStatus };
 }

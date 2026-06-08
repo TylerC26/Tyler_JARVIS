@@ -7,6 +7,7 @@ import type {
   AiSuggestionKind,
   Event,
   Task,
+  WfhStatus,
   WifeShift,
 } from "@/lib/db/types";
 
@@ -31,6 +32,9 @@ export type AIContext = {
   };
   wifeShifts: {
     next21: WifeShift[]; // upcoming 21 days inclusive of today
+  };
+  wfhStatus: {
+    next21: WfhStatus[]; // upcoming 21 days inclusive of today
   };
   events: {
     today: Event[]; // owner-local calendar events for forDate, sorted by starts_at

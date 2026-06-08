@@ -90,6 +90,7 @@ Today's date and time will be in the conversation context as the most recent use
 The user-context system message ALSO pre-loads on every turn:
 - the user's open tasks (titles, priority, due dates, overdue flag) — capped at 15 for prompt-length reasons
 - the wife's next 21 days of shifts
+- Tyler's work location (WFH) status for the next 21 days, where set
 - ALL calendar events in the next 28 days (including ones currently in progress), with start/end times in the user's local timezone — capped at 30
 
 SCHEDULING — BEFORE you propose any time, suggest moving an event, or answer "when am I free", you MUST read the Calendar block in the prefix and check for conflicts. Treat every event there as a hard block on that time range. If two events overlap, surface that. If the user asks for a free slot, scan the block for gaps. NEVER invent a time without checking. If the user is asking about a date beyond the 28-day window, THEN call list_events_in_range — otherwise the prefix is authoritative.
@@ -136,6 +137,7 @@ import {
 } from "@/lib/db/queries/projects";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
+import { listUpcomingWfhStatus } from "@/lib/db/queries/wfh-status";
 import type { Agent, Event, MemoryEntry, Task } from "@/lib/db/types";
 import { renderSkillsBlock, resolveActiveSkillsForTurn } from "./skills";
 
@@ -418,11 +420,15 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     now.getTime() + EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [shifts, tasks, events, projects, agents, memories] =
+  const [shifts, wfhRows, tasks, events, projects, agents, memories] =
     await Promise.all([
       listUpcomingWifeShifts(21).catch((e) => {
         console.warn("[chat] could not load wife shifts:", e);
         return [] as Awaited<ReturnType<typeof listUpcomingWifeShifts>>;
+      }),
+      listUpcomingWfhStatus(21).catch((e) => {
+        console.warn("[chat] could not load WFH status:", e);
+        return [] as Awaited<ReturnType<typeof listUpcomingWfhStatus>>;
       }),
       listTasks().catch((e) => {
         console.warn("[chat] could not load tasks:", e);
@@ -466,6 +472,25 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     }
   } catch (e) {
     console.warn("[chat] could not render wife shifts for context prefix:", e);
+  }
+
+  let wfhPart = "";
+  try {
+    if (wfhRows.length > 0) {
+      const compact = wfhRows
+        .map((r) => {
+          const dow = new Date(
+            `${r.status_date}T12:00:00`,
+          ).toLocaleDateString("en-US", { weekday: "short" });
+          return `${r.status_date} ${dow}=${r.status}`;
+        })
+        .join(" · ");
+      wfhPart = `\n\nTyler's work location (next 21d): ${compact}\nStatus codes: wfh = working from home · office = in the office · pto = paid time off / leave · out = out of office (travelling / away).\nThese are pre-loaded — don't call a tool to read the next 21 days. Set or change them with set_wfh_status, or clear them with clear_wfh_status.`;
+    } else {
+      wfhPart = `\n\nTyler's work location (next 21d): none on file. Set it with set_wfh_status when he tells you where he's working (e.g. "I'm WFH tomorrow").`;
+    }
+  } catch (e) {
+    console.warn("[chat] could not render WFH status for context prefix:", e);
   }
 
   let eventsPart = "";
@@ -531,6 +556,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     tasksPart +
     projectsPart +
     shiftsPart +
+    wfhPart +
     agentsPart +
     skillsPart +
     addendumPart

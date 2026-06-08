@@ -17,15 +17,17 @@ import {
 import { layoutDayEvents, type LaidOutEvent } from "@/lib/calendar/layout";
 import type { Event } from "@/lib/db/types";
 import { AllDayStrip } from "./AllDayStrip";
-import type { WifeShiftMap } from "./CalendarView";
+import type { WfhStatusMap, WifeShiftMap } from "./CalendarView";
 import { EventBlock } from "./EventBlock";
 import { useDragReschedule } from "./hooks/useDragReschedule";
+import { WfhStatusBadge } from "./WfhStatusBadge";
 import { WifeShiftBadge } from "./WifeShiftBadge";
 
 type Props = {
   cursor: Date;
   events: Event[];
   wifeShifts: WifeShiftMap;
+  wfhStatus: WfhStatusMap;
   onSelectEvent: (event: Event) => void;
   onCreateAt: (starts_at: Date) => void;
   onMove: (id: string, starts: string, ends: string) => Promise<void>;
@@ -35,6 +37,7 @@ export function WeekView({
   cursor,
   events,
   wifeShifts,
+  wfhStatus,
   onSelectEvent,
   onCreateAt,
   onMove,
@@ -115,7 +118,9 @@ export function WeekView({
         >
           <div />
           {days.map((day, i) => {
-            const shift = wifeShifts[format(day, "yyyy-MM-dd")];
+            const key = format(day, "yyyy-MM-dd");
+            const shift = wifeShifts[key];
+            const wfh = wfhStatus[key];
             return (
               <div
                 key={i}
@@ -129,10 +134,14 @@ export function WeekView({
                   {day.getDate()}
                 </div>
                 {/* Always reserve the badge slot so date numbers line up
-                    across the week even when only some days carry a shift. */}
-                <div className="mt-1 flex h-[16px] justify-center items-center">
-                  {shift ? (
-                    <WifeShiftBadge code={shift} />
+                    across the week even when a day carries no badges. WFH (my
+                    work location) sits above the wife's shift. */}
+                <div className="mt-1 flex min-h-[16px] flex-wrap justify-center items-center gap-0.5">
+                  {wfh || shift ? (
+                    <>
+                      <WfhStatusBadge status={wfh} />
+                      <WifeShiftBadge code={shift} />
+                    </>
                   ) : (
                     <span className="invisible">·</span>
                   )}

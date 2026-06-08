@@ -81,10 +81,17 @@ import {
 import { createSkillCore } from "@/lib/db/core/skills";
 import { searchChatMessagesCore } from "@/lib/db/core/chat-search";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
+import {
+  deleteWfhStatusInRangeCore,
+  listWfhStatusInRangeCore,
+  upsertWfhStatusCore,
+  type WfhStatusInput,
+} from "@/lib/db/core/wfh-status";
 import { listProjectSummaries } from "@/lib/db/queries/projects";
 import { listActiveSkills } from "@/lib/db/queries/skills";
 import { listTasks } from "@/lib/db/queries/tasks";
 import { listUpcomingWifeShifts } from "@/lib/db/queries/wife-shifts";
+import { listUpcomingWfhStatus } from "@/lib/db/queries/wfh-status";
 import { webSearch } from "@/lib/web-search/anthropic";
 
 // ---------- task tools ----------
@@ -321,6 +328,133 @@ export const listWifeShiftsTool = tool({
       shifts: shifts.map((s) => ({
         shift_date: s.shift_date,
         code: s.code,
+      })),
+    };
+  },
+});
+
+// ---------- WFH status ----------
+
+const WFH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const WFH_MAX_DAYS = 60;
+
+// Expand an inclusive from..to date range into an array of YYYY-MM-DD strings.
+// Uses noon-UTC anchors so day stepping is immune to DST. Returns an error
+// string if the inputs are malformed or the span exceeds WFH_MAX_DAYS.
+function expandWfhRange(
+  from: string,
+  to: string,
+): { ok: true; dates: string[] } | { ok: false; error: string } {
+  if (!WFH_DATE_RE.test(from) || !WFH_DATE_RE.test(to)) {
+    return { ok: false, error: "Dates must be in YYYY-MM-DD format." };
+  }
+  const start = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  if (end < start) {
+    return { ok: false, error: "`to` must be on or after `from`." };
+  }
+  const dates: string[] = [];
+  for (let d = start; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    dates.push(d.toISOString().slice(0, 10));
+    if (dates.length > WFH_MAX_DAYS) {
+      return {
+        ok: false,
+        error: `Range too large (max ${WFH_MAX_DAYS} days). Narrow the from/to span.`,
+      };
+    }
+  }
+  return { ok: true, dates };
+}
+
+const WFH_LABELS: Record<string, string> = {
+  wfh: "Working from home",
+  office: "In the office",
+  pto: "PTO / leave",
+  out: "Out of office",
+};
+
+export const setWfhStatusTool = tool({
+  description:
+    "Set Tyler's work-location (WFH) status for a single day or a date range — shown as a per-day badge on the calendar. Use when he says things like 'I'm working from home tomorrow', 'set me to office Monday', 'I'm WFH Mon–Wed', 'I'm on PTO next Friday', 'I'll be out Thursday'. Status values: wfh = working from home, office = in the office, pto = paid time off / leave, out = out of office (travelling / offsite / away). Resolve relative dates ('tomorrow', 'Monday', 'next week') to YYYY-MM-DD against the Current local date in the context prefix. For a single day, pass only `from`. For non-contiguous days, call this tool once per block.",
+  inputSchema: z.object({
+    status: z
+      .enum(["wfh", "office", "pto", "out"])
+      .describe("wfh / office / pto / out."),
+    from: z
+      .string()
+      .describe("Inclusive start date in YYYY-MM-DD."),
+    to: z
+      .string()
+      .optional()
+      .describe("Inclusive end date in YYYY-MM-DD. Defaults to `from` (single day)."),
+    note: z
+      .string()
+      .optional()
+      .describe("Optional short note (e.g. 'team offsite')."),
+  }),
+  execute: async ({ status, from, to, note }) => {
+    const range = expandWfhRange(from, to ?? from);
+    if (!range.ok) return { ok: false, error: range.error };
+    const entries: WfhStatusInput[] = range.dates.map((status_date) => ({
+      status_date,
+      status,
+      note: note ?? null,
+    }));
+    const result = await upsertWfhStatusCore(entries);
+    if (!result.ok) return { ok: false, error: result.error };
+    const span =
+      range.dates.length === 1
+        ? range.dates[0]
+        : `${range.dates[0]} → ${range.dates[range.dates.length - 1]} (${range.dates.length} days)`;
+    return {
+      ok: true,
+      message: `WFH status set: ${WFH_LABELS[status]} · ${span}`,
+      count: result.data.length,
+    };
+  },
+});
+
+export const clearWfhStatusTool = tool({
+  description:
+    "Remove Tyler's WFH status for a single day or date range (clears the calendar badge). Use when he says 'clear my WFH status for Friday', 'remove my work location next week', or corrects a day he set by mistake.",
+  inputSchema: z.object({
+    from: z.string().describe("Inclusive start date in YYYY-MM-DD."),
+    to: z
+      .string()
+      .optional()
+      .describe("Inclusive end date in YYYY-MM-DD. Defaults to `from` (single day)."),
+  }),
+  execute: async ({ from, to }) => {
+    const range = expandWfhRange(from, to ?? from);
+    if (!range.ok) return { ok: false, error: range.error };
+    const result = await deleteWfhStatusInRangeCore(
+      range.dates[0],
+      range.dates[range.dates.length - 1],
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      message: `Cleared WFH status on ${result.data} day${result.data === 1 ? "" : "s"}.`,
+      count: result.data,
+    };
+  },
+});
+
+export const listWfhStatusTool = tool({
+  description:
+    "List Tyler's WFH (work-location) statuses between two dates (inclusive). Values: wfh / office / pto / out. The next 21 days are already in your context prefix — use this tool ONLY for dates beyond that window or a specific range you don't already have.",
+  inputSchema: z.object({
+    from: z.string().describe("Inclusive start date in YYYY-MM-DD."),
+    to: z.string().describe("Inclusive end date in YYYY-MM-DD."),
+  }),
+  execute: async ({ from, to }) => {
+    const rows = await listWfhStatusInRangeCore(from, to);
+    return {
+      ok: true,
+      count: rows.length,
+      statuses: rows.map((r) => ({
+        status_date: r.status_date,
+        status: r.status,
       })),
     };
   },
@@ -644,6 +778,7 @@ export const queryStateTool = tool({
         "tasks",
         "events",
         "wife_shifts",
+        "wfh_status",
         "skills",
         "projects",
         "all",
@@ -692,6 +827,16 @@ export const queryStateTool = tool({
         next_21_days: shifts.map((s) => ({
           shift_date: s.shift_date,
           code: s.code,
+        })),
+      };
+    }
+
+    if (domain === "wfh_status" || domain === "all") {
+      const rows = await listUpcomingWfhStatus(21);
+      out.wfh_status = {
+        next_21_days: rows.map((r) => ({
+          status_date: r.status_date,
+          status: r.status,
         })),
       };
     }
@@ -2038,6 +2183,9 @@ export const ALL_TOOLS = {
   delete_event: deleteEventTool,
   list_events_in_range: listEventsInRangeTool,
   list_wife_shifts: listWifeShiftsTool,
+  set_wfh_status: setWfhStatusTool,
+  clear_wfh_status: clearWfhStatusTool,
+  list_wfh_status: listWfhStatusTool,
   add_project: addProjectTool,
   add_project_milestone: addProjectMilestoneTool,
   complete_project_milestone: completeProjectMilestoneTool,
