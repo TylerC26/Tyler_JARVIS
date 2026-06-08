@@ -170,3 +170,70 @@ export function moveItemWithinSection(
   next[sIdx] = { ...section, items };
   return next;
 }
+
+// ---------- per-tab visibility (hide / show) ----------
+//
+// Stored separately from order as a flat list of hidden hrefs, shared by the
+// desktop sidebar and the mobile drawer so a tab hidden in one is hidden in
+// both. Item metadata always rehydrates from NAV_SECTIONS (see applyStoredOrder).
+
+export const NAV_HIDDEN_STORAGE_KEY = "jarvis-nav-hidden-v1";
+
+export function loadHidden(): string[] {
+  try {
+    const raw = localStorage.getItem(NAV_HIDDEN_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string");
+  } catch {
+    return [];
+  }
+}
+
+export function persistHidden(hrefs: string[]) {
+  try {
+    localStorage.setItem(NAV_HIDDEN_STORAGE_KEY, JSON.stringify(hrefs));
+  } catch {
+    // localStorage may be unavailable in private mode / quota exceeded.
+  }
+}
+
+// Drop hidden items — and any section left empty as a result — for the normal
+// (non-editing) nav view. In edit mode callers render the full set instead so
+// hidden tabs can be toggled back on.
+export function visibleSections(
+  sections: NavSection[],
+  hidden: Set<string>,
+): NavSection[] {
+  const result: NavSection[] = [];
+  for (const s of sections) {
+    const items = s.items.filter((i) => !hidden.has(i.href));
+    if (items.length > 0) result.push({ label: s.label, items });
+  }
+  return result;
+}
+
+// ---------- edit-mode passcode ----------
+//
+// A light gate so the reorder/hide editor isn't triggered by accident — NOT a
+// security boundary (this is a single-user personal OS, and the code ships in
+// the client bundle). Unlock state lives in-module so it survives component
+// remounts for the session and is shared across the sidebar + drawer; a full
+// reload re-locks it.
+
+export const NAV_EDIT_PASSCODE = "1126";
+
+let editUnlocked = false;
+
+export function isEditUnlocked(): boolean {
+  return editUnlocked;
+}
+
+export function tryUnlockEdit(code: string): boolean {
+  if (code.trim() === NAV_EDIT_PASSCODE) {
+    editUnlocked = true;
+    return true;
+  }
+  return false;
+}

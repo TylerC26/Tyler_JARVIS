@@ -2,35 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   NAV_SECTIONS,
+  isEditUnlocked,
+  loadHidden,
   loadStoredOrder,
   moveItemWithinSection,
+  persistHidden,
   persistOrder,
+  tryUnlockEdit,
+  visibleSections,
   type NavSection,
 } from "@/lib/nav/order";
+import { EyeIcon, EyeOffIcon, PencilIcon } from "./nav-icons";
 
 export function MobileNavMenu() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [sections, setSections] = useState<NavSection[]>(NAV_SECTIONS);
-  const [reorderMode, setReorderMode] = useState(false);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [editMode, setEditMode] = useState(false);
+  const [askingPass, setAskingPass] = useState(false);
+  const [pass, setPass] = useState("");
+  const [passErr, setPassErr] = useState(false);
+  const passRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
 
   useEffect(() => {
     setMounted(true);
     const restored = loadStoredOrder(NAV_SECTIONS);
     if (restored) setSections(restored);
+    setHidden(new Set(loadHidden()));
   }, []);
 
   useEffect(() => {
     setOpen(false);
-    // Closing the overlay (e.g. on route change) should also leave reorder
-    // mode so reopening lands on the normal nav view.
-    setReorderMode(false);
+    // Closing the overlay (e.g. on route change) should also leave edit mode so
+    // reopening lands on the normal nav view.
+    setEditMode(false);
+    setAskingPass(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (askingPass) passRef.current?.focus();
+  }, [askingPass]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,12 +63,51 @@ export function MobileNavMenu() {
     };
   }, [open]);
 
+  const shown = editMode ? sections : visibleSections(sections, hidden);
+
   function swap(sectionLabel: string, href: string, direction: "up" | "down") {
     setSections((current) => {
       const next = moveItemWithinSection(current, sectionLabel, href, direction);
       if (next !== current) persistOrder(next);
       return next;
     });
+  }
+
+  function toggleHidden(href: string) {
+    setHidden((current) => {
+      const next = new Set(current);
+      if (next.has(href)) next.delete(href);
+      else next.add(href);
+      persistHidden([...next]);
+      return next;
+    });
+  }
+
+  function onEditClick() {
+    if (editMode) {
+      setEditMode(false);
+      return;
+    }
+    if (isEditUnlocked()) {
+      setEditMode(true);
+      return;
+    }
+    setAskingPass(true);
+    setPass("");
+    setPassErr(false);
+  }
+
+  function submitPass() {
+    if (tryUnlockEdit(pass)) {
+      setAskingPass(false);
+      setPass("");
+      setPassErr(false);
+      setEditMode(true);
+    } else {
+      setPassErr(true);
+      setPass("");
+      passRef.current?.focus();
+    }
   }
 
   // Portal the overlay to document.body so it escapes the TopBar's
@@ -80,24 +136,24 @@ export function MobileNavMenu() {
               JARVIS
             </span>
             <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-              // {reorderMode ? "reorder" : "nav"}
+              // {editMode ? "edit" : "nav"}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setReorderMode((r) => !r)}
-              aria-pressed={reorderMode}
-              aria-label={reorderMode ? "Finish reordering" : "Reorder nav"}
+              onClick={onEditClick}
+              aria-pressed={editMode}
+              aria-label={editMode ? "Finish editing" : "Edit nav"}
               className={[
                 "flex h-11 items-center justify-center gap-1.5 rounded-sm border px-3 font-mono text-[10px] uppercase tracking-wider",
-                reorderMode
+                editMode
                   ? "border-accent/60 bg-accent/10 text-accent"
                   : "border-edge text-fg-muted hover:text-fg",
               ].join(" ")}
             >
-              <span aria-hidden>▤</span>
-              {reorderMode ? "done" : "reorder"}
+              <PencilIcon />
+              {editMode ? "done" : "edit"}
             </button>
             <button
               type="button"
@@ -110,8 +166,57 @@ export function MobileNavMenu() {
           </div>
         </header>
 
+        {askingPass && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitPass();
+            }}
+            className="flex shrink-0 items-center gap-2 border-b border-edge bg-surface-2/40 px-4 py-2.5"
+          >
+            <input
+              ref={passRef}
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={pass}
+              onChange={(e) => {
+                setPass(e.target.value);
+                setPassErr(false);
+              }}
+              placeholder="passcode"
+              aria-label="Edit passcode"
+              aria-invalid={passErr}
+              className={[
+                "h-11 flex-1 rounded-sm border bg-base px-3 font-mono text-fg placeholder:text-fg-dim focus:outline-none",
+                passErr
+                  ? "border-danger focus:border-danger"
+                  : "border-edge focus:border-accent/50",
+              ].join(" ")}
+            />
+            <button
+              type="submit"
+              className="flex h-11 items-center justify-center rounded-sm border border-accent/40 bg-accent/10 px-4 font-mono text-[11px] uppercase tracking-wider text-accent active:bg-accent/20"
+            >
+              unlock
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAskingPass(false);
+                setPass("");
+                setPassErr(false);
+              }}
+              aria-label="Cancel"
+              className="flex h-11 w-11 items-center justify-center rounded-sm border border-edge text-fg-muted active:bg-surface-2"
+            >
+              <span className="font-mono text-base leading-none">×</span>
+            </button>
+          </form>
+        )}
+
         <nav className="flex-1 overflow-y-auto px-3 py-3">
-          {sections.map((section, idx) => {
+          {shown.map((section, idx) => {
             const lastItemIdx = section.items.length - 1;
             return (
               <div key={section.label} className={idx === 0 ? "" : "mt-4"}>
@@ -124,13 +229,16 @@ export function MobileNavMenu() {
                       item.href === "/"
                         ? pathname === "/"
                         : pathname.startsWith(item.href);
-                    if (reorderMode) {
+                    const isHidden = hidden.has(item.href);
+                    if (editMode) {
                       return (
                         <li key={item.href}>
                           <div
                             className={[
                               "flex items-center gap-3 rounded-sm border px-3 py-2 font-mono text-sm",
-                              "border-accent/30 bg-accent/5",
+                              isHidden
+                                ? "border-edge bg-surface-2/40 opacity-60"
+                                : "border-accent/30 bg-accent/5",
                             ].join(" ")}
                           >
                             <span
@@ -139,9 +247,34 @@ export function MobileNavMenu() {
                             >
                               {item.glyph}
                             </span>
-                            <span className="flex-1 truncate normal-case tracking-normal text-[12px] text-fg-muted">
+                            <span
+                              className={[
+                                "flex-1 truncate normal-case tracking-normal text-[12px]",
+                                isHidden
+                                  ? "text-fg-dim line-through"
+                                  : "text-fg-muted",
+                              ].join(" ")}
+                            >
                               {item.label}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleHidden(item.href)}
+                              aria-pressed={!isHidden}
+                              aria-label={
+                                isHidden
+                                  ? `Show ${item.label}`
+                                  : `Hide ${item.label}`
+                              }
+                              className={[
+                                "grid h-11 w-11 place-items-center rounded-sm border",
+                                isHidden
+                                  ? "border-edge text-fg-dim active:bg-surface-2"
+                                  : "border-accent/30 text-accent active:bg-accent/15",
+                              ].join(" ")}
+                            >
+                              {isHidden ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                            </button>
                             <button
                               type="button"
                               disabled={itemIdx === 0}
@@ -149,7 +282,7 @@ export function MobileNavMenu() {
                                 swap(section.label, item.href, "up")
                               }
                               aria-label={`Move ${item.label} up`}
-                              className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:text-accent hover:border-accent/40 active:bg-accent/15 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:border-accent/40 hover:text-accent active:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-30"
                             >
                               ▲
                             </button>
@@ -160,7 +293,7 @@ export function MobileNavMenu() {
                                 swap(section.label, item.href, "down")
                               }
                               aria-label={`Move ${item.label} down`}
-                              className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:text-accent hover:border-accent/40 active:bg-accent/15 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="grid h-11 w-11 place-items-center rounded-sm border border-edge text-fg-muted hover:border-accent/40 hover:text-accent active:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-30"
                             >
                               ▼
                             </button>
@@ -208,8 +341,8 @@ export function MobileNavMenu() {
         </nav>
 
         <div className="shrink-0 border-t border-edge px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-          {reorderMode
-            ? "tap ▲ / ▼ to reorder within a section · done when finished"
+          {editMode
+            ? `tap ▲ / ▼ to reorder · eye to hide · ${hidden.size} hidden`
             : "tap outside · select item to close"}
         </div>
       </div>
