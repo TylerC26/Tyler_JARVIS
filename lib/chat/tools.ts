@@ -114,7 +114,7 @@ export const addTaskTool = tool({
       .string()
       .optional()
       .describe(
-        "ISO 8601 timestamp. Resolve relative dates ('tomorrow', 'Friday') against the current date in context.",
+        "ISO 8601 timestamp WITH the user's local offset (e.g. 2026-05-12T17:00:00+08:00) — never a trailing Z. Resolve relative dates ('tomorrow', 'Friday') against the Current local time / Day of week in the context prefix.",
       ),
     project: z
       .string()
@@ -290,8 +290,16 @@ export const listEventsInRangeTool = tool({
   description:
     "List events between two ISO timestamps. Use this to answer 'what's on Friday', 'what's tomorrow', 'when do I have free time', etc.",
   inputSchema: z.object({
-    start: z.string().describe("ISO 8601 inclusive start"),
-    end: z.string().describe("ISO 8601 exclusive end"),
+    start: z
+      .string()
+      .describe(
+        "ISO 8601 inclusive start at the user's LOCAL day boundary WITH their offset (e.g. 2026-06-12T00:00:00+08:00 for the start of Friday). Never a trailing Z — that shifts the window off the user's day.",
+      ),
+    end: z
+      .string()
+      .describe(
+        "ISO 8601 exclusive end at the user's LOCAL day boundary WITH their offset (e.g. 2026-06-13T00:00:00+08:00 to cover all of Friday). Never a trailing Z.",
+      ),
   }),
   execute: async ({ start, end }) => {
     const events = await listEventsInRangeCore(start, end);

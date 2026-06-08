@@ -179,24 +179,28 @@ const EVENTS_WINDOW_DAYS = 28;
 // Pretty-print a Task line. Examples:
 //   • [P3] Email landlord (due Mon May 12)
 //   • [P1!] File taxes (OVERDUE: May 5)
-function formatTaskLine(t: Task, now: Date): string {
+function formatTaskLine(t: Task, now: Date, tz: string): string {
   const prio = `P${t.priority ?? 0}`;
   const statusTag = `[${prio}]`;
   let dueTag = "";
   if (t.due_at) {
     const due = new Date(t.due_at);
     const overdue = due.getTime() < now.getTime();
+    // Render the due date in the OWNER's timezone — without timeZone this falls
+    // back to the runtime zone (UTC on Vercel) and shows the wrong day/weekday
+    // for any due instant that lands on a different calendar day in UTC.
     const dueStr = due.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
+      timeZone: tz,
     });
     dueTag = overdue ? ` (OVERDUE ${dueStr})` : ` (due ${dueStr})`;
   }
   return `${statusTag} ${t.title}${dueTag}`;
 }
 
-function renderTasksBlock(tasks: Task[], now: Date): string {
+function renderTasksBlock(tasks: Task[], now: Date, tz: string): string {
   // Open tasks only (status != "done"); prioritize overdue, then by due_at,
   // then by descending priority. Capped to keep the prefix bounded.
   const open = tasks.filter((t) => t.status !== "done");
@@ -211,7 +215,7 @@ function renderTasksBlock(tasks: Task[], now: Date): string {
 
   const shown = sorted.slice(0, MAX_TASKS_IN_PREFIX);
   const more = sorted.length - shown.length;
-  const lines = shown.map((t) => `  • ${formatTaskLine(t, now)}`).join("\n");
+  const lines = shown.map((t) => `  • ${formatTaskLine(t, now, tz)}`).join("\n");
   const tail = more > 0 ? `\n  …and ${more} more open task${more === 1 ? "" : "s"}.` : "";
   return `\n\nOpen tasks (${open.length} total, prioritized by due date):\n${lines}${tail}`;
 }
@@ -407,10 +411,11 @@ Current local ISO timestamp: ${localISO}.
 Current UTC timestamp: ${now.toISOString()}.
 Day of week: ${weekday}.
 
-TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_event, update_event, move_event, etc.):
+TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_event, update_event, move_event, add_task, list_events_in_range, etc.):
 - The user speaks in their LOCAL time. "7pm tomorrow" means 19:00 in ${userTz}, not UTC.
-- When emitting starts_at / ends_at, ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
-- Build the date portion from the local ISO timestamp above, not from the UTC timestamp.`;
+- When emitting ANY timestamp (starts_at, ends_at, due_at, range start/end), ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
+- Build the date portion from the local ISO timestamp above, not from the UTC timestamp. Day-of-week math ("which day is Friday") follows the local date and Day of week above, not the UTC timestamp.
+- For day-scoped reads (list_events_in_range to answer "what's on Friday"), set the bounds to the user's LOCAL midnight-to-midnight with the offset — start ${`2026-06-12T00:00:00${offset}`}, end ${`2026-06-13T00:00:00${offset}`} covers all of that Friday. A trailing "Z" shifts the window by ${offset} and silently drops or mis-attributes events near the day's edges.`;
 
   // Fetch everything that feeds the prefix in parallel — we don't want each
   // chat turn to wait on serial DB roundtrips. Event window starts ~36h ago
@@ -459,9 +464,11 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     if (shifts.length > 0) {
       const compact = shifts
         .map((s) => {
-          const dow = new Date(`${s.shift_date}T12:00:00`).toLocaleDateString(
+          // shift_date is a pure calendar date — anchor at UTC noon and format
+          // in UTC so the weekday is stable regardless of the runtime's zone.
+          const dow = new Date(`${s.shift_date}T12:00:00Z`).toLocaleDateString(
             "en-US",
-            { weekday: "short" },
+            { weekday: "short", timeZone: "UTC" },
           );
           return `${s.shift_date} ${dow}=${s.code}`;
         })
@@ -479,9 +486,11 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     if (wfhRows.length > 0) {
       const compact = wfhRows
         .map((r) => {
+          // status_date is a pure calendar date — anchor at UTC noon and format
+          // in UTC so the weekday is stable regardless of the runtime's zone.
           const dow = new Date(
-            `${r.status_date}T12:00:00`,
-          ).toLocaleDateString("en-US", { weekday: "short" });
+            `${r.status_date}T12:00:00Z`,
+          ).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
           return `${r.status_date} ${dow}=${r.status}`;
         })
         .join(" · ");
@@ -502,7 +511,7 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
 
   let tasksPart = "";
   try {
-    tasksPart = renderTasksBlock(tasks, now);
+    tasksPart = renderTasksBlock(tasks, now, userTz);
   } catch (e) {
     console.warn("[chat] could not render tasks for context prefix:", e);
   }
