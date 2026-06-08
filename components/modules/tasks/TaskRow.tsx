@@ -3,7 +3,11 @@
 import { differenceInCalendarDays } from "date-fns";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { cycleTaskStatus, deleteTask } from "@/lib/db/actions/tasks";
+import {
+  cycleTaskStatus,
+  deleteTask,
+  setTaskImportant,
+} from "@/lib/db/actions/tasks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fmtRelativeDay } from "@/lib/date";
 import type { Task } from "@/lib/db/types";
@@ -54,7 +58,10 @@ export function TaskRow({
         }}
         onDragEnd={() => onDragEnd?.()}
         className={[
-          "group flex items-start gap-3 rounded-sm border border-edge bg-surface-2/30 px-3 py-2 cursor-grab active:cursor-grabbing transition-colors hover:border-accent/60",
+          "group flex items-start gap-3 rounded-sm border bg-surface-2/30 px-3 py-2 cursor-grab active:cursor-grabbing transition-colors hover:border-accent/60",
+          task.important
+            ? "border-warn/50 border-l-2 border-l-warn"
+            : "border-edge",
           task.status === "done" ? "opacity-60" : "",
           isDragging ? "opacity-40 ring-1 ring-accent/50" : "",
         ].join(" ")}
@@ -115,6 +122,27 @@ export function TaskRow({
         </button>
 
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            aria-label={task.important ? "Unmark important" : "Mark important"}
+            aria-pressed={task.important}
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              startTransition(
+                () => void setTaskImportant(task.id, !task.important),
+              );
+            }}
+            title={task.important ? "Important · click to unstar" : "Mark important"}
+            className={[
+              "grid h-11 w-7 place-items-center text-[13px] transition-opacity",
+              task.important
+                ? "text-warn opacity-100"
+                : "text-fg-dim opacity-50 hover:opacity-100 hover:text-warn",
+            ].join(" ")}
+          >
+            {task.important ? "★" : "☆"}
+          </button>
           {task.due_at && (
             <span
               className={[

@@ -43,6 +43,7 @@ export function TaskDetailModal({
           ((formData.get("description") as string | null) ?? "").trim() || null,
         status: (formData.get("status") as TaskStatus) ?? task.status,
         priority: Number(formData.get("priority") ?? task.priority),
+        important: formData.get("important") === "on",
         due_at: dueRaw ? new Date(dueRaw).toISOString() : null,
       });
       if (!result.ok) {
@@ -125,6 +126,17 @@ export function TaskDetailModal({
               defaultValue={toLocalInputValue(task.due_at)}
             />
           </Field>
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-sm border border-edge bg-surface-2 px-2.5 py-2.5">
+            <input
+              type="checkbox"
+              name="important"
+              defaultChecked={task.important}
+              className="size-4 accent-warn"
+            />
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              ★ Important
+            </span>
+          </label>
           {project && (
             <div className="rounded-sm border border-edge bg-surface/40 px-3 py-2 font-mono text-[11px] text-fg-muted">
               <span className="text-fg-dim">project · </span>

@@ -5,6 +5,7 @@ import {
   createTaskCore,
   cycleTaskStatusCore,
   deleteTaskCore,
+  setTaskImportantCore,
   setTaskStatusCore,
   updateTaskCore,
   type UpdateTaskInput,
@@ -36,6 +37,7 @@ export async function createTask(formData: FormData) {
     description: asString(formData.get("description")) || null,
     status: (asString(formData.get("status")) as TaskStatus) || "todo",
     priority: asInt(formData.get("priority"), 3),
+    important: asString(formData.get("important")) === "on",
     due_at: dueRaw ? new Date(dueRaw).toISOString() : null,
     project_id: projectId || null,
   });
@@ -63,6 +65,14 @@ export async function cycleTaskStatus(id: string, current: TaskStatus) {
 
 export async function setTaskStatus(id: string, status: TaskStatus) {
   const result = await setTaskStatusCore(id, status);
+  bumpRevalidations();
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function setTaskImportant(id: string, important: boolean) {
+  const result = await setTaskImportantCore(id, important);
   bumpRevalidations();
   return result.ok
     ? { ok: true as const }

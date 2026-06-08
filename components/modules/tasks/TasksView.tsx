@@ -5,14 +5,49 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTask, setTaskStatus } from "@/lib/db/actions/tasks";
-import type { Task, TaskStatus } from "@/lib/db/types";
+import { createTask, setTaskStatus, updateTask } from "@/lib/db/actions/tasks";
+import type { Task } from "@/lib/db/types";
 import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
 
-const STATUS_GROUPS: { key: TaskStatus; label: string; code: string }[] = [
-  { key: "todo", label: "Open", code: "OPEN" },
-  { key: "done", label: "Done", code: "DONE" },
+// Board columns. IMPORTANT is a focus lane: it shows ONLY starred, still-open
+// tasks — those same tasks also stay in OPEN, which lists every open item.
+// `match` decides membership; `patch`/`commit` are the optimistic + server
+// effect of dropping a card onto the column.
+type BoardColumn = {
+  key: string;
+  label: string;
+  code: string;
+  match: (t: Task) => boolean;
+  patch: Partial<Task>;
+  commit: (id: string) => Promise<{ ok: boolean; error?: string }>;
+};
+
+const COLUMNS: BoardColumn[] = [
+  {
+    key: "important",
+    label: "Important",
+    code: "IMPORTANT",
+    match: (t) => t.important && t.status !== "done",
+    patch: { important: true, status: "todo", completed_at: null },
+    commit: (id) => updateTask(id, { important: true, status: "todo" }),
+  },
+  {
+    key: "open",
+    label: "Open",
+    code: "OPEN",
+    match: (t) => t.status === "todo",
+    patch: { status: "todo", completed_at: null },
+    commit: (id) => setTaskStatus(id, "todo"),
+  },
+  {
+    key: "done",
+    label: "Done",
+    code: "DONE",
+    match: (t) => t.status === "done",
+    patch: { status: "done" },
+    commit: (id) => setTaskStatus(id, "done"),
+  },
 ];
 
 export type ProjectsById = Record<string, { name: string; slug: string }>;
@@ -36,22 +71,23 @@ export function TasksView({
   useEffect(() => setTasks(initialTasks), [initialTasks]);
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoverStatus, setHoverStatus] = useState<TaskStatus | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
 
-  async function onDropTo(target: TaskStatus) {
+  async function onDropTo(col: BoardColumn) {
     const id = draggingId;
     setDraggingId(null);
-    setHoverStatus(null);
+    setHoverKey(null);
     if (!id) return;
     const current = tasks.find((t) => t.id === id);
-    if (!current || current.status === target) return;
+    // No-op if the card already belongs to the target column.
+    if (!current || col.match(current)) return;
 
-    // Optimistic — flip status in-place; revert on server error.
+    // Optimistic — apply the column's patch in-place; revert on server error.
     const before = tasks;
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: target } : t)),
+      prev.map((t) => (t.id === id ? { ...t, ...col.patch } : t)),
     );
-    const result = await setTaskStatus(id, target);
+    const result = await col.commit(id);
     if (!result.ok) {
       setTasks(before);
       alert(`Could not move task: ${result.error}`);
@@ -71,10 +107,14 @@ export function TasksView({
     setOpen(false);
   }
 
-  const grouped = STATUS_GROUPS.map((g) => ({
+  const grouped = COLUMNS.map((g) => ({
     ...g,
-    items: tasks.filter((t) => t.status === g.key),
+    items: tasks.filter((t) => g.match(t)),
   }));
+
+  const dragged = draggingId
+    ? tasks.find((t) => t.id === draggingId) ?? null
+    : null;
 
   const openCount = tasks.filter((t) => t.status !== "done").length;
 
@@ -110,12 +150,10 @@ export function TasksView({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {grouped.map((g) => {
-            const isHover = hoverStatus === g.key;
-            const isSource =
-              draggingId !== null &&
-              tasks.find((t) => t.id === draggingId)?.status === g.key;
+            const isHover = hoverKey === g.key;
+            const isSource = dragged ? g.match(dragged) : false;
             return (
               <section
                 key={g.key}
@@ -123,17 +161,17 @@ export function TasksView({
                   if (!draggingId) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
-                  if (hoverStatus !== g.key) setHoverStatus(g.key);
+                  if (hoverKey !== g.key) setHoverKey(g.key);
                 }}
                 onDragLeave={(e) => {
                   // Only clear when leaving the section entirely, not a child.
                   if (e.currentTarget.contains(e.relatedTarget as Node | null))
                     return;
-                  if (hoverStatus === g.key) setHoverStatus(null);
+                  if (hoverKey === g.key) setHoverKey(null);
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  void onDropTo(g.key);
+                  void onDropTo(g);
                 }}
                 className={[
                   "rounded-md border bg-surface/40 transition-colors",
@@ -144,7 +182,17 @@ export function TasksView({
               >
                 <header className="flex items-center justify-between border-b border-edge px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+                    {g.key === "important" && (
+                      <span className="text-warn text-[12px]" aria-hidden>
+                        ★
+                      </span>
+                    )}
+                    <span
+                      className={[
+                        "font-mono text-[10px] uppercase tracking-[0.2em]",
+                        g.key === "important" ? "text-warn" : "text-fg-dim",
+                      ].join(" ")}
+                    >
                       {g.code}
                     </span>
                     <span className="font-mono text-[12px] text-fg">
@@ -174,7 +222,7 @@ export function TasksView({
                         onDragStart={() => setDraggingId(t.id)}
                         onDragEnd={() => {
                           setDraggingId(null);
-                          setHoverStatus(null);
+                          setHoverKey(null);
                         }}
                       />
                     ))
@@ -230,6 +278,16 @@ export function TasksView({
             <Field label="Due Date">
               <Input name="due_at" type="datetime-local" />
             </Field>
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-sm border border-edge bg-surface-2 px-2.5 py-2.5">
+              <input
+                type="checkbox"
+                name="important"
+                className="size-4 accent-warn"
+              />
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                ★ Important
+              </span>
+            </label>
           </div>
           <Field label="Description" className="min-h-[240px] md:h-full">
             <Textarea
