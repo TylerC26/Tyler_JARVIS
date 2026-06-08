@@ -363,18 +363,20 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         </span>
       </div>
 
-      <ProgressRow
-        label="Tasks"
+      <TaskProgressBar
         done={project.done_task_count}
         total={totalTasks}
         pct={project.task_pct}
       />
-      <ProgressRow
-        label="Milestones"
-        done={project.milestone_done}
-        total={project.milestone_total}
-        pct={project.milestone_pct}
-      />
+
+      <div className="flex items-center justify-between pl-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+        <span>Milestones</span>
+        <span className="tabular text-fg-muted">
+          {project.milestone_total > 0
+            ? `${project.milestone_done}/${project.milestone_total} done`
+            : "none"}
+        </span>
+      </div>
 
       <div className="pl-2 font-mono text-[10px] text-fg-muted">
         {project.next_milestone ? (
@@ -402,30 +404,36 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   );
 }
 
-function ProgressRow({
-  label,
+function TaskProgressBar({
   done,
   total,
   pct,
 }: {
-  label: string;
   done: number;
   total: number;
   pct: number;
 }) {
+  const open = total - done;
   return (
     <div className="pl-2">
       <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-        <span>{label}</span>
+        <span>Tasks</span>
         <span className="tabular text-fg-muted">
           {done}/{total} · {pct}%
         </span>
       </div>
-      <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full bg-accent transition-all"
-          style={{ width: `${pct}%` }}
-        />
+      <div className="flex h-1 w-full overflow-hidden rounded-full bg-surface-2">
+        {total > 0 && (
+          <>
+            <div
+              className="h-full bg-success transition-all"
+              style={{ width: `${pct}%` }}
+            />
+            {open > 0 && (
+              <div className="h-full flex-1 bg-danger transition-all" />
+            )}
+          </>
+        )}
       </div>
     </div>
   );
