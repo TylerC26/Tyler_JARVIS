@@ -38,10 +38,10 @@ export async function TerminalSpend() {
     >
       <div className="flex flex-col gap-4">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold tabular text-fg">
+          <span className="font-display text-2xl font-semibold tabular text-fg [text-shadow:0_0_14px_rgba(0,217,255,0.3)]">
             {usd(summary.total_usd)}
           </span>
-          <span className="text-xs text-fg-dim">
+          <span className="font-hud text-[10px] uppercase tracking-wider text-fg-dim">
             {totalCalls} call{totalCalls === 1 ? "" : "s"}
           </span>
         </div>
@@ -52,12 +52,13 @@ export async function TerminalSpend() {
               <span className="w-16 shrink-0 text-xs text-fg-muted">
                 {PROVIDER_LABEL[p.provider] ?? p.provider}
               </span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full border border-edge/60 bg-surface-2">
                 <div
                   className="h-full rounded-full"
                   style={{
                     width: `${maxCost > 0 ? Math.max(4, (p.cost_usd / maxCost) * 100) : 0}%`,
                     background: PROVIDER_BAR[p.provider] ?? "var(--color-fg-dim)",
+                    boxShadow: `0 0 8px ${PROVIDER_BAR[p.provider] ?? "var(--color-fg-dim)"}`,
                   }}
                 />
               </div>

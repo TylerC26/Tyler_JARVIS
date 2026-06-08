@@ -104,6 +104,7 @@ export function TerminalAgenda({ events }: { events: Event[] }) {
                       "size-2 shrink-0 rounded-full",
                       dotColor,
                       isPast ? "opacity-40" : "",
+                      isCurrent ? "pulse-dot shadow-[0_0_8px_var(--color-accent)]" : "",
                     ].join(" ")}
                     aria-hidden
                   />
@@ -126,7 +127,7 @@ export function TerminalAgenda({ events }: { events: Event[] }) {
                     {e.title}
                   </Link>
                   {isCurrent ? (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                    <span className="shrink-0 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-hud text-[10px] font-medium uppercase tracking-wide text-accent shadow-[0_0_10px_rgba(0,217,255,0.25)]">
                       Now
                     </span>
                   ) : isPast ? (
