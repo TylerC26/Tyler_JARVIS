@@ -17,6 +17,7 @@ import {
 
 function bump(slug?: string) {
   revalidatePath("/projects");
+  revalidatePath("/ventures");
   revalidatePath("/");
   revalidatePath("/chat");
   revalidatePath("/assistant");

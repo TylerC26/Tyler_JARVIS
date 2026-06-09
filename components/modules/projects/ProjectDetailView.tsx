@@ -172,8 +172,14 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
       alert(`Failed: ${result.error}`);
       return;
     }
-    if (typeof window !== "undefined") window.location.href = "/projects";
+    if (typeof window !== "undefined") window.location.href = backHref;
   }
+
+  // Ventures (category "other") live under /ventures; work projects under
+  // /projects. The detail route itself is shared, so derive the home link.
+  const backHref = project.category === "other" ? "/ventures" : "/projects";
+  const backLabel =
+    project.category === "other" ? "← all ventures" : "← all projects";
 
   const totalTasks = project.open_task_count + project.done_task_count;
 
@@ -186,10 +192,10 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         actions={
           <div className="flex items-center gap-2">
             <Link
-              href="/projects"
+              href={backHref}
               className="rounded-sm border border-edge px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg"
             >
-              ← all projects
+              {backLabel}
             </Link>
             <Button variant="ghost" onClick={() => setEditingProject(true)}>
               EDIT

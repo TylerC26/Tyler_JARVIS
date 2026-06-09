@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createProjectAction } from "@/app/(app)/projects/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
@@ -13,7 +12,6 @@ import type { ProjectSummary } from "@/lib/db/queries/projects";
 import type { ProjectCategory, ProjectStatus } from "@/lib/db/types";
 
 type Filter = ProjectStatus | "all";
-type CategoryFilter = ProjectCategory | "all";
 
 const FILTER_TABS: { key: Filter; label: string }[] = [
   { key: "active", label: "Active" },
@@ -24,21 +22,36 @@ const FILTER_TABS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
 ];
 
-// Top-level section split. "All" is the projects home you return to.
-const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
-  { key: "work", label: "Work" },
-  { key: "other", label: "Others" },
-  { key: "all", label: "All" },
-];
-
 const CATEGORY_LABEL: Record<ProjectCategory, string> = {
   work: "Work",
   other: "Other",
 };
 
-function parseCategory(raw: string | null): CategoryFilter {
-  return raw === "work" || raw === "other" || raw === "all" ? raw : "all";
-}
+// Each category is its own route now (/projects = work, /ventures = other)
+// rather than an in-page tab switch, so the chrome is keyed off the category
+// the page renders with. `sibling` is the cross-link to the other bucket.
+const CATEGORY_META: Record<
+  ProjectCategory,
+  {
+    code: string;
+    title: string;
+    noun: string;
+    sibling: { href: string; label: string };
+  }
+> = {
+  work: {
+    code: "PRJ",
+    title: "Projects",
+    noun: "work project",
+    sibling: { href: "/ventures", label: "ventures" },
+  },
+  other: {
+    code: "VEN",
+    title: "Ventures",
+    noun: "venture",
+    sibling: { href: "/projects", label: "work projects" },
+  },
+};
 
 const STATUS_TONE: Record<ProjectStatus, "neutral" | "accent" | "success" | "warn"> = {
   idea: "neutral",
@@ -65,13 +78,13 @@ function fmtDate(iso: string | null): string {
 }
 
 export function ProjectsDashboard({
+  category,
   initialProjects,
 }: {
+  category: ProjectCategory;
   initialProjects: ProjectSummary[];
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const category = parseCategory(searchParams.get("cat"));
+  const meta = CATEGORY_META[category];
 
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
   const [filter, setFilter] = useState<Filter>("active");
@@ -83,25 +96,10 @@ export function ProjectsDashboard({
     setProjects(initialProjects);
   }, [initialProjects]);
 
-  // The category lives in the URL (?cat=work) so each section is linkable and
-  // "All" navigates back to the bare /projects home.
-  function selectCategory(next: CategoryFilter) {
-    router.replace(next === "all" ? "/projects" : `/projects?cat=${next}`, {
-      scroll: false,
-    });
-  }
-
-  const byCategory =
-    category === "all"
-      ? projects
-      : projects.filter((p) => p.category === category);
+  // initialProjects is already scoped to this category server-side, so only
+  // the status filter is applied client-side.
   const filtered =
-    filter === "all"
-      ? byCategory
-      : byCategory.filter((p) => p.status === filter);
-
-  const sectionLabel =
-    category === "all" ? "all ventures" : `${CATEGORY_LABEL[category]} projects`;
+    filter === "all" ? projects : projects.filter((p) => p.status === filter);
 
   async function onCreate(formData: FormData) {
     setError(null);
@@ -113,7 +111,7 @@ export function ProjectsDashboard({
           ((formData.get("description") as string | null)?.trim() || null) ??
           null,
         status: (formData.get("status") as ProjectStatus) ?? "active",
-        category: (formData.get("category") as ProjectCategory) ?? "other",
+        category,
         target_date:
           ((formData.get("target_date") as string | null)?.trim() || null) ??
           null,
@@ -151,45 +149,26 @@ export function ProjectsDashboard({
   return (
     <>
       <PageHeader
-        code="PRJ"
-        title="Projects"
-        subtitle={`${sectionLabel} · tasks + milestones per venture`}
+        code={meta.code}
+        title={meta.title}
+        subtitle={`${projects.length} ${meta.noun}${
+          projects.length === 1 ? "" : "s"
+        } · tasks + milestones each`}
         actions={
           <Button variant="primary" onClick={() => setOpen(true)}>
-            + NEW PROJECT
+            + NEW {category === "work" ? "PROJECT" : "VENTURE"}
           </Button>
         }
       />
 
-      {/* Top-level section split: Work vs Others. "All" is the home view. */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-1 rounded-md border border-edge bg-surface/40 p-1">
-          {CATEGORY_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => selectCategory(t.key)}
-              className={[
-                "rounded-sm px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors",
-                category === t.key
-                  ? "bg-accent/15 text-accent"
-                  : "text-fg-muted hover:text-fg",
-              ].join(" ")}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {category !== "all" && (
-          <button
-            type="button"
-            onClick={() => selectCategory("all")}
-            className="whitespace-nowrap font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent"
-          >
-            ← all projects
-          </button>
-        )}
+      {/* Each category is its own route — link across to the sibling bucket. */}
+      <div className="mb-3 flex items-center justify-end">
+        <Link
+          href={meta.sibling.href}
+          className="whitespace-nowrap font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent"
+        >
+          {meta.sibling.label} →
+        </Link>
       </div>
 
       <div className="mb-4 flex items-center gap-1 border-b border-edge overflow-x-auto">
@@ -221,7 +200,7 @@ export function ProjectsDashboard({
           {projects.length === 0 && (
             <div className="mt-4">
               <Button variant="primary" onClick={() => setOpen(true)}>
-                + CREATE FIRST PROJECT
+                + CREATE FIRST {category === "work" ? "PROJECT" : "VENTURE"}
               </Button>
             </div>
           )}
@@ -238,8 +217,8 @@ export function ProjectsDashboard({
         open={open}
         wide
         onClose={() => setOpen(false)}
-        title="New Project"
-        subtitle="side hustle"
+        title={category === "work" ? "New Project" : "New Venture"}
+        subtitle={category === "work" ? "work project" : "side hustle"}
         footer={
           <>
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -264,15 +243,6 @@ export function ProjectsDashboard({
           <div className="flex flex-col gap-4">
             <Field label="Name">
               <Input name="name" placeholder="e.g. Lemon Lab" autoFocus required />
-            </Field>
-            <Field label="Category" hint="work projects vs other ventures">
-              <Select
-                name="category"
-                defaultValue={category === "all" ? "other" : category}
-              >
-                <option value="work">Work</option>
-                <option value="other">Others</option>
-              </Select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Status">

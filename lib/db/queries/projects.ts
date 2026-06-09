@@ -5,7 +5,12 @@ import {
   listProjectsCore,
 } from "@/lib/db/core/projects";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import type { Project, ProjectMilestone, ProjectStatus } from "@/lib/db/types";
+import type {
+  Project,
+  ProjectCategory,
+  ProjectMilestone,
+  ProjectStatus,
+} from "@/lib/db/types";
 
 export type ProjectSummary = Project & {
   open_task_count: number;
@@ -85,9 +90,15 @@ async function decorate(project: Project): Promise<ProjectSummary> {
 }
 
 export async function listProjectSummaries(
-  opts: { status?: ProjectStatus | "all" } = {},
+  opts: {
+    status?: ProjectStatus | "all";
+    category?: ProjectCategory | "all";
+  } = {},
 ): Promise<ProjectSummary[]> {
-  const projects = await listProjectsCore({ status: opts.status });
+  const projects = await listProjectsCore({
+    status: opts.status,
+    category: opts.category,
+  });
   return Promise.all(projects.map(decorate));
 }
 
