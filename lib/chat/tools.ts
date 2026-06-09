@@ -2199,7 +2199,7 @@ export const dispatchRepoTaskTool = tool({
       .string()
       .optional()
       .describe(
-        "Project slug or fuzzy name. Optional if there is exactly one allowlisted repo (defaults to that). Use 'jarvis' for the Personal OS repo itself.",
+        "Which repo to edit. Defaults to the Jarvis Personal OS repo ('jarvis') if omitted. To target a different repo, pass its EXACT folder name under /Users/tylerc/Dev — e.g. 'BookEasyHK', 'Redzone', 'mtf', 'Giftiquehk', 'HabbitCLI', 'SnapVault', 'Wedding'. Must be a single folder name (no slashes or paths).",
       ),
     branch_hint: z
       .string()

@@ -29,6 +29,9 @@ export type DaemonConfig = {
     dangerous_globs: string[];
     require_clean_worktree: boolean;
   };
+  // Absolute parent dirs. Any git repo that is a DIRECT child of a root is
+  // dispatchable without an explicit [[repos]] entry (see validateRepoPath).
+  roots: string[];
   repos: RepoConfig[];
 };
 
@@ -103,11 +106,14 @@ export function loadDaemonConfig(
       ],
       require_clean_worktree: parsed.safety?.require_clean_worktree ?? true,
     },
+    roots: (parsed.roots ?? []).map((r) => r.replace(/\/+$/, "")),
     repos: parsed.repos ?? [],
   };
 
-  if (cfg.repos.length === 0) {
-    throw new Error(`No [[repos]] entries in ${path}; daemon would refuse every task.`);
+  if (cfg.repos.length === 0 && cfg.roots.length === 0) {
+    throw new Error(
+      `No [[repos]] entries or roots in ${path}; daemon would refuse every task.`,
+    );
   }
   setLogLevel(cfg.daemon.log_level);
   return cfg;
