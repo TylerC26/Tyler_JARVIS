@@ -33,13 +33,19 @@ https.
 ```
 OWNER_ID=00000000-0000-0000-0000-000000000001
 NEXT_PUBLIC_SUPABASE_URL=https://uisfucwkxbyrtykcowns.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<from Supabase dashboard>
+SUPABASE_SERVICE_ROLE_KEY=<from Supabase dashboard — Settings → API>
 TELEGRAM_BOT_TOKEN=<bot token>
 TELEGRAM_ALLOWED_CHAT_ID=<your chat id>
 ANTHROPIC_API_KEY=<key with billing for the spawned `claude` process>
 ```
 
 `OWNER_ID` MUST match the value Vercel uses or Realtime filters won't fire.
+
+The daemon uses the **service-role** key (not the anon key): `repo_tasks` is
+under Row-Level Security and the daemon has no Supabase Auth session, so the
+anon key reads zero rows and every claim/status write is silently dropped. The
+service-role key bypasses RLS — keep it local to this Mac and never ship it to
+the browser.
 
 ### 2. Create the config file
 

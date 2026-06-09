@@ -58,7 +58,13 @@ class TaskQueue {
 
 export function makeSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  // Service-role key: the daemon is a trusted local backend (same trust tier as
+  // the Next.js server) and MUST bypass RLS. repo_tasks is locked to
+  // owner_id = auth.uid(), and the daemon has no Supabase Auth session, so the
+  // anon key reads zero rows and every claim/status UPDATE is silently dropped.
+  // Realtime postgres_changes also respects RLS, so the anon key never receives
+  // task events either. The service-role key bypasses all of it.
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     realtime: { params: { eventsPerSecond: 10 } },

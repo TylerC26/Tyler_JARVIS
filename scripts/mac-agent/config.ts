@@ -38,7 +38,10 @@ const DEFAULT_CONFIG_PATH = resolve(homedir(), ".jarvis", "mac-agent.toml");
 const REQUIRED_ENV = [
   "OWNER_ID",
   "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  // Service-role key (not anon): repo_tasks is under RLS and the daemon has no
+  // auth session, so it must bypass RLS to read/claim/update tasks. See
+  // makeSupabase() in subscribe.ts.
+  "SUPABASE_SERVICE_ROLE_KEY",
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_ALLOWED_CHAT_ID",
   "ANTHROPIC_API_KEY",
