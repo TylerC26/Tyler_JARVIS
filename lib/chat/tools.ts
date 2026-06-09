@@ -31,7 +31,7 @@ import {
   setGroceryItemCheckedCore,
 } from "@/lib/db/core/grocery";
 import { createMealCore, listMealsCore } from "@/lib/db/core/meals";
-import { getMealPhotoContext } from "@/lib/chat/request-context";
+import { getMealPhotoContext, getTelegramContext } from "@/lib/chat/request-context";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
 import {
@@ -78,6 +78,8 @@ import {
   fetchRepoTree,
   parseRepoUrl,
 } from "@/lib/github/client";
+import { createRepoTaskCore } from "@/lib/db/core/repo-tasks";
+import { listAllowedRepoSlugs, resolveRepoFuzzy } from "@/lib/repo-tasks/allowlist";
 import { createSkillCore } from "@/lib/db/core/skills";
 import { searchChatMessagesCore } from "@/lib/db/core/chat-search";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
@@ -2181,6 +2183,88 @@ export const readMealsTool = tool({
 
 // ---------- registry ----------
 
+// ---------- repo tasks (remote code editing) ----------
+
+export const dispatchRepoTaskTool = tool({
+  description:
+    "Hand a natural-language coding instruction to the coding agent (Claude Code) running on Tyler's Mac at home. Use this whenever Tyler asks you to fix/refactor/add/implement/change code in one of his allowlisted repos — from web chat or Telegram alike. Read-only repo questions (what's in a file, list the tree, recent commits) go through `read_project_repo` instead. The change lands on an isolated jarvis/* branch and is NEVER pushed — Tyler reviews and merges it himself. Returns immediately with a task id; the Mac agent posts a separate Telegram message with the diff summary when it finishes, so report the task as DISPATCHED, not done. NEVER include destructive shell verbs (rm -rf, git push --force, git reset --hard, git clean -fd) in the instruction.",
+  inputSchema: z.object({
+    instruction: z
+      .string()
+      .min(3)
+      .describe(
+        "The coding instruction in natural language. Be specific: name the file or area, describe the desired behavior. Example: 'in lib/chat/router.ts, fix the bug where the engine swap drops the last message — add a regression test'.",
+      ),
+    project: z
+      .string()
+      .optional()
+      .describe(
+        "Project slug or fuzzy name. Optional if there is exactly one allowlisted repo (defaults to that). Use 'jarvis' for the Personal OS repo itself.",
+      ),
+    branch_hint: z
+      .string()
+      .optional()
+      .describe(
+        "Short slug to incorporate into the auto-generated branch name (e.g. 'router-fix'). Optional — server derives one from the instruction if omitted.",
+      ),
+    agent: z
+      .enum(["claude-code", "opencode"])
+      .optional()
+      .describe("Coding agent to run. Defaults to claude-code."),
+  }),
+  execute: async (input) => {
+    const allowed = listAllowedRepoSlugs();
+    if (allowed.length === 0) {
+      return {
+        ok: false,
+        error:
+          "No repos are configured for remote dispatch. Set JARVIS_REPO_PATHS env var or use the built-in jarvis slug.",
+      };
+    }
+
+    let resolved: { slug: string; path: string } | null;
+    if (input.project && input.project.trim()) {
+      resolved = resolveRepoFuzzy(input.project);
+      if (!resolved) {
+        return {
+          ok: false,
+          error: `Project "${input.project}" not in dispatch allowlist. Allowed: ${allowed.join(", ")}.`,
+        };
+      }
+    } else if (allowed.length === 1) {
+      const slug = allowed[0];
+      resolved = resolveRepoFuzzy(slug);
+      if (!resolved) {
+        return { ok: false, error: "Allowlist resolution failed." };
+      }
+    } else {
+      return {
+        ok: false,
+        error: `Multiple repos available — pass \`project\` (one of: ${allowed.join(", ")}).`,
+      };
+    }
+
+    const tg = getTelegramContext();
+    const result = await createRepoTaskCore({
+      repo_path: resolved.path,
+      instruction: input.instruction.trim(),
+      agent: input.agent ?? "claude-code",
+      telegram_chat_id: tg?.chat_id ?? null,
+      telegram_message_id: tg?.message_id ?? null,
+    });
+
+    if (!result.ok) return { ok: false, error: result.error };
+
+    return {
+      ok: true,
+      task_id: result.data.id,
+      repo: resolved.slug,
+      message:
+        "Queued for the Mac. The agent will post a separate Telegram message with the diff when it lands on a jarvis/* branch.",
+    };
+  },
+});
+
 export const ALL_TOOLS = {
   add_task: addTaskTool,
   complete_task: completeTaskTool,
@@ -2199,6 +2283,7 @@ export const ALL_TOOLS = {
   complete_project_milestone: completeProjectMilestoneTool,
   update_project_status: updateProjectStatusTool,
   read_project_repo: readProjectRepoTool,
+  dispatch_repo_task: dispatchRepoTaskTool,
   create_skill: createSkillTool,
   query_state: queryStateTool,
   search_past_conversations: searchPastConversationsTool,

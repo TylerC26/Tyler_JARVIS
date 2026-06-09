@@ -3,26 +3,37 @@
 import { revalidatePath } from "next/cache";
 import {
   cancelRepoTaskCore,
+  createRepoTaskCore,
   requestCleanupCore,
   retryRepoTaskCore,
 } from "@/lib/db/core/repo-tasks";
+import { resolveRepoFuzzy } from "@/lib/repo-tasks/allowlist";
 import type { RepoTask, RepoTaskAgent } from "@/lib/db/types";
 
 type CoreResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-export async function createRepoTaskAction(_input: {
+export async function createRepoTaskAction(input: {
   project: string;
   instruction: string;
   agent?: RepoTaskAgent;
 }): Promise<CoreResult<RepoTask>> {
-  // Dispatch is archived. The Mac agent daemon may still be running and
-  // listening to the queue, but no new entries should be created from the UI
-  // or the chat tool (dispatch_repo_task is unregistered). Re-enable by
-  // restoring this action body and re-registering the tool.
-  return {
-    ok: false,
-    error: "Remote repo dispatch is archived. Re-enable in app/(app)/repo-tasks/actions.ts.",
-  };
+  const resolved = resolveRepoFuzzy(input.project);
+  if (!resolved) {
+    return {
+      ok: false,
+      error: `Project "${input.project}" is not in the dispatch allowlist.`,
+    };
+  }
+
+  const result = await createRepoTaskCore({
+    repo_path: resolved.path,
+    instruction: input.instruction,
+    agent: input.agent,
+  });
+  if (result.ok) {
+    revalidatePath("/repo-tasks");
+  }
+  return result;
 }
 
 export async function cancelRepoTaskAction(id: string) {
