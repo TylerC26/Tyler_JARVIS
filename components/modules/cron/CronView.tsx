@@ -13,10 +13,12 @@ import type { CronJob } from "@/lib/db/types";
 
 type Props = { initialJobs: CronJob[] };
 
-const EXAMPLES = [
-  { label: "Morning brief", schedule: "0 8 * * *", prompt: "Generate my morning brief" },
-  { label: "Weekly review (Mon 9am)", schedule: "0 9 * * 1", prompt: "Give me a summary of open tasks and upcoming events this week" },
-  { label: "Daily water reminder", schedule: "0 12 * * *", prompt: "Add a task: drink water and take a break" },
+// Natural-language starting points — these seed the prompt box, then Opus
+// turns them into the structured schedule/prompt/name fields.
+const EXAMPLE_PROMPTS = [
+  "Every morning at 8, send me a brief of today's tasks and calendar",
+  "Monday at 9am, summarize my open tasks and this week's events",
+  "Every day at noon, remind me to drink water and take a break",
 ];
 
 function fmtDate(iso: string | null) {
@@ -29,9 +31,55 @@ function fmtDate(iso: string | null) {
 export function CronView({ initialJobs }: Props) {
   const [jobs, setJobs] = useState<CronJob[]>(initialJobs);
   const [showForm, setShowForm] = useState(false);
+  const [nlPrompt, setNlPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", schedule: "", prompt: "" });
   const [error, setError] = useState<string | null>(null);
+
+  function resetForm() {
+    setShowForm(false);
+    setNlPrompt("");
+    setHasDraft(false);
+    setForm({ name: "", description: "", schedule: "", prompt: "" });
+    setError(null);
+  }
+
+  async function handleGenerate() {
+    const request = nlPrompt.trim();
+    if (!request) return;
+    setError(null);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/cron/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? "Couldn't generate the automation.");
+        return;
+      }
+      setForm({
+        name: data.name ?? "",
+        schedule: data.schedule ?? "",
+        prompt: data.prompt ?? "",
+        description: data.description ?? "",
+      });
+      setHasDraft(true);
+      setError(
+        data.scheduleValid === false
+          ? "Opus produced an unusual schedule — double-check the cron expression below before scheduling."
+          : null,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't generate the automation.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -46,8 +94,7 @@ export function CronView({ initialJobs }: Props) {
     setSaving(false);
     if (!result.ok) { setError(result.error); return; }
     setJobs((prev) => [...prev, result.data]);
-    setForm({ name: "", description: "", schedule: "", prompt: "" });
-    setShowForm(false);
+    resetForm();
   }
 
   async function handleToggle(job: CronJob) {
@@ -63,10 +110,6 @@ export function CronView({ initialJobs }: Props) {
     if (result.ok) setJobs((prev) => prev.filter((j) => j.id !== job.id));
   }
 
-  function applyExample(ex: (typeof EXAMPLES)[number]) {
-    setForm((f) => ({ ...f, schedule: ex.schedule, prompt: ex.prompt, name: f.name || ex.label }));
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
@@ -74,83 +117,125 @@ export function CronView({ initialJobs }: Props) {
         title="Cron Jobs"
         subtitle={`${jobs.length} automation${jobs.length !== 1 ? "s" : ""} scheduled`}
         actions={
-          <Button variant="primary" size="sm" onClick={() => setShowForm((v) => !v)}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => (showForm ? resetForm() : setShowForm(true))}
+          >
             {showForm ? "cancel" : "+ new"}
           </Button>
         }
       />
 
       <div className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
-        {/* Create form */}
+        {/* Create flow: describe in plain language → Opus drafts → review → schedule */}
         {showForm && (
-          <form
-            onSubmit={handleCreate}
-            className="rounded-sm border border-accent/30 bg-surface-2/60 p-4 space-y-3"
-          >
+          <div className="rounded-sm border border-accent/30 bg-surface-2/60 p-4 space-y-3">
             <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
-              // new automation
+              // describe your automation
             </p>
 
-            {/* Quick-start examples */}
+            {/* Example prompts — seed the box, then generate */}
             <div className="flex flex-wrap gap-1.5">
-              {EXAMPLES.map((ex) => (
+              {EXAMPLE_PROMPTS.map((ex) => (
                 <button
-                  key={ex.label}
+                  key={ex}
                   type="button"
-                  onClick={() => applyExample(ex)}
+                  onClick={() => setNlPrompt(ex)}
                   className="rounded-sm border border-edge bg-surface px-2 py-0.5 font-mono text-[10px] text-fg-muted hover:text-fg hover:border-edge-strong transition-colors"
                 >
-                  {ex.label}
+                  {ex}
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Name">
-                <Input
-                  placeholder="Morning Brief"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  required
-                />
-              </Field>
-              <Field label="Schedule (UTC cron)">
-                <Input
-                  placeholder="0 8 * * *"
-                  value={form.schedule}
-                  onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))}
-                  required
-                  className="font-mono"
-                />
-              </Field>
-            </div>
-            <Field label="Prompt">
+            <Field label="What should this automation do?">
               <Textarea
-                placeholder="Generate my morning brief"
-                value={form.prompt}
-                onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
-                required
+                placeholder="Every morning at 8, send me a brief of today's tasks and calendar"
+                value={nlPrompt}
+                onChange={(e) => setNlPrompt(e.target.value)}
                 rows={2}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void handleGenerate();
+                  }
+                }}
               />
             </Field>
-            <Field label="Description (optional)">
-              <Input
-                placeholder="Runs every day at 8am UTC"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              />
-            </Field>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] text-fg-dim">
+                ⌘↵ to generate
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleGenerate()}
+                disabled={generating || !nlPrompt.trim()}
+              >
+                {generating ? "generating…" : hasDraft ? "✦ regenerate" : "✦ generate with opus"}
+              </Button>
+            </div>
+
+            {/* Generated draft — editable review before scheduling */}
+            {hasDraft && (
+              <form
+                onSubmit={handleCreate}
+                className="border-t border-edge pt-3 space-y-3"
+              >
+                <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
+                  // review &amp; schedule
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Name">
+                    <Input
+                      placeholder="Morning Brief"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      required
+                    />
+                  </Field>
+                  <Field label="Schedule (UTC cron)">
+                    <Input
+                      placeholder="0 8 * * *"
+                      value={form.schedule}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))}
+                      required
+                      className="font-mono"
+                    />
+                  </Field>
+                </div>
+                <Field label="Prompt">
+                  <Textarea
+                    placeholder="Generate my morning brief"
+                    value={form.prompt}
+                    onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
+                    required
+                    rows={2}
+                  />
+                </Field>
+                <Field label="Description (optional)">
+                  <Input
+                    placeholder="Runs every day at 8am UTC"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                </Field>
+
+                <div className="flex justify-end">
+                  <Button type="submit" variant="primary" size="sm" disabled={saving}>
+                    {saving ? "saving…" : "schedule"}
+                  </Button>
+                </div>
+              </form>
+            )}
 
             {error && (
               <p className="font-mono text-[11px] text-danger">{error}</p>
             )}
-
-            <div className="flex justify-end">
-              <Button type="submit" variant="primary" size="sm" disabled={saving}>
-                {saving ? "saving…" : "schedule"}
-              </Button>
-            </div>
-          </form>
+          </div>
         )}
 
         {/* Job list */}
