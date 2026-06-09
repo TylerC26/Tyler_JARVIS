@@ -261,30 +261,39 @@ export async function runAgentChatTurn(
   // Full history for THIS agent's thread, including the new user turn.
   modelMessages: ModelMessage[],
   latestUserText: string,
+  // Set when a Telegram food photo addressed to a meal-logging agent triggered
+  // this turn — log_meal reads from here to attach the pre-uploaded photo URL.
+  mealPhotoContext?: MealPhotoContext,
 ): Promise<RunAgentChatTurnResult | null> {
-  // Persist the owner's message onto the agent's thread (sender null = owner).
-  await appendMessage({
-    role: "user",
-    content: latestUserText,
-    agent_slug: agent.slug,
+  return requestContext.run({ mealPhoto: mealPhotoContext }, async () => {
+    // Persist the owner's message onto the agent's thread (sender null = owner).
+    await appendMessage({
+      role: "user",
+      content: latestUserText,
+      agent_slug: agent.slug,
+    });
+
+    const streamed = await streamAgentResponse(
+      agent,
+      modelMessages,
+      latestUserText,
+    );
+    if (!streamed) return null;
+
+    // Nothing pipes the stream to a response here, so drain it so `.steps` settle.
+    await streamed.result.consumeStream();
+    const steps = (await streamed.result.steps) as StepLike[];
+
+    // Stamp both agent_slug and sender with the agent so its rows render as the
+    // named teammate in the thread, identical to a delegated transcript.
+    const { text: assistantText } = await persistAssistantSteps(
+      steps,
+      streamed.modelId,
+      agent.slug,
+      agent.slug,
+    );
+
+    revalidateChatPaths();
+    return { assistantText, modelId: streamed.modelId };
   });
-
-  const streamed = await streamAgentResponse(agent, modelMessages, latestUserText);
-  if (!streamed) return null;
-
-  // Nothing pipes the stream to a response here, so drain it so `.steps` settle.
-  await streamed.result.consumeStream();
-  const steps = (await streamed.result.steps) as StepLike[];
-
-  // Stamp both agent_slug and sender with the agent so its rows render as the
-  // named teammate in the thread, identical to a delegated transcript.
-  const { text: assistantText } = await persistAssistantSteps(
-    steps,
-    streamed.modelId,
-    agent.slug,
-    agent.slug,
-  );
-
-  revalidateChatPaths();
-  return { assistantText, modelId: streamed.modelId };
 }

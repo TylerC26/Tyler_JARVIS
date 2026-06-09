@@ -227,6 +227,26 @@ export async function POST(req: Request) {
               { type: "image", image: imageBuffer, mediaType: "image/jpeg" },
               { type: "text", text: captionPrompt + mealHint },
             ];
+          } else if (agent.tool_allowlist.includes("log_meal")) {
+            // Meal-logging agent (e.g. Irene): mirror the Jarvis meal path so a
+            // food photo addressed to her gets re-hosted + auto-attached on
+            // log_meal, and she's nudged to analyze and log it like the
+            // orchestrator would. Her own prompt decides how to report back.
+            const mealHint =
+              "\n\n[system: if this image is food/drink/a meal, analyze it and call log_meal with structured macros. The photo has already been uploaded server-side, so log_meal will auto-attach it — do NOT pass an image_url. If the image is not food, ignore this hint and respond normally.]";
+            const publicUrl = await uploadMealPhoto(imageBuffer, {
+              mediaType: "image/jpeg",
+            });
+            mealPhotoContext = {
+              publicUrl,
+              bytes: imageBuffer,
+              mediaType: "image/jpeg",
+              caption: caption || null,
+            };
+            userContent = [
+              { type: "image", image: imageBuffer, mediaType: "image/jpeg" },
+              { type: "text", text: captionPrompt + mealHint },
+            ];
           } else {
             // Agent path: hand the image + caption straight through, no meal logic.
             userContent = [
@@ -265,7 +285,12 @@ export async function POST(req: Request) {
       let assistantText: string;
       if (agent) {
         // Direct chat with the addressed agent — its own prompt, tools, history.
-        const res = await runAgentChatTurn(agent, modelMessages, latestUserText);
+        const res = await runAgentChatTurn(
+          agent,
+          modelMessages,
+          latestUserText,
+          mealPhotoContext,
+        );
         assistantText = res
           ? res.assistantText || "(no text response)"
           : `(${agent.name} has no model configured — set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY.)`;
