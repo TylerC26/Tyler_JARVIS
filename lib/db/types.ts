@@ -29,6 +29,16 @@ export type ProjectStatus =
 // "other" (side-hustle / personal) ventures. See migration 0042.
 export type ProjectCategory = "work" | "other";
 
+// External-software links on a project (Procore, CxAlloy, or a custom URL).
+// Stored as a JSONB array on projects.links — see migration 0046. `platform`
+// is a preset key ('procore' | 'cxalloy' | 'custom'); the soft enum lives in
+// lib/projects/platforms.ts so new platforms ship with no migration.
+export type ProjectLink = {
+  platform: string;
+  label: string;
+  url: string;
+};
+
 export type Project = {
   id: string;
   owner_id: string;
@@ -43,6 +53,7 @@ export type Project = {
   notes: string | null;
   github_repo_url: string | null;
   github_default_branch: string | null;
+  links: ProjectLink[];
   created_at: string;
   updated_at: string | null;
 };
@@ -56,6 +67,37 @@ export type ProjectMilestone = {
   target_date: string | null;
   completed_at: string | null;
   position: number;
+  created_at: string;
+  updated_at: string | null;
+};
+
+// Meetings: live-transcribed meetings captured by the Jarvis desktop app and
+// summarized by Claude (see migration 0043). status/source are soft enums (no
+// DB CHECK) so new values ship without a migration. `project_id` (migration
+// 0047) optionally attaches a meeting to a project so its notes surface there.
+export type MeetingStatus =
+  | "recording"
+  | "transcribing"
+  | "summarizing"
+  | "done"
+  | "failed";
+
+export type MeetingSource = "desktop" | "browser" | "upload";
+
+export type Meeting = {
+  id: string;
+  owner_id: string;
+  title: string;
+  status: MeetingStatus | string;
+  source: MeetingSource | string;
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  transcript: string;
+  summary: string;
+  note_id: string | null;
+  recording_url: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -763,6 +805,7 @@ export type Database = {
           notes?: string | null;
           github_repo_url?: string | null;
           github_default_branch?: string | null;
+          links?: ProjectLink[];
           created_at?: string;
           updated_at?: string | null;
         };
@@ -784,6 +827,28 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<ProjectMilestone>;
+        Relationships: [];
+      };
+      meetings: {
+        Row: Meeting;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title?: string;
+          status?: MeetingStatus | string;
+          source?: MeetingSource | string;
+          started_at?: string;
+          ended_at?: string | null;
+          duration_ms?: number | null;
+          transcript?: string;
+          summary?: string;
+          note_id?: string | null;
+          recording_url?: string | null;
+          project_id?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<Meeting>;
         Relationships: [];
       };
       chat_messages: {

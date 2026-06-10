@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { platformFor, type PlatformTone } from "@/lib/projects/platforms";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
 import type { ProjectCategory, ProjectStatus } from "@/lib/db/types";
 
@@ -333,6 +334,8 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         </span>
       </div>
 
+      <PlatformChips project={project} />
+
       <TaskProgressBar
         done={project.done_task_count}
         total={totalTasks}
@@ -371,6 +374,42 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         → open
       </div>
     </Link>
+  );
+}
+
+const CHIP_TONE: Record<PlatformTone, string> = {
+  warn: "border-warn/40 text-warn",
+  info: "border-info/40 text-info",
+  accent: "border-accent/40 text-accent",
+  success: "border-success/40 text-success",
+  danger: "border-danger/40 text-danger",
+  neutral: "border-edge text-fg-muted",
+};
+
+// Non-clickable indicators of which external tools a project links to. The
+// legacy github_repo_url counts as a neutral "GitHub" chip. Launching happens
+// on the detail page, not here.
+function PlatformChips({ project }: { project: ProjectSummary }) {
+  const chips = (project.links ?? []).map((l) => ({
+    label: l.label || platformFor(l.platform).label,
+    tone: platformFor(l.platform).tone,
+  }));
+  if (project.github_repo_url) chips.push({ label: "GitHub", tone: "neutral" });
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pl-2">
+      {chips.map((c, i) => (
+        <span
+          key={`${c.label}-${i}`}
+          className={[
+            "rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+            CHIP_TONE[c.tone],
+          ].join(" ")}
+        >
+          {c.label}
+        </span>
+      ))}
+    </div>
   );
 }
 
