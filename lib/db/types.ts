@@ -71,16 +71,22 @@ export type ProjectMilestone = {
   updated_at: string | null;
 };
 
-// Meetings: live-transcribed meetings captured by the Jarvis desktop app and
-// summarized by Claude (see migration 0043). status/source are soft enums (no
-// DB CHECK) so new values ship without a migration. `project_id` (migration
-// 0047) optionally attaches a meeting to a project so its notes surface there.
-export type MeetingStatus =
-  | "recording"
-  | "transcribing"
-  | "summarizing"
-  | "done"
-  | "failed";
+// Meetings (v2, record-then-transcribe — see migration 0049): audio is
+// recorded locally by the desktop app (or browser mic), uploaded to Storage in
+// ~5-minute chunks, batch-transcribed per chunk, then stitched + summarized by
+// Claude into a note + memory. status drives the UI state machine; source
+// records which capture path made it. Both are soft enums (no DB CHECK) so new
+// values ship without a migration. `project_id` (migration 0047) optionally
+// attaches a meeting to a project; `event_id` (0049) to a calendar work event.
+export const MEETING_STATUSES = [
+  "recording",
+  "processing",
+  "transcribing",
+  "summarizing",
+  "done",
+  "failed",
+] as const;
+export type MeetingStatus = (typeof MEETING_STATUSES)[number];
 
 export type MeetingSource = "desktop" | "browser" | "upload";
 
@@ -88,16 +94,45 @@ export type Meeting = {
   id: string;
   owner_id: string;
   title: string;
-  status: MeetingStatus | string;
-  source: MeetingSource | string;
+  status: MeetingStatus;
+  source: MeetingSource;
   started_at: string;
   ended_at: string | null;
   duration_ms: number | null;
   transcript: string;
   summary: string;
   note_id: string | null;
+  event_id: string | null;
   recording_url: string | null;
   project_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+// One ~5-minute audio segment of a meeting recording (migration 0049). The
+// chunk's local file (on the recording machine) is the durable source of truth;
+// this row tracks how far it got through upload → transcribe so an interrupted
+// pipeline can resume. status is a soft enum.
+export const CHUNK_STATUSES = [
+  "pending",
+  "uploaded",
+  "transcribed",
+  "failed",
+] as const;
+export type ChunkStatus = (typeof CHUNK_STATUSES)[number];
+
+export type MeetingChunk = {
+  id: string;
+  owner_id: string;
+  meeting_id: string;
+  idx: number;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number | null;
+  duration_ms: number | null;
+  status: ChunkStatus;
+  transcript: string;
+  error: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -847,20 +882,41 @@ export type Database = {
           id?: string;
           owner_id: string;
           title?: string;
-          status?: MeetingStatus | string;
-          source?: MeetingSource | string;
+          status?: MeetingStatus;
+          source?: MeetingSource;
           started_at?: string;
           ended_at?: string | null;
           duration_ms?: number | null;
           transcript?: string;
           summary?: string;
           note_id?: string | null;
+          event_id?: string | null;
           recording_url?: string | null;
           project_id?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };
         Update: Partial<Meeting>;
+        Relationships: [];
+      };
+      meeting_chunks: {
+        Row: MeetingChunk;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          meeting_id: string;
+          idx: number;
+          storage_path?: string;
+          mime_type?: string;
+          size_bytes?: number | null;
+          duration_ms?: number | null;
+          status?: ChunkStatus;
+          transcript?: string;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<MeetingChunk>;
         Relationships: [];
       };
       chat_messages: {

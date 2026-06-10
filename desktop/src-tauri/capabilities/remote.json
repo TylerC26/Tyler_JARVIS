@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-meetings",
+  "description": "Allow the deployed Jarvis site (loaded remotely in the webview) to listen for native meeting-recorder events. Custom commands (start/stop/upload/list/discard meeting recording) are allowed to the main window by default; this capability extends event access to the remote origin.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://tyler-jarvis.vercel.app"]
+  },
+  "permissions": ["core:event:default"]
+}

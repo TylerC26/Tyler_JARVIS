@@ -46,6 +46,16 @@ export function EventDrawer({
   // into Claudia's (work-assistant) thread with a seeded kick-off message.
   const isWorkEvent = mode === "edit" && initial.category === "work";
 
+  // Record the meeting's audio: deep-link into /meetings with the recorder
+  // pre-armed so the resulting summary note links back to this event.
+  function startRecording() {
+    const params = new URLSearchParams({
+      event_id: initial.id ?? "",
+      event_title: initial.title?.trim() || "work event",
+    });
+    router.push(`/meetings?${params.toString()}`);
+  }
+
   function startNotes() {
     const title = initial.title?.trim() || "this event";
     let when = "";
@@ -79,9 +89,14 @@ export function EventDrawer({
             </Button>
           )}
           {isWorkEvent && (
-            <Button variant="primary" onClick={startNotes} disabled={pending}>
-              📝 TAKE NOTES
-            </Button>
+            <>
+              <Button variant="primary" onClick={startRecording} disabled={pending}>
+                ● RECORD
+              </Button>
+              <Button variant="primary" onClick={startNotes} disabled={pending}>
+                📝 TAKE NOTES
+              </Button>
+            </>
           )}
           <div className="flex-1" />
           <Button variant="ghost" onClick={onClose} disabled={pending}>

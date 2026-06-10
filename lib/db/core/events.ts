@@ -46,6 +46,18 @@ export type UpdateEventInput = Partial<{
 // listEvents* call sites stay in sync.
 const EVENT_SELECT = "*, linked_task:tasks(id, title, status)";
 
+export async function getEventCore(id: string): Promise<Event | null> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("events")
+    .select(EVENT_SELECT)
+    .eq("owner_id", getOwnerId())
+    .eq("id", id)
+    .maybeSingle();
+  return (data as Event | null) ?? null;
+}
+
 export async function createEventCore(
   input: CreateEventInput,
 ): Promise<CoreResult<Event>> {

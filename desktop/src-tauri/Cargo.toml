@@ -13,6 +13,26 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# --- meeting recording (Meetings v2, record-then-transcribe) ---
+# Async runtime for the chunk-upload command (tauri's own runtime is tokio; we
+# just need fs/time utilities in our async fn).
+tokio = { version = "1", features = ["fs", "time"] }
+# Mic capture (cross-platform). ruhear also depends on cpal; a separate copy is
+# fine since we don't share cpal types with it.
+cpal = "0.17"
+# System-output (loopback) capture on macOS via ScreenCaptureKit. NOTE: the
+# RUBuffers shape is assumed to be Vec<Vec<f32>> (per-channel) in
+# src/meeting.rs — adjust if the crate differs.
+ruhear = "0.1"
+# ruhear 0.1.1 targets `screencapturekit ^1.4`, but 1.5.x broke its API
+# (SCContentFilter::builder was removed), so cargo picking the newest 1.x fails
+# to compile ruhear. Pin to the last 1.4.x so ruhear builds.
+screencapturekit = "=1.4.2"
+# Local WAV chunk files (the durable recording until upload+finalize succeed).
+hound = "3.5"
+# Direct PUT of chunk files to Supabase Storage signed upload URLs.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
 # Slim release binary (kept light so first build isn't glacial)
 [profile.release]
 opt-level = "s"
