@@ -20,6 +20,7 @@ import {
 } from "@/lib/chat/turn";
 import type { JarvisMessageMetadata, JarvisUIMessage } from "@/lib/chat/ui";
 import type { ChatAttachment } from "@/lib/db/types";
+import { resolvePageContext } from "@/lib/chat/page-context";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 
 type FilePart = { type: "file"; url: string; mediaType: string; filename?: string };
@@ -80,6 +81,10 @@ type IncomingBody = {
   forceRoute?: ForceRoute;
   // When set, the turn belongs to a sub-agent thread rather than main Jarvis.
   agentSlug?: string | null;
+  // App pathname the turn was typed on (docked launcher only) — resolved into
+  // a CURRENT PAGE context block so "what's the status?" on a project page
+  // means that project. Null/absent for the dedicated /chat surface.
+  pagePath?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -93,11 +98,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const { messages, forceRoute, agentSlug } = (await req.json()) as IncomingBody;
+  const { messages, forceRoute, agentSlug, pagePath } =
+    (await req.json()) as IncomingBody;
 
-  const modelMessages = await convertToModelMessages(
-    prepareModelMessages(messages),
-  );
+  const [modelMessages, pageContext] = await Promise.all([
+    convertToModelMessages(prepareModelMessages(messages)),
+    // Best-effort: resolves to null on unknown paths or fetch failures.
+    resolvePageContext(pagePath),
+  ]);
 
   // Persist the latest user message (the only one not already saved by a prior turn).
   const latestUser = [...messages].reverse().find((m) => m.role === "user");
@@ -132,6 +140,7 @@ export async function POST(req: Request) {
       agent,
       modelMessages,
       latestUserText,
+      { pageContext: pageContext?.block ?? null },
     );
     if (!stream) {
       return NextResponse.json(
@@ -178,7 +187,10 @@ export async function POST(req: Request) {
     await appendMessage({ role: "user", content: latestUserText });
   }
 
-  const route = await decideRoute(modelMessages, { forceRoute });
+  const route = await decideRoute(modelMessages, {
+    forceRoute,
+    pageLabel: pageContext?.label ?? null,
+  });
 
   if (route === "deepseek" && !isDeepseekConfigured()) {
     return NextResponse.json(
@@ -195,10 +207,13 @@ export async function POST(req: Request) {
 
   const result =
     route === "deepseek"
-      ? await streamDeepseekResponse(modelMessages)
+      ? await streamDeepseekResponse(modelMessages, {
+          pageContext: pageContext?.block ?? null,
+        })
       : await streamClaudeResponse(
           modelMessages,
           route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          { pageContext: pageContext?.block ?? null },
         );
 
   const modelId = modelIdForRoute(route);

@@ -83,6 +83,7 @@ export async function streamAgentResponse(
   agent: Agent,
   messages: ModelMessage[],
   latestUserText: string,
+  opts: { pageContext?: string | null } = {},
 ) {
   const picked = await pickModel(agent);
   if (!picked) return null;
@@ -92,7 +93,12 @@ export async function streamAgentResponse(
 
   // Date/wife-shift/task context, minus the delegation block (a sub-agent
   // can't delegate). The agent's own system_prompt stays the primary spec.
-  const prefix = await buildContextPrefix(latestUserText, { includeAgents: false });
+  // pageContext carries the CURRENT PAGE block when the turn came from the
+  // docked chatbox on a data page (e.g. a project's detail page).
+  const prefix = await buildContextPrefix(latestUserText, {
+    includeAgents: false,
+    pageContext: opts.pageContext,
+  });
 
   const result = streamText({
     model: picked.model,

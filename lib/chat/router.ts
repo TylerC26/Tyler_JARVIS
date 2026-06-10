@@ -73,6 +73,10 @@ export type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
+  // Short label for the page the turn was sent from ("the KIX11 project
+  // page"). Nudges the classifier: ambiguous messages on a data page are
+  // data reads, not chitchat.
+  pageLabel?: string | null;
 };
 
 // Sync env-key check. Used for UI capability gating ("is the key present at
@@ -103,11 +107,15 @@ export async function decideRoute(
   // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
   if (!isDeepseekConfigured()) return "sonnet";
 
+  const classifierSystem = opts.pageLabel
+    ? `${CLASSIFIER_SYSTEM_PROMPT}\n\nNote: the user is currently viewing ${opts.pageLabel} in the app. Short or ambiguous messages ("what's the status?", "summarize this") likely ask about the data on that page and need tools to answer — route those to sonnet, not deepseek.`
+    : CLASSIFIER_SYSTEM_PROMPT;
+
   try {
     const result = await generateObject({
       model: deepseek("deepseek-chat"),
       schema: RouteSchema,
-      system: CLASSIFIER_SYSTEM_PROMPT,
+      system: classifierSystem,
       messages,
       maxOutputTokens: 30,
     });
@@ -156,7 +164,15 @@ function looksLikeAction(text: string): boolean {
   return ACTION_VERB_REGEX.test(text);
 }
 
-export async function streamDeepseekResponse(messages: ModelMessage[]) {
+export type StreamOptions = {
+  // Pre-rendered CURRENT PAGE block from lib/chat/page-context.ts.
+  pageContext?: string | null;
+};
+
+export async function streamDeepseekResponse(
+  messages: ModelMessage[],
+  streamOpts: StreamOptions = {},
+) {
   // When Claude is the orchestrator (the default), DeepSeek runs as the cheap
   // chitchat tier — no tools, "responder" prompt that explicitly disclaims
   // taking actions. When Claude is killed via the StatusRail toggle, every
@@ -166,7 +182,7 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
   const claudeOn = await isClaudeEnabled();
   const userText = extractLatestUserText(messages);
   const [prefixContent, baseSystem] = await Promise.all([
-    buildContextPrefix(userText),
+    buildContextPrefix(userText, { pageContext: streamOpts.pageContext }),
     claudeOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
   ]);
   // In orchestrator mode, prepend the DeepSeek-specific tool-calling preamble
@@ -223,9 +239,12 @@ export async function streamDeepseekResponse(messages: ModelMessage[]) {
 export async function streamClaudeResponse(
   messages: ModelMessage[],
   model: ClaudeModelId = "claude-sonnet-4-6",
+  streamOpts: StreamOptions = {},
 ) {
   const [prefixContent, system] = await Promise.all([
-    buildContextPrefix(extractLatestUserText(messages)),
+    buildContextPrefix(extractLatestUserText(messages), {
+      pageContext: streamOpts.pageContext,
+    }),
     getActiveOrchestratorPrompt(),
   ]);
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };

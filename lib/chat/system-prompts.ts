@@ -378,13 +378,17 @@ export type ContextPrefixOptions = {
   // Direct sub-agent threads suppress the delegation block — the agent can't
   // delegate, and telling it to call delegate_to_agent would just mislead it.
   includeAgents?: boolean;
+  // Pre-rendered CURRENT PAGE block (lib/chat/page-context.ts) describing what
+  // the user is looking at right now. Injected near the top so ambiguous
+  // messages resolve against the on-screen record, not the global lists.
+  pageContext?: string | null;
 };
 
 export async function buildContextPrefix(
   userText?: string,
   opts: ContextPrefixOptions = {},
 ) {
-  const { includeAgents = true } = opts;
+  const { includeAgents = true, pageContext = null } = opts;
   // Injected as an extra system message so BOTH chat routes (DeepSeek chitchat
   // AND Claude orchestrator) see Tyler's date context and his wife's upcoming
   // shifts on every message — no tool-call required. This is what makes the
@@ -558,8 +562,13 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
     console.warn("[chat] could not render memory for context prefix:", e);
   }
 
+  // The page block sits directly under the date header — it's the lens the
+  // rest of the prefix (tasks, projects, events) should be read through.
+  const pagePart = pageContext ? `\n\n${pageContext}` : "";
+
   return (
     datePart +
+    pagePart +
     memoryPart +
     eventsPart +
     tasksPart +

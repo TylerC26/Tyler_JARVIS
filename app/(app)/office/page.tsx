@@ -60,6 +60,7 @@ export default async function OfficePage() {
               initialMessages={initialMessages}
               configured={configured}
               variant="page"
+              pagePath="/office"
             />
           </div>
         </section>

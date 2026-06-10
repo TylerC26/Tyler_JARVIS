@@ -24,6 +24,10 @@ type Props = {
   // When true, the input exposes image attach/paste/drop. Gated server-side on
   // the active agent having an OCR/vision tool allowlisted (Claudia first).
   imageUploadEnabled?: boolean;
+  // App pathname this panel is docked on (launcher only). Sent with every turn
+  // so the server can preset the page's context ("this project", "this
+  // meeting"). Null for the dedicated /chat surface.
+  pagePath?: string | null;
 };
 
 type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
@@ -36,6 +40,7 @@ export function ChatPanel({
   agent = null,
   initialPrompt = null,
   imageUploadEnabled = false,
+  pagePath = null,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
@@ -51,12 +56,25 @@ export function ChatPanel({
     () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
   );
 
+  // Read through a ref so the body closure always sees the current page even
+  // when the panel survives a navigation (e.g. /projects/a → /projects/b keeps
+  // the same mounted panel — only the prop changes).
+  const pagePathRef = useRef(pagePath);
+  useEffect(() => {
+    pagePathRef.current = pagePath;
+  }, [pagePath]);
+
   const transport = new DefaultChatTransport({
     api: "/api/chat",
     // Timezone is resolved server-side from the owner's configured tz
     // (getOwnerTz) — the browser's local zone is intentionally not used.
     // agentSlug scopes the turn to a sub-agent thread (null = main Jarvis).
-    body: () => ({ forceRoute, agentSlug: agent?.slug ?? null }),
+    // pagePath tells the server which page the turn was typed on.
+    body: () => ({
+      forceRoute,
+      agentSlug: agent?.slug ?? null,
+      pagePath: pagePathRef.current,
+    }),
   });
 
   const { messages, sendMessage, status, error, setMessages } =
