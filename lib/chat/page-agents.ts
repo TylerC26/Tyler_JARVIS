@@ -7,21 +7,19 @@
 // system-prompt block for the same paths.
 
 // Ordered first-match-wins rules. A trailing (\/|$) means the list page AND
-// its detail pages share the agent.
+// its detail pages share the agent. Project detail pages are category-aware
+// and refine this via <PageAgentHint/> (lib/chat/page-agent-hint.ts): WORK
+// projects → Claudia, ventures → Developer; the /projects entry below covers
+// the list page and the first paint of a detail page before its hint lands.
 const PAGE_AGENT_RULES: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/projects(\/|$)/, "developer"],
+  [/^\/projects(\/|$)/, "work-assistant"], // Claudia — work projects
+  [/^\/ventures$/, "developer"], // side-business list (category "other")
   [/^\/repo-tasks(\/|$)/, "developer"],
   [/^\/meetings(\/|$)/, "work-assistant"], // Claudia — meeting notes live with her
   [/^\/calendar$/, "scheduler"],
   [/^\/tasks$/, "planner"],
   [/^\/places$/, "travel"],
 ];
-
-// Every slug the rules can resolve to — the app layout uses this to ship only
-// the relevant agents to the launcher instead of the whole roster.
-export const PAGE_AGENT_SLUGS: ReadonlySet<string> = new Set(
-  PAGE_AGENT_RULES.map(([, slug]) => slug),
-);
 
 // The sub-agent slug that should handle chat turns typed on this page, or
 // null for main Jarvis. The launcher only honors it when the slug exists in

@@ -1,8 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ChatPanel } from "@/components/modules/chat/ChatPanel";
+import {
+  getPageAgentHint,
+  getServerPageAgentHint,
+  subscribePageAgentHint,
+} from "@/lib/chat/page-agent-hint";
 import {
   defaultAgentSlugForPath,
   pageContextLabel,
@@ -30,11 +35,20 @@ export function ChatLauncher({
   // permanently (CSS forces it visible) and this state is inert.
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  // Page-default agent the user has switched off (back to main Jarvis).
-  // Stored as the dismissed slug so navigating to a page mapped to a
-  // DIFFERENT agent re-arms automatically, while staying dismissed across
-  // pages that share the same agent (e.g. two project pages).
-  const [dismissedSlug, setDismissedSlug] = useState<string | null>(null);
+  // Manual pick from the strip dropdown, scoped to the page default it was
+  // made under — navigating to a page with a DIFFERENT default re-arms that
+  // page's agent instead of dragging the pick along.
+  const [pick, setPick] = useState<{
+    under: string | null;
+    slug: string | null;
+  } | null>(null);
+  // Data-aware override from the current page (e.g. project category routes
+  // work projects to Claudia, ventures to Developer). Beats the path map.
+  const hintSlug = useSyncExternalStore(
+    subscribePageAgentHint,
+    getPageAgentHint,
+    getServerPageAgentHint,
+  );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -55,13 +69,14 @@ export function ChatLauncher({
 
   // Page awareness: every turn sent from this panel carries the pathname so
   // the server presets the page's context, and pages with a mapped sub-agent
-  // talk to that agent's thread by default instead of main Jarvis.
-  const mappedSlug = defaultAgentSlugForPath(pathname);
-  const pageAgent = mappedSlug
-    ? (agents.find((a) => a.slug === mappedSlug) ?? null)
+  // talk to that agent's thread by default instead of main Jarvis. A manual
+  // pick wins while the page default it was made under is still in effect.
+  const mappedSlug = hintSlug ?? defaultAgentSlugForPath(pathname);
+  const activeSlug =
+    pick && pick.under === mappedSlug ? pick.slug : mappedSlug;
+  const agent = activeSlug
+    ? (agents.find((a) => a.slug === activeSlug) ?? null)
     : null;
-  const agent =
-    pageAgent && pageAgent.slug !== dismissedSlug ? pageAgent : null;
   const ctxLabel = pageContextLabel(pathname);
 
   return (
@@ -122,34 +137,37 @@ export function ChatLauncher({
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        {/* Context strip: which page the chat is grounded in, and a toggle
-            between the page's default agent and main Jarvis. */}
-        {ctxLabel && (
-          <div className="flex items-center justify-between gap-2 border-b border-l border-edge bg-surface-2/70 px-3 py-1.5">
-            <span
-              className="truncate font-mono text-[10px] uppercase tracking-[0.15em] text-fg-dim"
-              title={`Chat is grounded in this page: ${ctxLabel}`}
-            >
-              ◈ ctx · {ctxLabel}
-            </span>
-            {pageAgent && (
-              <button
-                type="button"
-                onClick={() =>
-                  setDismissedSlug(agent ? pageAgent.slug : null)
-                }
-                className="shrink-0 rounded-sm border border-edge px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong hover:text-fg"
-                title={
-                  agent
-                    ? `Switch this page's chat back to main Jarvis`
-                    : `Switch back to ${pageAgent.name}, this page's default agent`
-                }
-              >
-                {agent ? "→ jarvis" : `→ ${pageAgent.name}`}
-              </button>
-            )}
-          </div>
-        )}
+        {/* Context strip: which page the chat is grounded in, plus an agent
+            picker — defaults to the page's mapped agent (◈), pick anyone. */}
+        <div className="flex items-center justify-between gap-2 border-b border-l border-edge bg-surface-2/70 px-3 py-1.5">
+          <span
+            className="truncate font-mono text-[10px] uppercase tracking-[0.15em] text-fg-dim"
+            title={
+              ctxLabel
+                ? `Chat is grounded in this page: ${ctxLabel}`
+                : "No page context"
+            }
+          >
+            ◈ ctx · {ctxLabel ?? "—"}
+          </span>
+          <select
+            value={agent?.slug ?? ""}
+            onChange={(e) =>
+              setPick({ under: mappedSlug, slug: e.target.value || null })
+            }
+            className="h-7 max-w-[45%] shrink-0 truncate rounded-sm border border-edge bg-surface-2 px-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
+            title="Who handles messages typed here (◈ = this page's default)"
+            aria-label="Chat agent"
+          >
+            <option value="">jarvis</option>
+            {agents.map((a) => (
+              <option key={a.slug} value={a.slug}>
+                {a.name}
+                {a.slug === mappedSlug ? " ◈" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="min-h-0 flex-1">
           {/* Keyed by thread so switching the page agent (or toggling back to
               Jarvis) resets useChat to the right conversation. */}

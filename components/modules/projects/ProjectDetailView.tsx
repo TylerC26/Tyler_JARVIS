@@ -10,6 +10,7 @@ import {
   updateMilestoneAction,
   updateProjectAction,
 } from "@/app/(app)/projects/actions";
+import { PageAgentHint } from "@/components/modules/chat/PageAgentHint";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
@@ -195,6 +196,11 @@ export function ProjectDetailView({
 
   return (
     <>
+      {/* Chatbox default agent for this page: Claudia handles WORK projects,
+          Developer handles ventures — the path map can't see the category. */}
+      <PageAgentHint
+        agent={project.category === "work" ? "work-assistant" : "developer"}
+      />
       <PageHeader
         code="PRJ"
         title={project.name}
