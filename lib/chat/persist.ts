@@ -1,6 +1,7 @@
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type {
+  ChatAttachment,
   ChatMessage,
   ChatRole,
   ChatToolCall,
@@ -18,6 +19,8 @@ export type AppendInput = {
   tokens_out?: number | null;
   // null = main Jarvis thread; a slug scopes the row to one sub-agent thread.
   agent_slug?: string | null;
+  // Images attached to a user turn, re-hosted in chat-uploads. See migration 0048.
+  attachments?: ChatAttachment[] | null;
   // Author identity for team transcripts. null = derive from role; 'jarvis' =
   // the orchestrator; a slug = that sub-agent. See migration 0039.
   sender?: string | null;
@@ -43,6 +46,7 @@ export async function appendMessage(
       tokens_out: input.tokens_out ?? null,
       agent_slug: input.agent_slug ?? null,
       sender: input.sender ?? null,
+      attachments: input.attachments ?? null,
     })
     .select()
     .single();

@@ -19,7 +19,54 @@ import {
   runSkillJudge,
 } from "@/lib/chat/turn";
 import type { JarvisMessageMetadata, JarvisUIMessage } from "@/lib/chat/ui";
+import type { ChatAttachment } from "@/lib/db/types";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
+
+type FilePart = { type: "file"; url: string; mediaType: string; filename?: string };
+
+// Pull re-hosted image attachments off a user turn for persistence, so the
+// thread can rehydrate its image parts on reload.
+function collectAttachments(msg: UIMessage): ChatAttachment[] {
+  return msg.parts
+    .filter((p) => p.type === "file")
+    .map((p) => {
+      const fp = p as FilePart;
+      return { url: fp.url, mediaType: fp.mediaType, filename: fp.filename };
+    });
+}
+
+// Shape the UI messages into what the model should actually see:
+//   - The latest user turn keeps its real image parts (so the model can see the
+//     new upload) plus a text note listing each image URL, so the agent can pass
+//     that URL to the ocr_extract / vision_analyze tools.
+//   - Every earlier user turn has its images downgraded to text markers. The
+//     bytes are only sent for the current turn; prior screenshots reference
+//     their URL as text (re-OCR via tool if needed). Without this, a
+//     meeting-note session re-encodes and re-bills every historical image every
+//     turn. The note/markers live only in the model copy — the persisted message
+//     content and the rendered bubble stay clean.
+function prepareModelMessages(messages: UIMessage[]): UIMessage[] {
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+  return messages.map((m, i) => {
+    const fileParts = m.parts.filter((p) => p.type === "file") as FilePart[];
+    if (fileParts.length === 0) return m;
+    if (i !== lastUserIdx) {
+      return {
+        ...m,
+        parts: m.parts.map((p) =>
+          p.type === "file"
+            ? { type: "text" as const, text: `[prior image: ${(p as FilePart).url}]` }
+            : p,
+        ),
+      };
+    }
+    const note = {
+      type: "text" as const,
+      text: fileParts.map((f) => `[image attached: ${f.url}]`).join("\n"),
+    };
+    return { ...m, parts: [...m.parts, note] };
+  });
+}
 
 export const runtime = "nodejs";
 // A turn may run a sub-agent inline (delegate_to_agent) before the orchestrator
@@ -48,7 +95,9 @@ export async function POST(req: Request) {
 
   const { messages, forceRoute, agentSlug } = (await req.json()) as IncomingBody;
 
-  const modelMessages = await convertToModelMessages(messages);
+  const modelMessages = await convertToModelMessages(
+    prepareModelMessages(messages),
+  );
 
   // Persist the latest user message (the only one not already saved by a prior turn).
   const latestUser = [...messages].reverse().find((m) => m.role === "user");
@@ -58,6 +107,7 @@ export async function POST(req: Request) {
         .map((p) => (p as { type: "text"; text: string }).text)
         .join("\n")
     : "";
+  const latestAttachments = latestUser ? collectAttachments(latestUser) : [];
 
   // ---- Sub-agent thread: stream against the agent's own prompt + tools. ----
   if (agentSlug) {
@@ -74,6 +124,7 @@ export async function POST(req: Request) {
         role: "user",
         content: latestUserText,
         agent_slug: agent.slug,
+        attachments: latestAttachments.length ? latestAttachments : null,
       });
     }
 

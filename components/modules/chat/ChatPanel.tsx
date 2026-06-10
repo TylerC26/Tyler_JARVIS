@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type FileUIPart } from "ai";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
@@ -21,6 +21,9 @@ type Props = {
   // Seeded message to auto-send once on mount (e.g. a calendar "take notes"
   // deep-link). Ignored for sub-agent threads.
   initialPrompt?: string | null;
+  // When true, the input exposes image attach/paste/drop. Gated server-side on
+  // the active agent having an OCR/vision tool allowlisted (Claudia first).
+  imageUploadEnabled?: boolean;
 };
 
 type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
@@ -32,9 +35,12 @@ export function ChatPanel({
   onClose,
   agent = null,
   initialPrompt = null,
+  imageUploadEnabled = false,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [version, setVersion] = useState(0); // bump on clear to reset useChat state
   // Per-mount nonce baked into the useChat id. Without it, switching threads
   // and switching back would reuse the previous mount's Chat instance (the
@@ -119,6 +125,44 @@ export function ChatPanel({
     }
     prevStatus.current = status;
   }, [status, router]);
+
+  // Upload any attached images to the chat-uploads bucket first, then send the
+  // turn with hosted file parts. The model gets the image natively; the route
+  // also surfaces each URL so the agent can pass it to ocr_extract.
+  async function handleSend(text: string, files: File[]) {
+    setUploadError(null);
+    let fileParts: FileUIPart[] = [];
+    if (files.length > 0) {
+      setUploading(true);
+      try {
+        fileParts = await Promise.all(
+          files.map(async (file) => {
+            const fd = new FormData();
+            fd.append("image", file);
+            const res = await fetch("/api/chat/upload", {
+              method: "POST",
+              body: fd,
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error ?? "Upload failed.");
+            return {
+              type: "file" as const,
+              mediaType: json.mediaType as string,
+              url: json.url as string,
+              ...(json.filename ? { filename: json.filename as string } : {}),
+            };
+          }),
+        );
+      } catch (e) {
+        setUploadError(e instanceof Error ? e.message : "Image upload failed.");
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+    if (text) sendMessage({ text, files: fileParts.length ? fileParts : undefined });
+    else if (fileParts.length) sendMessage({ files: fileParts });
+  }
 
   const title = agent ? agent.name : "jarvis";
   const accent = agent?.color ?? "#00d9ff";
@@ -234,6 +278,12 @@ export function ChatPanel({
         </div>
       )}
 
+      {uploadError && (
+        <div className="border-b border-danger/40 bg-danger/5 px-4 py-2 font-mono text-[11px] text-danger">
+          ! {uploadError}
+        </div>
+      )}
+
       <ChatThread
         messages={messages}
         pending={pending}
@@ -243,8 +293,9 @@ export function ChatPanel({
 
       <ChatInput
         disabled={inputDisabled}
-        pending={pending}
-        onSend={(text) => sendMessage({ text })}
+        pending={pending || uploading}
+        imageUploadEnabled={imageUploadEnabled && !inputDisabled}
+        onSend={handleSend}
       />
     </div>
   );

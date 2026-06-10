@@ -316,6 +316,15 @@ export type ChatToolCall = {
   arguments: Record<string, unknown>;
 };
 
+// An image (or other file) attached to a chat turn, re-hosted in the
+// chat-uploads bucket. Persisted on chat_messages.attachments so a thread can
+// rehydrate its image parts on reload. See migration 0048.
+export type ChatAttachment = {
+  url: string;
+  mediaType: string;
+  filename?: string;
+};
+
 export type ChatMessage = {
   id: string;
   owner_id: string;
@@ -331,6 +340,9 @@ export type ChatMessage = {
   tokens_out: number | null;
   // null = main Jarvis tab; otherwise scopes the row to one sub-agent thread.
   agent_slug: string | null;
+  // Images attached to this turn (user uploads), re-hosted in chat-uploads.
+  // null on turns with no attachments. See migration 0048.
+  attachments: ChatAttachment[] | null;
   // Who authored the row, independent of `role`. null = derive from role
   // (user = owner, assistant = Jarvis); 'jarvis' = the orchestrator (e.g. a
   // delegation handoff logged onto an agent thread); '<slug>' = that sub-agent.
@@ -867,6 +879,7 @@ export type Database = {
           tokens_out?: number | null;
           agent_slug?: string | null;
           sender?: string | null;
+          attachments?: ChatAttachment[] | null;
           created_at?: string;
         };
         Update: Partial<ChatMessage>;

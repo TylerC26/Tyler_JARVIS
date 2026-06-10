@@ -22,6 +22,9 @@ type Props = {
   // Seeded message (e.g. from a calendar "take notes" deep-link) the active
   // panel should auto-send once on mount. Main Jarvis thread only.
   initialPrompt?: string | null;
+  // Whether the active thread's agent supports image upload (OCR/vision tool
+  // allowlisted). Resolved server-side; Claudia first.
+  imageUploadEnabled?: boolean;
 };
 
 const ACCENT = "#00d9ff";
@@ -32,6 +35,7 @@ export function ChatWorkspace({
   initialMessages,
   configured,
   initialPrompt = null,
+  imageUploadEnabled = false,
 }: Props) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -102,6 +106,7 @@ export function ChatWorkspace({
           variant="page"
           agent={activeAgent}
           initialPrompt={initialPrompt}
+          imageUploadEnabled={imageUploadEnabled}
         />
       </div>
     </div>

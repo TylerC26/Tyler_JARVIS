@@ -3,6 +3,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
+import { extractJSON } from "@/lib/ocr/extract-json";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { createIdeaCore } from "@/lib/db/core/ideas";
 import {
@@ -1555,6 +1556,83 @@ export const visionAnalyzeTool = tool({
   },
 });
 
+export const ocrExtractTool = tool({
+  description:
+    "OCR an image: transcribe its text, or pull structured fields out of it. Use when the user shares an image (URL or attachment) of a document, whiteboard, screenshot, receipt, slide, or handwritten note and wants the text read out or specific fields extracted — e.g. 'transcribe this', 'what does this say', 'pull the action items from this whiteboard'. For a free-form description of a scene/photo, prefer vision_analyze.",
+  inputSchema: z.object({
+    image_url: z
+      .string()
+      .describe(
+        "Publicly accessible image URL (https://…) or a base64 data URI (data:image/…;base64,…). When the user attached an image, use the URL from its [image attached: …] marker.",
+      ),
+    mode: z
+      .enum(["text", "structured"])
+      .optional()
+      .describe(
+        "'text' (default) returns a clean transcription preserving layout. 'structured' returns a JSON object of the fields described in `prompt`.",
+      ),
+    prompt: z
+      .string()
+      .optional()
+      .describe(
+        "What to transcribe or extract. For structured mode, describe the exact fields/shape wanted (e.g. 'vendor, date, total, line items').",
+      ),
+  }),
+  execute: async ({ image_url, mode, prompt }) => {
+    const { isClaudeEnabled } = await import("@/lib/db/core/site-settings");
+    if (!(await isClaudeEnabled())) {
+      return {
+        ok: false,
+        error:
+          "OCR is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
+      };
+    }
+    try {
+      const image = image_url.startsWith("http")
+        ? new URL(image_url)
+        : image_url; // data URI or raw base64
+      const structured = mode === "structured";
+      const system = structured
+        ? `You extract structured data from an image via OCR. Output ONLY a single JSON object inside <result>...</result> XML tags — no prose, no markdown fences. If a field isn't present, use null. If the image is unreadable, output <result>{}</result>.`
+        : `You transcribe the text in an image via OCR. Output the text faithfully, preserving reading order and rough layout (line breaks, lists, columns). Do not summarize, translate, or add commentary. If there is no legible text, say so plainly.`;
+      const instruction = structured
+        ? (prompt ?? "Extract every labeled field you can read.")
+        : (prompt ??
+          "Transcribe all text in this image. Preserve layout where it carries meaning.");
+      const { text } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        system,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", image },
+              { type: "text", text: instruction },
+            ],
+          },
+        ],
+        maxOutputTokens: 4000,
+      });
+      if (structured) {
+        const parsed = extractJSON(text);
+        if (parsed === null) {
+          return {
+            ok: false,
+            error: "Couldn't parse structured data — try mode 'text' or a clearer image.",
+          };
+        }
+        return { ok: true, data: parsed };
+      }
+      return { ok: true, text };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "OCR failed.",
+      };
+    }
+  },
+});
+
 // ---------- places ----------
 
 export const savePlaceTool = tool({
@@ -2300,6 +2378,7 @@ export const ALL_TOOLS = {
   get_brief_prompt: getBriefPromptTool,
   set_brief_prompt: setBriefPromptTool,
   vision_analyze: visionAnalyzeTool,
+  ocr_extract: ocrExtractTool,
   web_search: webSearchTool,
   create_cron_job: createCronJobTool,
   list_cron_jobs: listCronJobsTool,
