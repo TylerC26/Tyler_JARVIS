@@ -49,6 +49,13 @@ export default async function ChatPage({
     deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
   };
 
+  // Data-driven rollout: image upload is enabled for an agent thread once that
+  // agent allowlists an OCR/vision tool. Claudia (work-assistant) first; adding
+  // the tool to another agent auto-enables upload there too.
+  const imageUploadEnabled = (activeAgent?.tool_allowlist ?? []).some(
+    (t) => t === "ocr_extract" || t === "vision_analyze",
+  );
+
   return (
     <div className="h-[calc(100dvh-3.5rem-2.5rem)] md:h-[calc(100dvh-3.5rem-3rem)]">
       <ChatWorkspace
@@ -75,6 +82,7 @@ export default async function ChatPage({
         // seeded kick-off message that auto-sends into the active thread
         // (Claudia / work-assistant, set via the agent param on the same link).
         initialPrompt={promptParam ?? null}
+        imageUploadEnabled={imageUploadEnabled}
       />
     </div>
   );

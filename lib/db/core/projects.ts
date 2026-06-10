@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import type {
   Project,
   ProjectCategory,
+  ProjectLink,
   ProjectMilestone,
   ProjectStatus,
 } from "@/lib/db/types";
@@ -19,6 +20,7 @@ export type CreateProjectInput = {
   notes?: string | null;
   github_repo_url?: string | null;
   github_default_branch?: string | null;
+  links?: ProjectLink[];
 };
 
 export type UpdateProjectInput = Partial<
@@ -34,8 +36,21 @@ export type UpdateProjectInput = Partial<
     | "notes"
     | "github_repo_url"
     | "github_default_branch"
+    | "links"
   >
 >;
+
+// Drop empty rows and trim — keeps stray blank link rows from the edit form out
+// of the DB. A link is only meaningful with a URL.
+function cleanLinks(links: ProjectLink[]): ProjectLink[] {
+  return links
+    .map((l) => ({
+      platform: (l.platform || "custom").trim(),
+      label: (l.label || "").trim(),
+      url: (l.url || "").trim(),
+    }))
+    .filter((l) => l.url.length > 0);
+}
 
 export type CreateMilestoneInput = {
   project_id: string;
@@ -179,6 +194,7 @@ export async function createProjectCore(
       notes: input.notes ?? null,
       github_repo_url: input.github_repo_url ?? null,
       github_default_branch: input.github_default_branch ?? null,
+      links: input.links ? cleanLinks(input.links) : [],
     })
     .select()
     .single();
@@ -212,6 +228,7 @@ export async function updateProjectCore(
     updates.github_repo_url = patch.github_repo_url;
   if (patch.github_default_branch !== undefined)
     updates.github_default_branch = patch.github_default_branch;
+  if (patch.links !== undefined) updates.links = cleanLinks(patch.links);
 
   const { data, error } = await supabase
     .from("projects")

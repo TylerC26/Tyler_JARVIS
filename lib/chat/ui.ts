@@ -141,7 +141,23 @@ export function dbToUIMessages(
         parts.push(toolPart(tc.name, tc.id, tc.arguments, output));
       }
     }
+    // Rehydrate uploaded images as file parts so a reloaded thread shows them
+    // again (content is text-only). Shape matches a streamed file part so live
+    // and historical turns render identically in Message.tsx. Display-path only
+    // (richTools) — model-history consumers (Telegram/cron/Discord) stay text so
+    // a non-vision model never receives image blocks from history.
+    if (richTools && m.attachments) {
+      for (const att of m.attachments) {
+        parts.push({
+          type: "file",
+          mediaType: att.mediaType,
+          url: att.url,
+          ...(att.filename ? { filename: att.filename } : {}),
+        } as unknown as UIPart);
+      }
+    }
     if (m.content) parts.push({ type: "text", text: m.content });
+    // A turn with only an image (no text) must still render.
     if (parts.length === 0) continue;
 
     out.push({

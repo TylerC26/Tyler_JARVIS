@@ -120,6 +120,39 @@ export function Message({
               </p>
             );
           }
+          if (part.type === "file") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const fp = part as any;
+            if (typeof fp.mediaType === "string" && fp.mediaType.startsWith("image/")) {
+              return (
+                <a
+                  key={i}
+                  href={fp.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-1 block w-fit"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={fp.url}
+                    alt={fp.filename ?? "attached image"}
+                    className="max-h-72 max-w-full rounded-sm border border-edge object-contain"
+                  />
+                </a>
+              );
+            }
+            return (
+              <a
+                key={i}
+                href={fp.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mb-1 block font-mono text-[12px] text-accent underline"
+              >
+                {fp.filename ?? fp.url}
+              </a>
+            );
+          }
           if (part.type.startsWith("tool-")) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const tp = part as any;

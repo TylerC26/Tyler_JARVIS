@@ -14,6 +14,7 @@ import {
   type UpdateMilestoneInput,
   type UpdateProjectInput,
 } from "@/lib/db/core/projects";
+import { setMeetingProjectCore } from "@/lib/db/core/meetings";
 
 function bump(slug?: string) {
   revalidatePath("/projects");
@@ -92,5 +93,25 @@ export async function deleteMilestoneAction(id: string, slug: string) {
   bump(slug);
   return result.ok
     ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function attachMeetingAction(
+  meetingId: string,
+  projectId: string,
+  slug: string,
+) {
+  const result = await setMeetingProjectCore(meetingId, projectId);
+  bump(slug);
+  return result.ok
+    ? { ok: true as const, meeting: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+export async function detachMeetingAction(meetingId: string, slug: string) {
+  const result = await setMeetingProjectCore(meetingId, null);
+  bump(slug);
+  return result.ok
+    ? { ok: true as const, meeting: result.data }
     : { ok: false as const, error: result.error };
 }

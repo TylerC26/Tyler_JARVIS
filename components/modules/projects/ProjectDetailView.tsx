@@ -14,11 +14,16 @@ import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LaunchBar } from "./LaunchBar";
+import { LinksEditor } from "./LinksEditor";
+import { ProjectMeetings } from "./ProjectMeetings";
 import { ProjectTaskBoard } from "./ProjectTaskBoard";
 import { RoadmapStrip } from "./RoadmapStrip";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
+import type { MeetingListRow } from "@/lib/db/queries/meetings";
 import type {
   ProjectCategory,
+  ProjectLink,
   ProjectMilestone,
   ProjectStatus,
   Task,
@@ -44,9 +49,17 @@ type Props = {
   project: ProjectSummary;
   milestones: ProjectMilestone[];
   tasks: Task[];
+  meetings: MeetingListRow[];
+  attachableMeetings: MeetingListRow[];
 };
 
-export function ProjectDetailView({ project, milestones: initialMilestones, tasks }: Props) {
+export function ProjectDetailView({
+  project,
+  milestones: initialMilestones,
+  tasks,
+  meetings,
+  attachableMeetings,
+}: Props) {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>(initialMilestones);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | "new" | null>(null);
   const [milestonePending, setMilestonePending] = useState(false);
@@ -55,8 +68,14 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectPending, setProjectPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [links, setLinks] = useState<ProjectLink[]>(project.links ?? []);
 
   useEffect(() => setMilestones(initialMilestones), [initialMilestones]);
+  // Reset the edit-form link buffer whenever the modal (re)opens so a cancelled
+  // edit doesn't leak stale rows into the next open.
+  useEffect(() => {
+    if (editingProject) setLinks(project.links ?? []);
+  }, [editingProject, project.links]);
 
   async function onSaveMilestone(formData: FormData) {
     setMilestoneError(null);
@@ -141,6 +160,7 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         github_repo_url:
           ((formData.get("github_repo_url") as string | null) ?? "").trim() ||
           null,
+        links,
       };
       const result = await updateProjectAction(project.id, patch, project.slug);
       if (!result.ok) {
@@ -204,7 +224,20 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         }
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* External-software quick-launch (Procore / CxAlloy / custom / repo). */}
+      <LaunchBar links={project.links ?? []} githubRepoUrl={project.github_repo_url} />
+
+      {/* Milestone timeline — the hero of the construction project page. */}
+      <RoadmapStrip
+        milestones={milestones}
+        busyId={busyId}
+        onToggle={(m) => void onToggleMilestone(m)}
+        onEdit={(m) => setEditingMilestone(m)}
+        onAdd={() => setEditingMilestone("new")}
+      />
+
+      {/* Compact status summary below the hero. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric
           label="STATUS"
           value={project.status}
@@ -218,19 +251,16 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
         />
       </div>
 
-      {project.github_repo_url && (
-        <div className="mb-4 flex items-center gap-2 rounded-md border border-edge bg-surface/40 px-3 py-2 font-mono text-[11px]">
-          <span className="text-fg-dim">// repo</span>
-          <a
-            href={project.github_repo_url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="truncate text-accent hover:underline"
-          >
-            {project.github_repo_url.replace(/^https?:\/\/(www\.)?/, "")}
-          </a>
-        </div>
-      )}
+      <ProjectTaskBoard tasks={tasks} projectId={project.id} />
+
+      <div className="mt-6">
+        <ProjectMeetings
+          projectId={project.id}
+          projectSlug={project.slug}
+          meetings={meetings}
+          attachable={attachableMeetings}
+        />
+      </div>
 
       {project.notes && (
         <div className="mb-6 rounded-md border border-edge bg-surface/40 p-4">
@@ -242,16 +272,6 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
           </pre>
         </div>
       )}
-
-      <RoadmapStrip
-        milestones={milestones}
-        busyId={busyId}
-        onToggle={(m) => void onToggleMilestone(m)}
-        onEdit={(m) => setEditingMilestone(m)}
-        onAdd={() => setEditingMilestone("new")}
-      />
-
-      <ProjectTaskBoard tasks={tasks} projectId={project.id} />
 
       <div className="mt-8 flex items-center justify-end gap-2">
         <Button variant="danger" onClick={() => void onDeleteProject()}>
@@ -447,6 +467,9 @@ export function ProjectDetailView({ project, milestones: initialMilestones, task
                 className="flex-1 resize-none"
               />
             </Field>
+          </div>
+          <div className="md:col-span-2">
+            <LinksEditor links={links} onChange={setLinks} />
           </div>
           {projectError && (
             <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger md:col-span-2">
