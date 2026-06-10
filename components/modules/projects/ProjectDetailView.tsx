@@ -37,14 +37,6 @@ const STATUS_OPTIONS: ProjectStatus[] = [
   "archived",
 ];
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString(
-    "en-US",
-    { month: "short", day: "numeric", year: "numeric" },
-  );
-}
-
 type Props = {
   project: ProjectSummary;
   milestones: ProjectMilestone[];
@@ -201,8 +193,6 @@ export function ProjectDetailView({
   const backLabel =
     project.category === "other" ? "← all ventures" : "← all projects";
 
-  const totalTasks = project.open_task_count + project.done_task_count;
-
   return (
     <>
       <PageHeader
@@ -227,7 +217,7 @@ export function ProjectDetailView({
       {/* External-software quick-launch (Procore / CxAlloy / custom / repo). */}
       <LaunchBar links={project.links ?? []} githubRepoUrl={project.github_repo_url} />
 
-      {/* Milestone timeline — the hero of the construction project page. */}
+      {/* Milestone table — plain rows, toggle to complete, click to edit. */}
       <RoadmapStrip
         milestones={milestones}
         busyId={busyId}
@@ -235,21 +225,6 @@ export function ProjectDetailView({
         onEdit={(m) => setEditingMilestone(m)}
         onAdd={() => setEditingMilestone("new")}
       />
-
-      {/* Compact status summary below the hero. */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric
-          label="STATUS"
-          value={project.status}
-          tone={project.status === "active" ? "accent" : project.status === "paused" ? "warn" : project.status === "shipped" ? "success" : "fg"}
-        />
-        <Metric label="TASKS" value={`${project.done_task_count}/${totalTasks} · ${project.task_pct}%`} />
-        <Metric label="MILESTONES" value={`${project.milestone_done}/${project.milestone_total} · ${project.milestone_pct}%`} />
-        <Metric
-          label="TARGET"
-          value={project.target_date ? fmtDate(project.target_date) : "—"}
-        />
-      </div>
 
       <ProjectTaskBoard tasks={tasks} projectId={project.id} />
 
@@ -479,34 +454,5 @@ export function ProjectDetailView({
         </form>
       </AddItemModal>
     </>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  tone = "fg",
-}: {
-  label: string;
-  value: string;
-  tone?: "fg" | "success" | "warn" | "accent";
-}) {
-  const toneClass =
-    tone === "success"
-      ? "text-success"
-      : tone === "warn"
-        ? "text-warn"
-        : tone === "accent"
-          ? "text-accent"
-          : "text-fg";
-  return (
-    <div className="rounded-md border border-edge bg-surface/60 px-3 py-2.5">
-      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
-        {label}
-      </div>
-      <div className={`mt-0.5 font-mono text-base tabular ${toneClass}`}>
-        {value}
-      </div>
-    </div>
   );
 }

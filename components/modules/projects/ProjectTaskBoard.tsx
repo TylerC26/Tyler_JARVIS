@@ -56,13 +56,28 @@ export function ProjectTaskBoard({
     ...g,
     items: tasks.filter((t) => t.status === g.key),
   }));
+  // Replaces the old TASKS metric tile: just the open count, highlighted.
+  const openCount = tasks.filter((t) => t.status !== "done").length;
 
   return (
     <section className="mb-6">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
-          // board
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+            // board
+          </h2>
+          <span
+            title="open tasks"
+            className={[
+              "rounded-sm border px-2 py-0.5 font-mono text-[11px] tabular",
+              openCount > 0
+                ? "border-accent/50 bg-accent/10 text-accent"
+                : "border-edge text-fg-dim",
+            ].join(" ")}
+          >
+            {openCount} OPEN
+          </span>
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
