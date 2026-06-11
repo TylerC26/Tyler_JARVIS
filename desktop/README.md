@@ -29,18 +29,23 @@ streams in realtime). The webview's /meetings page drives it over Tauri IPC.
 | Command | What it does |
 | --- | --- |
 | `npm run desktop:dev` | Launch the app in dev mode (hot-reloads the Rust shell; webview shows production). |
-| `npm run desktop:build` | Produce a release `.app` at `desktop/src-tauri/target/release/bundle/macos/Jarvis.app`. |
+| `npm run desktop:build` | Produce a release `.app` at `desktop/src-tauri/target/release/bundle/macos/Jarvis.app` **and** a shareable installer at `desktop/src-tauri/target/release/bundle/dmg/Jarvis_<version>_aarch64.dmg`. |
 | `npm run desktop:icon <path/to/1024.png>` | Regenerate the icon set from a square source image (≥1024×1024). |
 
 To install: drag `Jarvis.app` into `/Applications`.
 
 ## Installing on another Mac (e.g. the work machine)
 
-1. `npm run desktop:build`, then zip
-   `desktop/src-tauri/target/release/bundle/macos/Jarvis.app` and copy it over
-   (AirDrop/USB). Unzip into `/Applications`.
+1. `npm run desktop:build`, then copy
+   `desktop/src-tauri/target/release/bundle/dmg/Jarvis_<version>_aarch64.dmg`
+   over (AirDrop/USB/Drive). Open it and drag **Jarvis** into **Applications**.
+   The build is Apple Silicon-only — for an Intel Mac, build universal:
+   `rustup target add x86_64-apple-darwin`, then
+   `cd desktop && tauri build --target universal-apple-darwin`.
 2. The app is ad-hoc signed (no Apple Developer cert), so Gatekeeper will balk
-   on first launch: either **right-click → Open → Open**, or run
+   on first launch: **right-click → Open → Open**. On newer macOS that path may
+   not offer "Open" — instead launch once, then System Settings → Privacy &
+   Security → **Open Anyway**, or just run
    `xattr -dr com.apple.quarantine /Applications/Jarvis.app`.
 3. First recording prompts for **Microphone** access — allow it.
 4. The first time system audio is captured, macOS prompts for **Screen
