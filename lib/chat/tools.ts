@@ -90,6 +90,10 @@ import {
   upsertWfhStatusCore,
   type WfhStatusInput,
 } from "@/lib/db/core/wfh-status";
+import {
+  listMeetingsByProjectCore,
+  listMeetingsCore,
+} from "@/lib/db/core/meetings";
 import { listProjectSummaries } from "@/lib/db/queries/projects";
 import { listActiveSkills } from "@/lib/db/queries/skills";
 import { listTasks } from "@/lib/db/queries/tasks";
@@ -782,7 +786,7 @@ export const createSkillTool = tool({
 
 export const queryStateTool = tool({
   description:
-    "Read-only snapshot of the user's current state. Call this before answering any question that requires real numbers.",
+    "Read-only snapshot of the user's current state. Call this before answering any question that requires real numbers. Domain 'meetings' returns recorded meeting notes/summaries — pass `project` to get the meetings linked to one project.",
   inputSchema: z.object({
     domain: z
       .enum([
@@ -792,12 +796,21 @@ export const queryStateTool = tool({
         "wfh_status",
         "skills",
         "projects",
+        "meetings",
         "all",
       ])
       .describe("Which domain(s) to fetch. 'all' returns a summary across everything."),
+    project: z
+      .string()
+      .optional()
+      .describe(
+        "Only with domain 'meetings': project slug or name — returns that project's linked meetings with full notes.",
+      ),
   }),
-  execute: async ({ domain }) => {
+  execute: async ({ domain, project }) => {
     const out: Record<string, unknown> = {};
+    const short = (s: string | null, n: number) =>
+      s && s.length > n ? `${s.slice(0, n - 1)}…` : s;
 
     if (domain === "tasks" || domain === "all") {
       const tasks = await listTasks();
@@ -863,6 +876,46 @@ export const queryStateTool = tool({
           trigger_keywords: s.trigger_keywords,
         })),
       };
+    }
+
+    if (domain === "meetings" || domain === "all") {
+      if (project?.trim()) {
+        // Project-scoped: full notes — this is the "what came out of the
+        // meetings on X?" path.
+        const proj = await findProjectCore(project.trim());
+        if (!proj) {
+          out.meetings = { error: `No project matching "${project}".` };
+        } else {
+          const rows = await listMeetingsByProjectCore(proj.id);
+          out.meetings = {
+            project: { id: proj.id, name: proj.name, slug: proj.slug },
+            count: rows.length,
+            items: rows.slice(0, 10).map((m) => ({
+              id: m.id,
+              title: m.title,
+              status: m.status,
+              started_at: m.started_at,
+              duration_ms: m.duration_ms,
+              notes: m.summary,
+            })),
+          };
+        }
+      } else {
+        // Unscoped: recent meetings; notes clipped ('all' stays light).
+        const rows = await listMeetingsCore({ limit: 10 });
+        out.meetings = {
+          count: rows.length,
+          recent: rows.map((m) => ({
+            id: m.id,
+            title: m.title,
+            status: m.status,
+            started_at: m.started_at,
+            project_id: m.project_id,
+            notes:
+              domain === "meetings" ? short(m.summary, 800) : undefined,
+          })),
+        };
+      }
     }
 
     if (domain === "projects" || domain === "all") {

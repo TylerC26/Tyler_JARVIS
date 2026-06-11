@@ -171,9 +171,20 @@ async function projectBlock(slug: string): Promise<PageContext | null> {
 
   if (meetings.length > 0) {
     const shown = meetings.slice(0, MAX_MEETINGS);
-    lines.push(`• attached meetings:`);
-    for (const m of shown)
-      lines.push(`    - ${m.title} (${day(m.started_at)}, ${m.status})`);
+    lines.push(`• attached meetings (newest first):`);
+    for (const m of shown) {
+      lines.push(
+        `    - ${m.title || "untitled"} (${day(m.started_at)}, ${m.status})`,
+      );
+      // Inline the note so "what came out of the last meeting?" needs no
+      // lookup; flatten whitespace to keep the block one line per meeting.
+      if (m.summary)
+        lines.push(`      notes: ${clip(m.summary.replace(/\s+/g, " "), 400)}`);
+    }
+    if (meetings.length > shown.length)
+      lines.push(
+        `    … +${meetings.length - shown.length} more (query_state domain "meetings" with project="${slug}" for all of them)`,
+      );
   }
 
   if (project.notes) lines.push(`• project notes: ${clip(project.notes, 500)}`);
