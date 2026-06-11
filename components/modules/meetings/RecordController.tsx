@@ -1,34 +1,25 @@
 "use client";
 
 // The recorder card on /meetings: record → (chunks upload + transcribe while
-// you talk) → stop → finalize → land on the meeting detail. Desktop app gets
-// native mic + system-audio capture (Rust, local WAV chunks); a plain browser
-// falls back to mic-only MediaRecorder. Nothing is transcribed live — v1's
-// realtime path was the unreliable part.
+// you talk) → stop → finalize → land on the meeting detail. The session itself
+// lives in the global recorder store (lib/meetings/recorderStore), so leaving
+// this page mid-meeting never interrupts capture — this card and the TopBar
+// RecorderPill are two views over the same store. Desktop app gets native mic
+// + system-audio capture (Rust, local WAV chunks); a plain browser falls back
+// to mic-only MediaRecorder. Nothing is transcribed live — v1's realtime path
+// was the unreliable part.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createMeetingAction } from "@/app/(app)/meetings/actions";
 import { Button } from "@/components/ui/Button";
-import { finalizeMeeting, type ChunkProgress } from "@/lib/meetings/pipeline";
-import { discardNativeRecording, useTauriRuntime } from "@/lib/meetings/tauri";
-import { useBrowserRecorder } from "@/lib/meetings/useBrowserRecorder";
+import type { ChunkProgress } from "@/lib/meetings/pipeline";
 import {
-  useTauriRecorder,
-  type RecorderStatus,
-  type SystemAudioState,
-} from "@/lib/meetings/useTauriRecorder";
+  startRecording,
+  stopRecording,
+  useRecorder,
+} from "@/lib/meetings/recorderStore";
+import { useTauriRuntime } from "@/lib/meetings/tauri";
 import { fmtDuration } from "./meetingUi";
-
-type RecorderApi = {
-  status: RecorderStatus;
-  level: number;
-  error: string | null;
-  systemAudio: SystemAudioState;
-  chunks: ChunkProgress[];
-  start: (meetingId: string) => Promise<void>;
-  stop: () => Promise<{ failedChunks: number; totalDurationMs: number | null }>;
-};
 
 export type RecordControllerProps = {
   eventId?: string | null;
@@ -81,94 +72,54 @@ function ChunkStrip({ chunks }: { chunks: ChunkProgress[] }) {
   );
 }
 
-function useElapsed(running: boolean): number {
+// Elapsed clock derived from the store's startedAt, so it's correct even when
+// this card mounts mid-recording (user navigated back to /meetings).
+function useElapsed(startedAt: number | null): number {
   const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef(0);
   useEffect(() => {
-    if (!running) return;
-    startRef.current = Date.now();
-    setElapsed(0);
-    const t = setInterval(() => setElapsed(Date.now() - startRef.current), 1000);
+    if (startedAt == null) {
+      setElapsed(0);
+      return;
+    }
+    const update = () => setElapsed(Date.now() - startedAt);
+    update();
+    const t = setInterval(update, 1000);
     return () => clearInterval(t);
-  }, [running]);
+  }, [startedAt]);
   return elapsed;
 }
 
-function Recorder({
-  api,
-  native,
+export function RecordController({
   eventId,
   eventTitle,
-}: {
-  api: RecorderApi;
-  native: boolean;
-  eventId?: string | null;
-  eventTitle?: string | null;
-}) {
+}: RecordControllerProps) {
   const router = useRouter();
-  const [meetingId, setMeetingId] = useState<string | null>(null);
-  const [phase, setPhase] = useState<
-    "idle" | "recording" | "processing" | "finalizing"
-  >("idle");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const recording = phase === "recording";
-  const elapsed = useElapsed(recording);
+  const rec = useRecorder();
+  // Default to the browser runtime (also avoids a hydration mismatch), then
+  // upgrade to native once the Tauri shell is detected (the remote page race —
+  // see useTauriRuntime). For a LIVE session, trust the store's capture path.
+  const runtime = useTauriRuntime();
+  const native = rec.phase === "idle" ? runtime === "tauri" : rec.native;
+
+  const recording = rec.phase === "recording";
+  const busy = rec.phase === "processing" || rec.phase === "finalizing";
+  const elapsed = useElapsed(rec.startedAt);
+  // A live session carries the event it was armed with; while idle, show the
+  // event this card WOULD attach to (from the calendar deep-link).
+  const liveEventTitle = rec.phase === "idle" ? eventTitle : rec.eventTitle;
 
   async function start() {
-    setLocalError(null);
-    const created = await createMeetingAction({
-      source: native ? "desktop" : "browser",
-      event_id: eventId ?? null,
-    });
-    if (!created.ok) {
-      setLocalError(created.error);
-      return;
-    }
-    setMeetingId(created.data.id);
-    setPhase("recording");
-    await api.start(created.data.id);
+    await startRecording({ eventId, eventTitle });
   }
 
   async function stop() {
-    const id = meetingId;
-    if (!id) return;
-    setPhase("processing");
-    try {
-      const { failedChunks, totalDurationMs } = await api.stop();
-      if (failedChunks > 0) {
-        setLocalError(
-          `${failedChunks} segment(s) didn't process — open the meeting to retry; the audio is safe.`,
-        );
-        setPhase("idle");
-        router.push(`/meetings/${id}`);
-        return;
-      }
-      setPhase("finalizing");
-      const fin = await finalizeMeeting(id, {
-        durationMs: totalDurationMs ?? elapsed,
-      });
-      if (!fin.ok) {
-        setLocalError(
-          `${fin.error} Open the meeting to retry — the audio is safe.`,
-        );
-        setPhase("idle");
-        router.push(`/meetings/${id}`);
-        return;
-      }
-      await discardNativeRecording(id);
-      setPhase("idle");
-      router.push(`/meetings/${id}`);
-    } catch (e) {
-      setLocalError(e instanceof Error ? e.message : "Stop failed.");
-      setPhase("idle");
-    }
+    const { meetingId } = await stopRecording();
+    if (meetingId) router.push(`/meetings/${meetingId}`);
   }
 
-  const busy = phase === "processing" || phase === "finalizing";
-  const error = localError ?? api.error;
   const hint = native
-    ? "Captures your mic and system audio (Zoom/Teams and anything playing) natively, then transcribes and summarizes after you stop."
-    : "Records this device's mic, then transcribes and summarizes after you stop. For the other call participants' audio, use the desktop app.";
+    ? "Captures your mic and system audio (Zoom/Teams and anything playing) natively, then transcribes and summarizes after you stop. Recording keeps running if you navigate to other pages."
+    : "Records this device's mic, then transcribes and summarizes after you stop. Recording keeps running if you navigate to other pages. For the other call participants' audio, use the desktop app.";
 
   return (
     <div className="rounded-sm border border-edge bg-surface-2/40 p-4 space-y-3">
@@ -178,30 +129,30 @@ function Recorder({
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-danger animate-pulse" />
           )}
           <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
-            {api.status === "starting"
+            {rec.phase === "starting"
               ? "// starting…"
               : recording
                 ? `// recording ${fmtDuration(elapsed)}`
-                : phase === "processing"
+                : rec.phase === "processing"
                   ? "// processing segments…"
-                  : phase === "finalizing"
+                  : rec.phase === "finalizing"
                     ? "// summarizing…"
                     : "// meeting recorder"}
           </span>
-          {recording && native && api.systemAudio !== "unknown" && (
+          {recording && rec.native && rec.systemAudio !== "unknown" && (
             <span
               className={`rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                api.systemAudio === "ok"
+                rec.systemAudio === "ok"
                   ? "border-success/40 bg-success/10 text-success"
                   : "border-warn/50 bg-warn/10 text-warn"
               }`}
             >
-              {api.systemAudio === "ok" ? "sys audio ✓" : "mic only"}
+              {rec.systemAudio === "ok" ? "sys audio ✓" : "mic only"}
             </span>
           )}
-          {eventTitle && (
+          {liveEventTitle && (
             <span className="rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-accent">
-              ⟶ {eventTitle}
+              ⟶ {liveEventTitle}
             </span>
           )}
         </div>
@@ -214,7 +165,7 @@ function Recorder({
             variant="primary"
             size="sm"
             onClick={start}
-            disabled={busy || api.status === "starting"}
+            disabled={busy || rec.phase === "starting"}
           >
             ● record
           </Button>
@@ -227,46 +178,12 @@ function Recorder({
         </p>
       )}
 
-      {recording && <AudioMeter level={api.level} />}
-      {(recording || busy) && <ChunkStrip chunks={api.chunks} />}
+      {recording && <AudioMeter level={rec.level} />}
+      {(recording || busy) && <ChunkStrip chunks={rec.chunks} />}
 
-      {error && <p className="font-mono text-[11px] text-danger">{error}</p>}
+      {rec.error && (
+        <p className="font-mono text-[11px] text-danger">{rec.error}</p>
+      )}
     </div>
-  );
-}
-
-function TauriRecorder(props: RecordControllerProps) {
-  const api = useTauriRecorder();
-  return (
-    <Recorder
-      api={api}
-      native
-      eventId={props.eventId}
-      eventTitle={props.eventTitle}
-    />
-  );
-}
-
-function BrowserRecorder(props: RecordControllerProps) {
-  const api = useBrowserRecorder();
-  return (
-    <Recorder
-      api={api}
-      native={false}
-      eventId={props.eventId}
-      eventTitle={props.eventTitle}
-    />
-  );
-}
-
-export function RecordController(props: RecordControllerProps) {
-  // Default to the browser recorder (also avoids a hydration mismatch), then
-  // upgrade to native once the Tauri shell is detected (the remote page race —
-  // see useTauriRuntime).
-  const runtime = useTauriRuntime();
-  return runtime === "tauri" ? (
-    <TauriRecorder {...props} />
-  ) : (
-    <BrowserRecorder {...props} />
   );
 }

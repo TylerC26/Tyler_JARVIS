@@ -1,5 +1,6 @@
 import { MobileNavMenu } from "./MobileNavMenu";
 import { Clock } from "./Clock";
+import { RecorderPill } from "./RecorderPill";
 import { StatusRail } from "./StatusRail";
 
 export function TopBar() {
@@ -16,7 +17,8 @@ export function TopBar() {
         </span>
       </div>
 
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 md:gap-6">
+        <RecorderPill />
         <StatusRail />
         <Clock />
       </div>
