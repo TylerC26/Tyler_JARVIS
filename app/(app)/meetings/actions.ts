@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   createMeetingCore,
   deleteMeetingCore,
+  setMeetingProjectCore,
   updateMeetingCore,
   type CreateMeetingInput,
 } from "@/lib/db/core/meetings";
@@ -28,5 +29,21 @@ export async function renameMeetingAction(id: string, title: string) {
 export async function deleteMeetingAction(id: string) {
   const result = await deleteMeetingCore(id);
   if (result.ok) bumpMeetings();
+  return result;
+}
+
+// Meeting-side mirror of the project page's attach/detach: link this meeting
+// (and so its note/summary) to an existing project, or unlink it.
+export async function setMeetingProjectAction(
+  meetingId: string,
+  projectId: string | null,
+  projectSlug?: string,
+) {
+  const result = await setMeetingProjectCore(meetingId, projectId);
+  if (result.ok) {
+    bumpMeetings();
+    revalidatePath("/projects");
+    if (projectSlug) revalidatePath(`/projects/${projectSlug}`);
+  }
   return result;
 }

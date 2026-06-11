@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { MeetingDetail } from "@/components/modules/meetings/MeetingDetail";
 import { getMeetingCore, listChunksCore } from "@/lib/db/core/meetings";
+import { listProjectsCore } from "@/lib/db/core/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -13,5 +14,14 @@ export default async function MeetingDetailPage({
   const meeting = await getMeetingCore(id);
   if (!meeting) notFound();
   const chunks = await listChunksCore(id);
-  return <MeetingDetail meeting={meeting} chunks={chunks} />;
+  // Full roster (all statuses) so an already-linked project always resolves
+  // to its name; the picker sorts actives first.
+  const projects = (await listProjectsCore()).map((p) => ({
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    status: p.status,
+    category: p.category,
+  }));
+  return <MeetingDetail meeting={meeting} chunks={chunks} projects={projects} />;
 }

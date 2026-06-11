@@ -7,6 +7,7 @@ import {
 } from "@/app/(app)/projects/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MeetingListRow } from "@/lib/db/queries/meetings";
 
@@ -60,7 +61,7 @@ export function ProjectMeetings({
     const result = await attachMeetingAction(m.id, projectId, projectSlug);
     setBusyId(null);
     if (!result.ok) {
-      alert(`Failed: ${result.error}`);
+      await alertDialog(`Failed: ${result.error}`, { title: "attach failed" });
       return;
     }
     setMeetings((prev) => [{ ...m, project_id: projectId }, ...prev]);
@@ -69,12 +70,18 @@ export function ProjectMeetings({
   }
 
   async function onDetach(m: MeetingListRow) {
-    if (!confirm(`Remove "${m.title || "Untitled meeting"}" from this project?`)) return;
+    // confirmDialog, not window.confirm — the latter is a silent no-op inside
+    // the desktop webview (see ConfirmDialog.tsx).
+    const ok = await confirmDialog(
+      `Remove "${m.title || "Untitled meeting"}" from this project?`,
+      { title: "remove meeting", confirmText: "remove" },
+    );
+    if (!ok) return;
     setBusyId(m.id);
     const result = await detachMeetingAction(m.id, projectSlug);
     setBusyId(null);
     if (!result.ok) {
-      alert(`Failed: ${result.error}`);
+      await alertDialog(`Failed: ${result.error}`, { title: "detach failed" });
       return;
     }
     setMeetings((prev) => prev.filter((x) => x.id !== m.id));

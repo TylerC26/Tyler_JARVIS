@@ -197,6 +197,7 @@ function MeetingRow({
             : ""}
           {meeting.note_id ? " · note saved" : ""}
           {meeting.event_id ? " · linked to event" : ""}
+          {meeting.project_id ? " · project" : ""}
         </p>
       </Link>
       <div className="shrink-0">

@@ -6,22 +6,35 @@ import { useState } from "react";
 import {
   deleteMeetingAction,
   renameMeetingAction,
+  setMeetingProjectAction,
 } from "@/app/(app)/meetings/actions";
+import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
-import type { Meeting, MeetingChunk } from "@/lib/db/types";
+import type { Meeting, MeetingChunk, ProjectCategory, ProjectStatus } from "@/lib/db/types";
 import { resumeMeeting, type ChunkProgress } from "@/lib/meetings/pipeline";
 import { ChunkPill, StatusPill, fmtAge, fmtDuration } from "./meetingUi";
 
 const BUCKET_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/meeting-recordings`;
 
+// Slim project shape for the link-to-project picker (page passes the roster).
+export type MeetingProjectOption = {
+  id: string;
+  name: string;
+  slug: string;
+  status: ProjectStatus;
+  category: ProjectCategory;
+};
+
 export function MeetingDetail({
   meeting: initial,
   chunks,
+  projects,
 }: {
   meeting: Meeting;
   chunks: MeetingChunk[];
+  projects: MeetingProjectOption[];
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState<Meeting>(initial);
@@ -31,6 +44,11 @@ export function MeetingDetail({
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [canForce, setCanForce] = useState(false);
   const [liveChunks, setLiveChunks] = useState<Record<number, ChunkProgress>>({});
+  const [pickingProject, setPickingProject] = useState(false);
+  const [projectBusy, setProjectBusy] = useState(false);
+
+  const linkedProject =
+    projects.find((p) => p.id === meeting.project_id) ?? null;
 
   const unfinished = chunks.filter((c) => c.status !== "transcribed");
   const stuck =
@@ -65,6 +83,38 @@ export function MeetingDetail({
       return;
     }
     router.push("/meetings");
+  }
+
+  async function linkProject(p: MeetingProjectOption) {
+    setProjectBusy(true);
+    const r = await setMeetingProjectAction(meeting.id, p.id, p.slug);
+    setProjectBusy(false);
+    if (!r.ok) {
+      await alertDialog(r.error, { title: "link failed" });
+      return;
+    }
+    setMeeting((prev) => ({ ...prev, project_id: p.id }));
+    setPickingProject(false);
+  }
+
+  async function unlinkProject() {
+    const ok = await confirmDialog(
+      `Unlink this meeting from "${linkedProject?.name ?? "its project"}"?`,
+      { title: "unlink project", confirmText: "unlink" },
+    );
+    if (!ok) return;
+    setProjectBusy(true);
+    const r = await setMeetingProjectAction(
+      meeting.id,
+      null,
+      linkedProject?.slug,
+    );
+    setProjectBusy(false);
+    if (!r.ok) {
+      await alertDialog(r.error, { title: "unlink failed" });
+      return;
+    }
+    setMeeting((prev) => ({ ...prev, project_id: null }));
   }
 
   // Re-drive the pipeline from wherever it stopped: local files re-upload (in
@@ -160,6 +210,33 @@ export function MeetingDetail({
             >
               event →
             </Link>
+          )}
+          {meeting.project_id ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-accent border border-accent/40 rounded-sm px-1.5 py-0.5">
+              <Link
+                href={linkedProject ? `/projects/${linkedProject.slug}` : "/projects"}
+                className="hover:underline"
+              >
+                ⌬ {linkedProject?.name ?? "project"} →
+              </Link>
+              <button
+                type="button"
+                onClick={() => void unlinkProject()}
+                disabled={projectBusy}
+                title="unlink from project"
+                className="text-fg-dim hover:text-danger transition-colors disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPickingProject(true)}
+              className="font-mono text-[10px] uppercase tracking-wider text-fg-dim border border-dashed border-edge rounded-sm px-1.5 py-0.5 hover:text-accent hover:border-accent/40 transition-colors"
+            >
+              + project
+            </button>
           )}
         </div>
 
@@ -283,6 +360,54 @@ export function MeetingDetail({
           </section>
         )}
       </div>
+
+      <AddItemModal
+        open={pickingProject}
+        onClose={() => setPickingProject(false)}
+        title="Link Project"
+        subtitle="surface this meeting's notes on a project page"
+        footer={
+          <Button variant="ghost" onClick={() => setPickingProject(false)}>
+            CLOSE
+          </Button>
+        }
+      >
+        {projects.length === 0 ? (
+          <div className="px-1 py-6 text-center font-mono text-[11px] text-fg-dim">
+            // no projects yet — create one in /projects first
+          </div>
+        ) : (
+          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto">
+            {[...projects]
+              .sort(
+                (a, b) =>
+                  (a.status === "active" ? 0 : 1) -
+                  (b.status === "active" ? 0 : 1),
+              )
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => void linkProject(p)}
+                  disabled={projectBusy}
+                  className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface/40 px-3 py-2.5 text-left transition-colors hover:border-accent/60 disabled:opacity-50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-[13px] text-fg">
+                      {p.name}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+                      {p.status} · {p.category}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-accent">
+                    link →
+                  </span>
+                </button>
+              ))}
+          </div>
+        )}
+      </AddItemModal>
     </div>
   );
 }
