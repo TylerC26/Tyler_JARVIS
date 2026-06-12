@@ -1,8 +1,9 @@
 // Finalize a meeting: stitch the per-chunk transcripts (or take an inline
 // pasted transcript), summarize with Claude, mirror the summary into a note
-// (category 'meetings') linked back to the meeting's work event, fan action
-// items out into tasks, reconcile durable facts into long-term memory, and
-// flip the meeting to 'done'.
+// (category 'meetings') linked back to the meeting's work event, reconcile
+// durable facts into long-term memory, and flip the meeting to 'done'.
+// Action items are NOT auto-created as tasks — the meeting detail page's
+// action-item card promotes them explicitly (promoteActionItemsAction).
 //
 // Called by the client after the last chunk transcribes (recorded meetings) or
 // on "summarize" (pasted transcript). Idempotent-ish: re-finalizing
@@ -23,7 +24,6 @@ import {
   updateMeetingCore,
 } from "@/lib/db/core/meetings";
 import { createNoteCore, updateNoteCore } from "@/lib/db/core/notes";
-import { createTaskCore } from "@/lib/db/core/tasks";
 import type { Event } from "@/lib/db/types";
 import { parseSummaryActionItems } from "@/lib/meetings/actionItems";
 
@@ -117,7 +117,6 @@ export async function POST(req: Request) {
   let body: {
     meeting_id?: string;
     transcript?: string;
-    create_tasks?: boolean;
     duration_ms?: number;
     force?: boolean;
   };
@@ -232,13 +231,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // Action items from the previous summary (re-finalize after resume or
-  // continue-recording): their checked state carries into the rewrite, and
-  // they were already fanned out into tasks once — don't create duplicates.
-  const prevItems = parseSummaryActionItems(meeting.summary).items;
-  const prevTexts = new Set(prevItems.map((i) => i.text.toLowerCase()));
+  // Action items checked off in the previous summary (re-finalize after
+  // resume or continue-recording) keep their ticks through the rewrite.
   const prevChecked = new Set(
-    prevItems.filter((i) => i.checked).map((i) => i.text.toLowerCase()),
+    parseSummaryActionItems(meeting.summary)
+      .items.filter((i) => i.checked)
+      .map((i) => i.text.toLowerCase()),
   );
 
   const bodyMd = renderSummary(summary, event, prevChecked);
@@ -263,20 +261,6 @@ export async function POST(req: Request) {
     noteId = note.ok ? note.data.id : null;
   }
 
-  // Fan action items out into real tasks (default on).
-  let tasksCreated = 0;
-  if (body.create_tasks !== false) {
-    for (const item of summary.action_items) {
-      const t = item.task?.trim();
-      if (!t || prevTexts.has(itemText(item).toLowerCase())) continue;
-      const r = await createTaskCore({
-        title: t,
-        description: `From meeting: ${summary.title}`,
-      });
-      if (r.ok) tasksCreated++;
-    }
-  }
-
   // Extract durable facts into long-term memory. Feed the concise summary (not
   // the raw transcript) so the Haiku reconciliation stays cheap and on-point.
   await reconcileMemoriesFromTurn(
@@ -299,6 +283,5 @@ export async function POST(req: Request) {
     summarized: true,
     meeting: updated.ok ? updated.data : null,
     note_id: noteId,
-    tasks_created: tasksCreated,
   });
 }

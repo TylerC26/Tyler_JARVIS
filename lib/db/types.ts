@@ -14,6 +14,7 @@ export type Task = {
   due_at: string | null;
   completed_at: string | null;
   project_id: string | null;
+  meeting_id: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -705,6 +706,7 @@ export type Database = {
           due_at?: string | null;
           completed_at?: string | null;
           project_id?: string | null;
+          meeting_id?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };

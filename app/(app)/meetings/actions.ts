@@ -4,11 +4,17 @@ import { revalidatePath } from "next/cache";
 import {
   createMeetingCore,
   deleteMeetingCore,
+  getMeetingCore,
   setMeetingProjectCore,
   updateMeetingCore,
   type CreateMeetingInput,
 } from "@/lib/db/core/meetings";
 import { updateNoteCore } from "@/lib/db/core/notes";
+import {
+  createTaskCore,
+  listTasksByMeetingCore,
+} from "@/lib/db/core/tasks";
+import type { Task } from "@/lib/db/types";
 
 function bumpMeetings(): void {
   revalidatePath("/meetings");
@@ -40,6 +46,42 @@ export async function updateMeetingSummaryAction(id: string, summary: string) {
     }
   }
   return result;
+}
+
+// Promote action items from a meeting's summary card into real tasks. Tasks
+// carry meeting_id (migration 0054) so the card can show which items are
+// already promoted; an item whose title already exists for this meeting is
+// skipped rather than duplicated. Returns the meeting's full task list so the
+// card can refresh its promoted state in one round trip.
+export async function promoteActionItemsAction(
+  meetingId: string,
+  texts: string[],
+): Promise<{ ok: true; data: Task[] } | { ok: false; error: string }> {
+  const meeting = await getMeetingCore(meetingId);
+  if (!meeting) return { ok: false, error: "Meeting not found." };
+
+  const existing = await listTasksByMeetingCore(meetingId);
+  const have = new Set(existing.map((t) => t.title.toLowerCase()));
+
+  let created = 0;
+  for (const raw of texts) {
+    const title = raw.trim();
+    if (!title || have.has(title.toLowerCase())) continue;
+    const r = await createTaskCore({
+      title,
+      description: `From meeting: ${meeting.title || "untitled meeting"}`,
+      meeting_id: meetingId,
+    });
+    if (!r.ok) return { ok: false, error: r.error };
+    have.add(title.toLowerCase());
+    created++;
+  }
+
+  if (created > 0) {
+    revalidatePath("/tasks");
+    bumpMeetings();
+  }
+  return { ok: true, data: await listTasksByMeetingCore(meetingId) };
 }
 
 // Flip a finished meeting back to 'recording' so a new capture session can

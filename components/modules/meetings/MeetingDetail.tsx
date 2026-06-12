@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteMeetingAction,
+  promoteActionItemsAction,
   renameMeetingAction,
   setMeetingProjectAction,
   updateMeetingSummaryAction,
@@ -13,7 +14,13 @@ import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
-import type { Meeting, MeetingChunk, ProjectCategory, ProjectStatus } from "@/lib/db/types";
+import type {
+  Meeting,
+  MeetingChunk,
+  ProjectCategory,
+  ProjectStatus,
+  Task,
+} from "@/lib/db/types";
 import {
   parseSummaryActionItems,
   toggleActionItemLine,
@@ -58,10 +65,13 @@ export function MeetingDetail({
   meeting: initial,
   chunks,
   projects,
+  tasks: initialTasks,
 }: {
   meeting: Meeting;
   chunks: MeetingChunk[];
   projects: MeetingProjectOption[];
+  /** Tasks already promoted from this meeting's action items. */
+  tasks: Task[];
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState<Meeting>(initial);
@@ -77,6 +87,9 @@ export function MeetingDetail({
   const [pickingProject, setPickingProject] = useState(false);
   const [projectBusy, setProjectBusy] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
+  const [meetingTasks, setMeetingTasks] = useState<Task[]>(initialTasks);
+  // null = idle; an item's line number = that row promoting; -1 = promote-all.
+  const [promotingLine, setPromotingLine] = useState<number | null>(null);
 
   // router.refresh() (after resume / continued-recording finalize) hands down
   // fresh server props — adopt them, but never clobber an in-flight edit.
@@ -84,6 +97,7 @@ export function MeetingDetail({
   if (prevInitial !== initial) {
     setPrevInitial(initial);
     setMeeting(initial);
+    setMeetingTasks(initialTasks);
     if (!editingTitle) setTitleDraft(initial.title);
   }
 
@@ -102,6 +116,19 @@ export function MeetingDetail({
     [meeting.summary],
   );
   const checkedCount = summaryParts.items.filter((i) => i.checked).length;
+
+  // An item is "promoted" when a task with its exact text exists for this
+  // meeting (promotion creates tasks with the item text as the title).
+  const promotedTitles = useMemo(
+    () => new Set(meetingTasks.map((t) => t.title.toLowerCase())),
+    [meetingTasks],
+  );
+  const isPromoted = (text: string) => promotedTitles.has(text.toLowerCase());
+  // "add all" targets still-open, not-yet-promoted items; a checked-off item
+  // is already done and only promotes via its own button if wanted.
+  const promotable = summaryParts.items.filter(
+    (i) => !i.checked && !isPromoted(i.text),
+  );
 
   const linkedProject =
     projects.find((p) => p.id === meeting.project_id) ?? null;
@@ -163,6 +190,21 @@ export function MeetingDetail({
     }
     setMeeting(r.data);
     setEditingSummary(false);
+  }
+
+  // Promote action item(s) into /tasks. line is the row that asked (for its
+  // spinner), or -1 for promote-all. The action dedupes server-side and
+  // returns the meeting's full task list, which refreshes the tasked badges.
+  async function promoteItems(texts: string[], line: number) {
+    if (promotingLine !== null || texts.length === 0) return;
+    setPromotingLine(line);
+    const r = await promoteActionItemsAction(meeting.id, texts);
+    setPromotingLine(null);
+    if (!r.ok) {
+      await alertDialog(r.error, { title: "promote failed" });
+      return;
+    }
+    setMeetingTasks(r.data);
   }
 
   // Flip one action-item checkbox inside the stored summary markdown.
@@ -505,43 +547,89 @@ export function MeetingDetail({
 
               {summaryParts.items.length > 0 && (
                 <div className="rounded-sm border border-edge bg-surface-2/30 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-fg-dim">
                       // action items
                     </span>
-                    <span className="font-mono text-[10px] text-fg-dim">
-                      {checkedCount}/{summaryParts.items.length} done
+                    <span className="flex items-center gap-3">
+                      {promotable.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void promoteItems(
+                              promotable.map((i) => i.text),
+                              -1,
+                            )
+                          }
+                          disabled={promotingLine !== null}
+                          className="font-mono text-[10px] uppercase tracking-wider text-accent hover:underline disabled:opacity-50"
+                        >
+                          {promotingLine === -1
+                            ? "adding…"
+                            : `add all to /tasks (${promotable.length})`}
+                        </button>
+                      )}
+                      <span className="font-mono text-[10px] text-fg-dim">
+                        {checkedCount}/{summaryParts.items.length} done
+                      </span>
                     </span>
                   </div>
                   <div className="space-y-1.5">
                     {summaryParts.items.map((item) => (
-                      <button
+                      <div
                         key={item.line}
-                        type="button"
-                        onClick={() => void toggleItem(item.line)}
-                        disabled={summaryBusy}
-                        className="group flex w-full items-start gap-2.5 rounded-sm border border-edge/60 bg-surface/40 px-3 py-2 text-left transition-colors hover:border-accent/60 disabled:opacity-60"
+                        className="group flex items-start gap-2.5 rounded-sm border border-edge/60 bg-surface/40 px-3 py-2 transition-colors hover:border-accent/60"
                       >
-                        <span
-                          className={`mt-px font-mono text-[13px] leading-none ${
-                            item.checked
-                              ? "text-success"
-                              : "text-fg-dim group-hover:text-accent"
-                          }`}
-                          aria-hidden
+                        <button
+                          type="button"
+                          onClick={() => void toggleItem(item.line)}
+                          disabled={summaryBusy}
+                          className="flex flex-1 min-w-0 items-start gap-2.5 text-left disabled:opacity-60"
                         >
-                          {item.checked ? "☑" : "☐"}
-                        </span>
-                        <span
-                          className={`font-mono text-[12px] leading-relaxed ${
-                            item.checked
-                              ? "line-through text-fg-dim"
-                              : "text-fg"
-                          }`}
-                        >
-                          {item.text}
-                        </span>
-                      </button>
+                          <span
+                            className={`mt-px font-mono text-[13px] leading-none ${
+                              item.checked
+                                ? "text-success"
+                                : "text-fg-dim group-hover:text-accent"
+                            }`}
+                            aria-hidden
+                          >
+                            {item.checked ? "☑" : "☐"}
+                          </span>
+                          <span
+                            className={`font-mono text-[12px] leading-relaxed ${
+                              item.checked
+                                ? "line-through text-fg-dim"
+                                : "text-fg"
+                            }`}
+                          >
+                            {item.text}
+                          </span>
+                        </button>
+                        {isPromoted(item.text) ? (
+                          <Link
+                            href="/tasks"
+                            title="already in /tasks — open"
+                            className="mt-0.5 shrink-0 font-mono text-[10px] uppercase tracking-wider text-success/80 hover:text-success"
+                          >
+                            ✓ tasked
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void promoteItems([item.text], item.line)
+                            }
+                            disabled={promotingLine !== null}
+                            title="add this item to /tasks"
+                            className="mt-0.5 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent transition-colors disabled:opacity-50"
+                          >
+                            {promotingLine === item.line
+                              ? "adding…"
+                              : "→ task"}
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>

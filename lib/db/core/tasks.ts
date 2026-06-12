@@ -14,6 +14,7 @@ export type CreateTaskInput = {
   important?: boolean;
   due_at?: string | null;
   project_id?: string | null;
+  meeting_id?: string | null;
 };
 
 const STATUS_CYCLE: TaskStatus[] = ["todo", "done"];
@@ -41,6 +42,7 @@ export async function createTaskCore(
       important: input.important ?? false,
       due_at: input.due_at ?? null,
       project_id: input.project_id ?? null,
+      meeting_id: input.meeting_id ?? null,
     })
     .select()
     .single();
@@ -165,6 +167,20 @@ export async function deleteTaskCore(id: string): Promise<CoreResult<true>> {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: true };
+}
+
+// Tasks promoted from a meeting's action items (migration 0054). The meeting
+// detail page uses these to mark which items are already in /tasks.
+export async function listTasksByMeetingCore(meetingId: string): Promise<Task[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: true });
+  return (data as Task[] | null) ?? [];
 }
 
 // Tasks tagged to a specific project. Same status-then-priority sort as the
