@@ -77,6 +77,28 @@ export async function listMessages(
   return rows.reverse();
 }
 
+// Slug of the thread with the most recent activity inside the window — "who
+// was Tyler just talking to?". Returns null when the main Jarvis thread was
+// most recent, undefined when there were no messages in the window at all.
+// Used by the physique-photo ingress routing (lib/chat/physique-detect.ts).
+export async function latestActiveThreadSlug(
+  withinMinutes: number,
+): Promise<string | null | undefined> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return undefined;
+  const since = new Date(Date.now() - withinMinutes * 60_000).toISOString();
+  const { data } = await supabase
+    .from("chat_messages")
+    .select("agent_slug")
+    .eq("owner_id", getOwnerId())
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return undefined;
+  return (data as { agent_slug: string | null }).agent_slug;
+}
+
 // Wipe one thread. `agentSlug` null → the main Jarvis thread only; a slug →
 // that sub-agent's thread only. Other threads are left untouched.
 export async function clearThread(

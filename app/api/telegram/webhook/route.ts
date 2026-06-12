@@ -21,8 +21,15 @@ import {
   type UserModelMessage,
 } from "ai";
 import { after } from "next/server";
-import { listMessages } from "@/lib/chat/persist";
+import { latestActiveThreadSlug, listMessages } from "@/lib/chat/persist";
+import {
+  captionSuggestsPhysique,
+  PHYSIQUE_AGENT_SLUG,
+  PHYSIQUE_THREAD_WINDOW_MINUTES,
+  TELEGRAM_PHYSIQUE_HINT,
+} from "@/lib/chat/physique-detect";
 import { runAgentChatTurn, runChatTurn } from "@/lib/chat/turn";
+import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import {
   getAgentByWebhookSecretCore,
@@ -181,10 +188,36 @@ export async function POST(req: Request) {
     try {
       await sendChatAction(chatId, "typing", { botToken });
 
-      // History comes from the addressed thread: the agent's own thread, or the
-      // main Jarvis thread (agent_slug = null).
+      // Physique rerouting (main bot only): a photo whose caption reads like
+      // physique talk — or arriving while Tyler's most recent thread activity
+      // was with Matt — is handled by Matt directly instead of the
+      // orchestrator. The reply still goes out through the main bot (botToken
+      // above is unchanged); the exchange persists to Matt's thread so his
+      // training history stays coherent.
+      let routedAgent: Agent | null = agent;
+      let physiqueRouted = false;
+      if (!agent && hasPhoto) {
+        const physiqueCaption = message.caption?.trim() ?? "";
+        const physique =
+          captionSuggestsPhysique(physiqueCaption) ||
+          (await latestActiveThreadSlug(PHYSIQUE_THREAD_WINDOW_MINUTES)) ===
+            PHYSIQUE_AGENT_SLUG;
+        if (physique) {
+          const matt = await getAgentBySlug(PHYSIQUE_AGENT_SLUG);
+          if (matt?.active) {
+            routedAgent = matt;
+            physiqueRouted = true;
+            console.log(
+              `[telegram] webhook: physique photo rerouted to ${matt.slug} (caption match=${captionSuggestsPhysique(physiqueCaption)})`,
+            );
+          }
+        }
+      }
+
+      // History comes from the addressed thread: the agent's own thread (or the
+      // physique-routed one), or the main Jarvis thread (agent_slug = null).
       const history = dbToUIMessages(
-        await listMessages(agent ? agent.slug : null, 60),
+        await listMessages(routedAgent ? routedAgent.slug : null, 60),
       );
       const historyModelMsgs = await convertToModelMessages(history);
 
@@ -208,7 +241,23 @@ export async function POST(req: Request) {
           : null;
 
         if (imageBuffer) {
-          if (!agent) {
+          if (routedAgent && (physiqueRouted || routedAgent.tool_allowlist.includes("log_body_photo"))) {
+            // Physique path (Matt — rerouted from the main bot, or his own bot
+            // when his allowlist carries log_body_photo): stash the photo bytes
+            // so the tool can upload them, and nudge the agent. Deliberately NO
+            // public re-host — progress photos only ever reach storage through
+            // log_body_photo, into the private bucket.
+            mealPhotoContext = {
+              publicUrl: null,
+              bytes: imageBuffer,
+              mediaType: "image/jpeg",
+              caption: caption || null,
+            };
+            userContent = [
+              { type: "image", image: imageBuffer, mediaType: "image/jpeg" },
+              { type: "text", text: captionPrompt + TELEGRAM_PHYSIQUE_HINT },
+            ];
+          } else if (!agent) {
             // Jarvis path: re-host the photo so /kcal can render it long after
             // Telegram's file URL expires, and hint the orchestrator to log it
             // via log_meal. The model still decides whether it's actually food.
@@ -283,17 +332,27 @@ export async function POST(req: Request) {
       const modelMessages = [...historyModelMsgs, newUserMsg];
 
       let assistantText: string;
-      if (agent) {
-        // Direct chat with the addressed agent — its own prompt, tools, history.
+      if (routedAgent) {
+        // Direct chat with the addressed (or physique-routed) agent — its own
+        // prompt, tools, history. On the physique route, guarantee
+        // log_body_photo is in the toolset even if the allowlist drifts.
+        const agentForTurn = physiqueRouted
+          ? {
+              ...routedAgent,
+              tool_allowlist: Array.from(
+                new Set([...routedAgent.tool_allowlist, "log_body_photo"]),
+              ),
+            }
+          : routedAgent;
         const res = await runAgentChatTurn(
-          agent,
+          agentForTurn,
           modelMessages,
           latestUserText,
           mealPhotoContext,
         );
         assistantText = res
           ? res.assistantText || "(no text response)"
-          : `(${agent.name} has no model configured — set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY.)`;
+          : `(${routedAgent.name} has no model configured — set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY.)`;
       } else {
         // Jarvis (orchestrator), which may itself delegate to sub-agents.
         const out = await runChatTurn({
