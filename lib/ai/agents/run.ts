@@ -9,6 +9,10 @@ import {
 } from "ai";
 import { getToolsForAgent } from "@/lib/ai/agents/tools";
 import {
+  agentWantsBodySnapshot,
+  buildBodySnapshot,
+} from "@/lib/ai/physique/snapshot";
+import {
   type ChatModelId,
   isAnthropicConfigured,
   isDeepseekConfigured,
@@ -100,9 +104,15 @@ export async function streamAgentResponse(
     pageContext: opts.pageContext,
   });
 
+  // Matt opens every session with current weight trends + the latest photo
+  // read (step-5 of the body-metrics plan). Other agents skip the queries.
+  const bodySnapshot = agentWantsBodySnapshot(agent.slug)
+    ? await buildBodySnapshot()
+    : null;
+
   const result = streamText({
     model: picked.model,
-    system: `${agent.system_prompt}\n\n---\n${prefix}`,
+    system: `${agent.system_prompt}\n\n---\n${prefix}${bodySnapshot ? `\n\n${bodySnapshot}` : ""}`,
     messages,
     ...(hasTools && {
       tools,
@@ -318,9 +328,16 @@ export async function runAgent(
   });
 
   try {
+    // Same step-5 snapshot as direct chat — a delegation to Matt ("ask Matt
+    // how my weight is trending") gets current numbers too.
+    const delegationSnapshot = agentWantsBodySnapshot(agent.slug)
+      ? await buildBodySnapshot()
+      : null;
     const result = await generateText({
       model,
-      system: agent.system_prompt,
+      system: delegationSnapshot
+        ? `${agent.system_prompt}\n\n${delegationSnapshot}`
+        : agent.system_prompt,
       messages: [{ role: "user", content: userBlock }],
       ...(hasTools && {
         tools,
