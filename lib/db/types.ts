@@ -647,6 +647,32 @@ export type AiSuggestion = {
   expires_on: string | null;
 };
 
+// Body metrics (migration 0050): one row per body-composition reading.
+// weight_kg / bf_percent are Postgres numerics (JSON numbers over PostgREST);
+// photo_ids are soft uuid refs into the future progress-photo store.
+export type BodyMetric = {
+  id: string;
+  user_id: string; // plays the role owner_id plays on other tables
+  weight_kg: number;
+  bf_percent: number | null;
+  photo_ids: string[] | null;
+  recorded_at: string;
+  created_at: string;
+};
+
+// Progress photos (migration 0052): one row per photo in the PRIVATE
+// progress-photos bucket. storage_path is the object key, not a URL — signed
+// URLs are minted on demand (lib/storage/progress-photos.ts) and never stored.
+export type ProgressPhoto = {
+  id: string;
+  user_id: string; // plays the role owner_id plays on other tables
+  storage_path: string;
+  taken_at: string;
+  analysis: Record<string, unknown> | null;
+  body_metric_id: string | null;
+  created_at: string;
+};
+
 // Database type matching the shape `@supabase/ssr` expects.
 // Insert types list only the truly required columns; everything else has a
 // default or is nullable.
@@ -1174,6 +1200,34 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: Partial<GroceryItem>;
+        Relationships: [];
+      };
+      body_metrics: {
+        Row: BodyMetric;
+        Insert: {
+          id?: string;
+          user_id: string;
+          weight_kg: number;
+          bf_percent?: number | null;
+          photo_ids?: string[] | null;
+          recorded_at: string;
+          created_at?: string;
+        };
+        Update: Partial<BodyMetric>;
+        Relationships: [];
+      };
+      progress_photos: {
+        Row: ProgressPhoto;
+        Insert: {
+          id?: string;
+          user_id: string;
+          storage_path: string;
+          taken_at: string;
+          analysis?: Record<string, unknown> | null;
+          body_metric_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<ProgressPhoto>;
         Relationships: [];
       };
     };

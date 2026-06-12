@@ -1,7 +1,14 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { after, NextResponse } from "next/server";
 import { streamAgentResponse } from "@/lib/ai/agents/run";
-import { appendMessage } from "@/lib/chat/persist";
+import { appendMessage, latestActiveThreadSlug } from "@/lib/chat/persist";
+import {
+  appendPhysiqueHint,
+  captionSuggestsPhysique,
+  PHYSIQUE_AGENT_SLUG,
+  PHYSIQUE_THREAD_WINDOW_MINUTES,
+  WEB_PHYSIQUE_HINT,
+} from "@/lib/chat/physique-detect";
 import {
   decideRoute,
   isAnthropicConfigured,
@@ -136,9 +143,18 @@ export async function POST(req: Request) {
       });
     }
 
+    // An image in a thread whose agent can log progress photos gets the
+    // physique nudge — web uploads aren't carried in request context, so the
+    // hint points the tool at the attachment URL from the turn's image note.
+    const agentModelMessages =
+      latestAttachments.length > 0 &&
+      agent.tool_allowlist.includes("log_body_photo")
+        ? appendPhysiqueHint(modelMessages, WEB_PHYSIQUE_HINT)
+        : modelMessages;
+
     const stream = await streamAgentResponse(
       agent,
-      modelMessages,
+      agentModelMessages,
       latestUserText,
       { pageContext: pageContext?.block ?? null },
     );
@@ -182,8 +198,67 @@ export async function POST(req: Request) {
     });
   }
 
+  // ---- Physique routing: an image on the main thread whose context suggests
+  // a progress photo (keywords in the message, or Tyler's most recent thread
+  // activity was with Matt) streams against Matt directly with log_body_photo
+  // guaranteed in his toolset. The exchange stays in the MAIN thread — that's
+  // the surface Tyler is looking at — authored by Matt like a delegated run.
+  let mainUserPersisted = false;
+  if (latestAttachments.length > 0) {
+    const physique =
+      captionSuggestsPhysique(latestUserText) ||
+      (await latestActiveThreadSlug(PHYSIQUE_THREAD_WINDOW_MINUTES)) ===
+        PHYSIQUE_AGENT_SLUG;
+    const matt = physique ? await getAgentBySlug(PHYSIQUE_AGENT_SLUG) : null;
+    if (matt?.active) {
+      if (latestUser) {
+        await appendMessage({
+          role: "user",
+          content: latestUserText,
+          attachments: latestAttachments,
+        });
+        mainUserPersisted = true;
+      }
+      const stream = await streamAgentResponse(
+        {
+          ...matt,
+          tool_allowlist: Array.from(
+            new Set([...matt.tool_allowlist, "log_body_photo"]),
+          ),
+        },
+        appendPhysiqueHint(modelMessages, WEB_PHYSIQUE_HINT),
+        latestUserText,
+        { pageContext: pageContext?.block ?? null },
+      );
+      if (stream) {
+        after(async () => {
+          try {
+            await persistAssistantSteps(
+              await stream.result.steps,
+              stream.modelId,
+              null, // main thread
+              matt.slug, // authored by Matt
+            );
+            revalidateChatPaths();
+          } catch (e) {
+            console.warn("[chat] physique turn persistence failed:", e);
+          }
+        });
+        return stream.result.toUIMessageStreamResponse<JarvisUIMessage>({
+          messageMetadata: ({ part }) => {
+            if (part.type === "start") {
+              return { model: stream.modelId } satisfies JarvisMessageMetadata;
+            }
+            return undefined;
+          },
+        });
+      }
+      // Matt has no model configured — fall through to the orchestrator.
+    }
+  }
+
   // ---- Main Jarvis thread: classifier-routed orchestrator. ----
-  if (latestUser) {
+  if (latestUser && !mainUserPersisted) {
     await appendMessage({ role: "user", content: latestUserText });
   }
 
