@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "eval:physique": "tsx --env-file=.env.local evals/physique/run.ts",
     "telegram:setup": "tsx scripts/setup-telegram-webhook.ts",
     "telegram:agent-bot": "tsx scripts/setup-telegram-agent-bot.ts",
     "agent:start": "tsx scripts/mac-agent/index.ts",
