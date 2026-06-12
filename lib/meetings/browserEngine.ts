@@ -87,10 +87,10 @@ export function createBrowserEngine(events: EngineEvents): RecorderEngine {
     recorder = rec;
   }
 
-  async function start(id: string) {
+  async function start(id: string, startIndex = 0) {
     meetingId = id;
     pipelines = [];
-    nextIndex = 0;
+    nextIndex = startIndex;
     stopping = false;
 
     mime = pickMime();

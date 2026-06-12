@@ -21,8 +21,12 @@ export type EngineEvents = {
 };
 
 export type RecorderEngine = {
-  /** Begin capture for the given meeting. Rejects if capture can't start. */
-  start: (meetingId: string) => Promise<void>;
+  /**
+   * Begin capture for the given meeting. Rejects if capture can't start.
+   * startIndex offsets chunk numbering so a continued meeting appends after
+   * its existing chunks instead of overwriting them.
+   */
+  start: (meetingId: string, startIndex?: number) => Promise<void>;
   /** End capture; resolves once every chunk pipeline has settled. */
   stop: () => Promise<StopResult>;
 };

@@ -22,9 +22,10 @@ import {
   listChunksCore,
   updateMeetingCore,
 } from "@/lib/db/core/meetings";
-import { createNoteCore } from "@/lib/db/core/notes";
+import { createNoteCore, updateNoteCore } from "@/lib/db/core/notes";
 import { createTaskCore } from "@/lib/db/core/tasks";
 import type { Event } from "@/lib/db/types";
+import { parseSummaryActionItems } from "@/lib/meetings/actionItems";
 
 export const maxDuration = 300;
 
@@ -65,7 +66,17 @@ const SUMMARY_SYSTEM = `You summarize meeting transcripts for Tyler's personal a
 
 The transcript is a single merged stream with no speaker labels — infer roles from context where you can, but never invent names or facts. Be faithful and concise. Pull out decisions and action items only when they are actually present; return empty arrays otherwise. Write the title and summary in plain, specific language (no filler like "the team discussed various topics").`;
 
-function renderSummary(s: Summary, event: Event | null): string {
+const itemText = (a: Summary["action_items"][number]) =>
+  `${a.task}${a.owner ? ` (${a.owner})` : ""}`;
+
+function renderSummary(
+  s: Summary,
+  event: Event | null,
+  // Items checked off in the previous summary — a re-finalize (resume or
+  // continue-recording) re-summarizes the whole transcript, and ticks the
+  // user already made shouldn't be lost in the rewrite.
+  checkedTexts: Set<string>,
+): string {
   const lines: string[] = [];
   if (event) {
     let when = "";
@@ -88,9 +99,11 @@ function renderSummary(s: Summary, event: Event | null): string {
   if (s.action_items.length) {
     lines.push(
       "## Action items",
-      ...s.action_items.map(
-        (a) => `- [ ] ${a.task}${a.owner ? ` (${a.owner})` : ""}`,
-      ),
+      ...s.action_items.map((a) => {
+        const text = itemText(a);
+        const mark = checkedTexts.has(text.toLowerCase()) ? "x" : " ";
+        return `- [${mark}] ${text}`;
+      }),
       "",
     );
   }
@@ -219,22 +232,43 @@ export async function POST(req: Request) {
     );
   }
 
-  const bodyMd = renderSummary(summary, event);
+  // Action items from the previous summary (re-finalize after resume or
+  // continue-recording): their checked state carries into the rewrite, and
+  // they were already fanned out into tasks once — don't create duplicates.
+  const prevItems = parseSummaryActionItems(meeting.summary).items;
+  const prevTexts = new Set(prevItems.map((i) => i.text.toLowerCase()));
+  const prevChecked = new Set(
+    prevItems.filter((i) => i.checked).map((i) => i.text.toLowerCase()),
+  );
+
+  const bodyMd = renderSummary(summary, event, prevChecked);
 
   // Mirror the summary into a note so it shows up alongside everything else.
-  const note = await createNoteCore({
-    title: summary.title,
-    body: bodyMd,
-    category: "meetings",
-  });
-  const noteId = note.ok ? note.data.id : null;
+  // Re-finalize refreshes the existing note in place (the user may have linked
+  // or pinned it); a vanished note just gets recreated.
+  let noteId = meeting.note_id;
+  if (noteId) {
+    const r = await updateNoteCore(noteId, {
+      title: summary.title,
+      body: bodyMd,
+    });
+    if (!r.ok) noteId = null;
+  }
+  if (!noteId) {
+    const note = await createNoteCore({
+      title: summary.title,
+      body: bodyMd,
+      category: "meetings",
+    });
+    noteId = note.ok ? note.data.id : null;
+  }
 
   // Fan action items out into real tasks (default on).
   let tasksCreated = 0;
   if (body.create_tasks !== false) {
     for (const item of summary.action_items) {
       const t = item.task?.trim();
-      if (!t) continue;
+      if (!t || prevTexts.has(itemText(item).toLowerCase())) continue;
       const r = await createTaskCore({
         title: t,
         description: `From meeting: ${summary.title}`,

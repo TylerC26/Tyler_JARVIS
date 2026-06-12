@@ -9,7 +9,10 @@
 // this one store. Pattern mirrors ConfirmDialog's module-level host.
 
 import { useSyncExternalStore } from "react";
-import { createMeetingAction } from "@/app/(app)/meetings/actions";
+import {
+  createMeetingAction,
+  reopenMeetingAction,
+} from "@/app/(app)/meetings/actions";
 import { createBrowserEngine } from "./browserEngine";
 import { finalizeMeeting, type ChunkProgress } from "./pipeline";
 import type { RecorderEngine, SystemAudioState } from "./recorderTypes";
@@ -50,6 +53,9 @@ const IDLE: RecorderState = {
 let state: RecorderState = IDLE;
 let engine: RecorderEngine | null = null;
 let chunkMap: Record<number, ChunkProgress> = {};
+// Duration already recorded in earlier sessions of a continued meeting —
+// added to this session's elapsed time when finalize recomputes duration_ms.
+let baseDurationMs = 0;
 const listeners = new Set<() => void>();
 
 function emit(patch: Partial<RecorderState>) {
@@ -107,6 +113,7 @@ export async function startRecording(opts: StartOptions = {}): Promise<void> {
   // since injected itself if we're in the desktop shell.
   const native = isTauriRuntime();
   chunkMap = {};
+  baseDurationMs = 0;
   emit({
     ...IDLE,
     phase: "starting",
@@ -142,6 +149,57 @@ export async function startRecording(opts: StartOptions = {}): Promise<void> {
   }
 }
 
+export type ContinueOptions = {
+  meetingId: string;
+  /** One past the highest existing chunk idx — new chunks append after it. */
+  nextChunkIndex: number;
+  /** duration_ms already on the meeting row, so the total keeps adding up. */
+  baseDurationMs?: number | null;
+  eventTitle?: string | null;
+};
+
+// Append a new capture session to an existing (usually finished) meeting:
+// same engine/session flow as startRecording, but the meeting row is reopened
+// instead of created and chunk numbering continues where it left off. On stop,
+// finalize re-stitches ALL chunks and re-summarizes the whole meeting.
+export async function continueRecording(opts: ContinueOptions): Promise<void> {
+  if (state.phase !== "idle") return; // one session at a time
+
+  const native = isTauriRuntime();
+  chunkMap = {};
+  baseDurationMs = Math.max(0, opts.baseDurationMs ?? 0);
+  emit({
+    ...IDLE,
+    phase: "starting",
+    native,
+    eventTitle: opts.eventTitle ?? null,
+  });
+
+  try {
+    const reopened = await reopenMeetingAction(opts.meetingId);
+    if (!reopened.ok) throw new Error(reopened.error);
+
+    engine = native
+      ? createTauriEngine(engineEvents)
+      : createBrowserEngine(engineEvents);
+    await engine.start(opts.meetingId, opts.nextChunkIndex);
+
+    setUnloadGuard(true);
+    emit({
+      phase: "recording",
+      meetingId: opts.meetingId,
+      startedAt: Date.now(),
+      systemAudio: native ? "unknown" : "n/a",
+    });
+  } catch (e) {
+    engine = null;
+    emit({
+      ...IDLE,
+      error: e instanceof Error ? e.message : "Failed to continue recording.",
+    });
+  }
+}
+
 export type StopOutcome = {
   ok: boolean;
   meetingId: string | null;
@@ -171,9 +229,10 @@ export async function stopRecording(): Promise<StopOutcome> {
       return { ok: false, meetingId: id };
     }
     emit({ phase: "finalizing" });
+    const sessionMs =
+      totalDurationMs ?? (startedAt ? Date.now() - startedAt : null);
     const fin = await finalizeMeeting(id, {
-      durationMs:
-        totalDurationMs ?? (startedAt ? Date.now() - startedAt : undefined),
+      durationMs: sessionMs != null ? baseDurationMs + sessionMs : undefined,
     });
     if (!fin.ok) {
       settle(`${fin.error} Open the meeting to retry — the audio is safe.`);
@@ -191,6 +250,7 @@ export async function stopRecording(): Promise<StopOutcome> {
 function settle(error: string | null) {
   setUnloadGuard(false);
   chunkMap = {};
+  baseDurationMs = 0;
   engine = null;
   emit({ ...IDLE, error });
 }

@@ -49,6 +49,10 @@ pub struct StartOpts {
     pub capture_mic: bool,
     #[serde(default = "default_true")]
     pub capture_system: bool,
+    // First chunk index for this session — non-zero when continuing an
+    // existing meeting, so new chunks append after the ones already recorded.
+    #[serde(default)]
+    pub start_index: u32,
 }
 fn default_true() -> bool {
     true
@@ -398,11 +402,12 @@ fn spawn_writer(
     sys_q: Queue,
     mic_q: Queue,
     stop: Arc<AtomicBool>,
+    start_index: u32,
 ) {
     std::thread::spawn(move || {
         let chunk_limit = CHUNK_SECONDS * TARGET_RATE as u64;
         let frame_len = TARGET_RATE as usize / 10; // 100 ms
-        let mut index: u32 = 0;
+        let mut index: u32 = start_index;
         let mut chunk_count: u32 = 0;
         let mut chunk_samples: u64 = 0;
         let mut total_samples: u64 = 0;
@@ -588,6 +593,7 @@ pub fn start_meeting_recording(
         sys_q.clone(),
         mic_q.clone(),
         stop.clone(),
+        opts.start_index,
     );
 
     // Input-level meter: emit the peak-since-last-tick every 100 ms so the user

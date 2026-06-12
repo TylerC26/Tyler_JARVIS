@@ -2,18 +2,28 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deleteMeetingAction,
   renameMeetingAction,
   setMeetingProjectAction,
+  updateMeetingSummaryAction,
 } from "@/app/(app)/meetings/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Meeting, MeetingChunk, ProjectCategory, ProjectStatus } from "@/lib/db/types";
+import {
+  parseSummaryActionItems,
+  toggleActionItemLine,
+} from "@/lib/meetings/actionItems";
 import { resumeMeeting, type ChunkProgress } from "@/lib/meetings/pipeline";
+import {
+  continueRecording,
+  stopRecording,
+  useRecorder,
+} from "@/lib/meetings/recorderStore";
 import { ChunkPill, StatusPill, fmtAge, fmtDuration } from "./meetingUi";
 
 const BUCKET_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/meeting-recordings`;
@@ -26,6 +36,23 @@ export type MeetingProjectOption = {
   status: ProjectStatus;
   category: ProjectCategory;
 };
+
+// Elapsed clock for a live continuation session, derived from the store's
+// startedAt so it's correct even when this page mounts mid-recording.
+function useElapsed(startedAt: number | null): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (startedAt == null) {
+      setElapsed(0);
+      return;
+    }
+    const update = () => setElapsed(Date.now() - startedAt);
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+  return elapsed;
+}
 
 export function MeetingDetail({
   meeting: initial,
@@ -40,18 +67,48 @@ export function MeetingDetail({
   const [meeting, setMeeting] = useState<Meeting>(initial);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(initial.title);
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [summaryBusy, setSummaryBusy] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [canForce, setCanForce] = useState(false);
   const [liveChunks, setLiveChunks] = useState<Record<number, ChunkProgress>>({});
   const [pickingProject, setPickingProject] = useState(false);
   const [projectBusy, setProjectBusy] = useState(false);
+  const [stopBusy, setStopBusy] = useState(false);
+
+  // router.refresh() (after resume / continued-recording finalize) hands down
+  // fresh server props — adopt them, but never clobber an in-flight edit.
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (prevInitial !== initial) {
+    setPrevInitial(initial);
+    setMeeting(initial);
+    if (!editingTitle) setTitleDraft(initial.title);
+  }
+
+  // The global recorder session, when it belongs to THIS meeting (the
+  // continue-recording flow). The session lives in recorderStore, so it keeps
+  // running if the user navigates away from this page.
+  const rec = useRecorder();
+  const isLive = rec.meetingId === meeting.id && rec.phase !== "idle";
+  const elapsed = useElapsed(isLive ? rec.startedAt : null);
+  const canContinue =
+    rec.phase === "idle" &&
+    (meeting.status === "done" || meeting.status === "failed");
+
+  const summaryParts = useMemo(
+    () => parseSummaryActionItems(meeting.summary),
+    [meeting.summary],
+  );
+  const checkedCount = summaryParts.items.filter((i) => i.checked).length;
 
   const linkedProject =
     projects.find((p) => p.id === meeting.project_id) ?? null;
 
   const unfinished = chunks.filter((c) => c.status !== "transcribed");
   const stuck =
+    !isLive &&
     meeting.status !== "done" &&
     (meeting.status === "failed" ||
       unfinished.length > 0 ||
@@ -69,6 +126,60 @@ export function MeetingDetail({
     const r = await renameMeetingAction(meeting.id, next);
     if (r.ok) setMeeting(r.data);
     setEditingTitle(false);
+  }
+
+  // Reopen this meeting and append a new capture session to it. New chunks
+  // number after the existing ones; stop re-stitches and re-summarizes the
+  // whole meeting (checked-off action items survive the rewrite).
+  async function handleContinue() {
+    const nextChunkIndex = chunks.reduce((m, c) => Math.max(m, c.idx + 1), 0);
+    await continueRecording({
+      meetingId: meeting.id,
+      nextChunkIndex,
+      baseDurationMs: meeting.duration_ms,
+      eventTitle: meeting.title || null,
+    });
+  }
+
+  async function handleStopContinued() {
+    setStopBusy(true);
+    await stopRecording(); // errors land in rec.error
+    setStopBusy(false);
+    router.refresh();
+  }
+
+  function beginSummaryEdit() {
+    setSummaryDraft(meeting.summary);
+    setEditingSummary(true);
+  }
+
+  async function saveSummary() {
+    setSummaryBusy(true);
+    const r = await updateMeetingSummaryAction(meeting.id, summaryDraft.trim());
+    setSummaryBusy(false);
+    if (!r.ok) {
+      await alertDialog(r.error, { title: "save failed" });
+      return;
+    }
+    setMeeting(r.data);
+    setEditingSummary(false);
+  }
+
+  // Flip one action-item checkbox inside the stored summary markdown.
+  // Optimistic: the card updates instantly, and rolls back if the save fails.
+  async function toggleItem(line: number) {
+    if (summaryBusy) return;
+    const prev = meeting.summary;
+    const next = toggleActionItemLine(prev, line);
+    if (next === prev) return;
+    setMeeting((m) => ({ ...m, summary: next }));
+    setSummaryBusy(true);
+    const r = await updateMeetingSummaryAction(meeting.id, next);
+    setSummaryBusy(false);
+    if (!r.ok) {
+      setMeeting((m) => ({ ...m, summary: prev }));
+      await alertDialog(r.error, { title: "update failed" });
+    }
   }
 
   async function handleDelete() {
@@ -151,6 +262,11 @@ export function MeetingDetail({
         } · ${meeting.source}`}
         actions={
           <div className="flex items-center gap-1.5">
+            {canContinue && (
+              <Button size="sm" variant="primary" onClick={handleContinue}>
+                ● continue rec
+              </Button>
+            )}
             <Link href="/meetings">
               <Button size="sm" variant="ghost">
                 back
@@ -165,7 +281,7 @@ export function MeetingDetail({
 
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
         <div className="flex items-center gap-3 flex-wrap">
-          <StatusPill status={meeting.status} />
+          <StatusPill status={isLive ? "recording" : meeting.status} />
           {editingTitle ? (
             <input
               value={titleDraft}
@@ -240,6 +356,58 @@ export function MeetingDetail({
           )}
         </div>
 
+        {isLive && (
+          <div className="rounded-sm border border-danger/40 bg-danger/5 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-danger animate-pulse" />
+                {rec.phase === "starting"
+                  ? "// starting…"
+                  : rec.phase === "recording"
+                    ? `// recording continuation ${fmtDuration(elapsed)}`
+                    : rec.phase === "processing"
+                      ? "// processing segments…"
+                      : "// re-summarizing…"}
+              </span>
+              {rec.phase === "recording" && (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={handleStopContinued}
+                  disabled={stopBusy}
+                >
+                  ■ stop & re-summarize
+                </Button>
+              )}
+            </div>
+            {rec.chunks.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-dim">
+                  new segments
+                </span>
+                {rec.chunks.map((c) => (
+                  <span
+                    key={c.index}
+                    title={`#${c.index} ${c.status}${c.error ? ` — ${c.error}` : ""}`}
+                    className={`font-mono text-[11px] ${
+                      c.status === "transcribed"
+                        ? "text-success"
+                        : c.status === "failed"
+                          ? "text-danger"
+                          : "text-accent animate-pulse"
+                    }`}
+                  >
+                    ◼
+                  </span>
+                ))}
+              </div>
+            )}
+            {rec.error && (
+              <p className="font-mono text-[11px] text-danger">{rec.error}</p>
+            )}
+          </div>
+        )}
+
         {meeting.status === "failed" && (
           <p className="font-mono text-[11px] text-danger">
             // processing failed — whatever transcribed is preserved below.
@@ -282,21 +450,116 @@ export function MeetingDetail({
           </div>
         )}
 
-        {meeting.summary ? (
-          <section className="space-y-2">
-            <h2 className="font-mono text-[10px] uppercase tracking-widest text-fg-dim border-b border-edge/40 pb-1">
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3 border-b border-edge/40 pb-1">
+            <h2 className="font-mono text-[10px] uppercase tracking-widest text-fg-dim">
               // summary
             </h2>
-            <div className="font-mono text-[12px] text-fg-muted whitespace-pre-wrap break-words leading-relaxed">
-              {meeting.summary}
+            {!editingSummary && (
+              <button
+                type="button"
+                onClick={beginSummaryEdit}
+                className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-accent transition-colors"
+              >
+                {meeting.summary ? "✎ edit" : "+ write"}
+              </button>
+            )}
+          </div>
+
+          {editingSummary ? (
+            <div className="space-y-2">
+              <textarea
+                value={summaryDraft}
+                onChange={(e) => setSummaryDraft(e.target.value)}
+                rows={Math.min(24, summaryDraft.split("\n").length + 2)}
+                autoFocus
+                placeholder="markdown — action items as `- [ ] task` stay checkable"
+                className="w-full resize-y rounded-sm border border-edge bg-surface-2/30 p-3 font-mono text-[12px] leading-relaxed text-fg focus:outline-none focus:border-accent/60"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={saveSummary}
+                  disabled={summaryBusy}
+                >
+                  {summaryBusy ? "saving…" : "save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditingSummary(false)}
+                  disabled={summaryBusy}
+                >
+                  cancel
+                </Button>
+              </div>
             </div>
-          </section>
-        ) : (
-          <p className="font-mono text-[11px] text-fg-dim">
-            // no summary yet
-            {stuck ? " — processing incomplete" : ""}
-          </p>
-        )}
+          ) : meeting.summary ? (
+            <>
+              {summaryParts.before && (
+                <div className="font-mono text-[12px] text-fg-muted whitespace-pre-wrap break-words leading-relaxed">
+                  {summaryParts.before}
+                </div>
+              )}
+
+              {summaryParts.items.length > 0 && (
+                <div className="rounded-sm border border-edge bg-surface-2/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-fg-dim">
+                      // action items
+                    </span>
+                    <span className="font-mono text-[10px] text-fg-dim">
+                      {checkedCount}/{summaryParts.items.length} done
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {summaryParts.items.map((item) => (
+                      <button
+                        key={item.line}
+                        type="button"
+                        onClick={() => void toggleItem(item.line)}
+                        disabled={summaryBusy}
+                        className="group flex w-full items-start gap-2.5 rounded-sm border border-edge/60 bg-surface/40 px-3 py-2 text-left transition-colors hover:border-accent/60 disabled:opacity-60"
+                      >
+                        <span
+                          className={`mt-px font-mono text-[13px] leading-none ${
+                            item.checked
+                              ? "text-success"
+                              : "text-fg-dim group-hover:text-accent"
+                          }`}
+                          aria-hidden
+                        >
+                          {item.checked ? "☑" : "☐"}
+                        </span>
+                        <span
+                          className={`font-mono text-[12px] leading-relaxed ${
+                            item.checked
+                              ? "line-through text-fg-dim"
+                              : "text-fg"
+                          }`}
+                        >
+                          {item.text}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {summaryParts.after && (
+                <div className="font-mono text-[12px] text-fg-muted whitespace-pre-wrap break-words leading-relaxed">
+                  {summaryParts.after}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="font-mono text-[11px] text-fg-dim">
+              // no summary yet
+              {stuck ? " — processing incomplete" : ""}
+            </p>
+          )}
+        </section>
 
         {chunks.length > 0 && (
           <section className="space-y-2">

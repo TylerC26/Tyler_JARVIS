@@ -39,7 +39,7 @@ export function createTauriEngine(events: EngineEvents): RecorderEngine {
     unlistens = [];
   }
 
-  async function start(id: string) {
+  async function start(id: string, startIndex = 0) {
     meetingId = id;
     pipelines = [];
 
@@ -92,7 +92,7 @@ export function createTauriEngine(events: EngineEvents): RecorderEngine {
       });
       unlistens = [unChunk, unStopped, unSource, unLevel, unError];
 
-      await startNativeRecording(id);
+      await startNativeRecording(id, startIndex);
     } catch (e) {
       cleanupListeners();
       throw e;

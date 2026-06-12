@@ -6,7 +6,11 @@
 // path; no Supabase credentials reach the client.
 
 import { NextResponse } from "next/server";
-import { getMeetingCore, upsertChunkCore } from "@/lib/db/core/meetings";
+import {
+  getMeetingCore,
+  listChunksCore,
+  upsertChunkCore,
+} from "@/lib/db/core/meetings";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 const BUCKET = "meeting-recordings";
@@ -45,6 +49,19 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Supabase not configured." },
       { status: 500 },
+    );
+  }
+
+  // No flow legitimately re-uploads a transcribed chunk (resume skips them) —
+  // refuse rather than let a stale client (e.g. a desktop build that doesn't
+  // know continue-recording's start offset) overwrite good audio + transcript.
+  const existing = (await listChunksCore(meetingId)).find(
+    (c) => c.idx === index,
+  );
+  if (existing?.status === "transcribed") {
+    return NextResponse.json(
+      { error: `Chunk ${index} is already transcribed; refusing to overwrite.` },
+      { status: 409 },
     );
   }
 

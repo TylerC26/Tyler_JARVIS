@@ -83,11 +83,14 @@ export type NativeRecordingInfo = {
   chunks: { index: number; path: string; sizeBytes: number; durationMs: number }[];
 };
 
-export async function startNativeRecording(meetingId: string): Promise<void> {
+export async function startNativeRecording(
+  meetingId: string,
+  startIndex = 0,
+): Promise<void> {
   const t = tauriApi();
   if (!t) throw new Error("Native capture is only available in the desktop app.");
   await t.core.invoke("start_meeting_recording", {
-    opts: { meetingId, captureMic: true, captureSystem: true },
+    opts: { meetingId, captureMic: true, captureSystem: true, startIndex },
   });
 }
 
