@@ -5,30 +5,80 @@
       "id": "lean-front-good-light",
       "image_url": "https://example.com/evals/physique/lean-front-good-light.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 12, "high": 15 },
+        "estimated_bf_range": {
+          "low": 12,
+          "high": 15
+        },
         "lighting_quality": "good",
-        "muscle_groups_expected": ["abs", "shoulders", "chest"],
-        "impression_keywords": ["lean", "defined", "definition"]
+        "muscle_groups_expected": [
+          "abs",
+          "shoulders",
+          "chest"
+        ],
+        "impression_keywords": [
+          "lean",
+          "defined",
+          "definition"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "average-front-fair-light",
       "image_url": "https://example.com/evals/physique/average-front-fair-light.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 18, "high": 23 },
+        "estimated_bf_range": {
+          "low": 18,
+          "high": 23
+        },
         "lighting_quality": "fair",
-        "muscle_groups_expected": ["shoulders", "arms"],
-        "impression_keywords": ["solid", "base", "average", "moderate"]
+        "muscle_groups_expected": [
+          "shoulders",
+          "arms"
+        ],
+        "impression_keywords": [
+          "solid",
+          "base",
+          "average",
+          "moderate"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "heavier-front-good-light",
       "image_url": "https://example.com/evals/physique/heavier-front-good-light.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 25, "high": 32 },
+        "estimated_bf_range": {
+          "low": 25,
+          "high": 32
+        },
         "lighting_quality": "good",
-        "muscle_groups_expected": ["forearms", "calves"],
-        "impression_keywords": ["fuller", "carrying", "softer"]
+        "muscle_groups_expected": [
+          "forearms",
+          "calves"
+        ],
+        "impression_keywords": [
+          "fuller",
+          "carrying",
+          "softer"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
@@ -37,58 +87,154 @@
       "golden": {
         "estimated_bf_range": null,
         "lighting_quality": "poor",
-        "muscle_groups_expected": ["shoulders"],
-        "impression_keywords": ["lighting", "hard to read", "silhouette", "limited"]
+        "muscle_groups_expected": [
+          "shoulders"
+        ],
+        "impression_keywords": [
+          "lighting",
+          "hard to read",
+          "silhouette",
+          "limited"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "back-double-bicep-good-light",
       "image_url": "https://example.com/evals/physique/back-double-bicep.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 14, "high": 18 },
+        "estimated_bf_range": {
+          "low": 14,
+          "high": 18
+        },
         "lighting_quality": "good",
-        "muscle_groups_expected": ["lats", "traps", "biceps"],
-        "impression_keywords": ["back", "width", "taper"]
+        "muscle_groups_expected": [
+          "lats",
+          "traps",
+          "biceps"
+        ],
+        "impression_keywords": [
+          "back",
+          "width",
+          "taper"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "side-profile-fair-light",
       "image_url": "https://example.com/evals/physique/side-profile.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 16, "high": 21 },
+        "estimated_bf_range": {
+          "low": 16,
+          "high": 21
+        },
         "lighting_quality": "fair",
-        "muscle_groups_expected": ["shoulders", "triceps"],
-        "impression_keywords": ["profile", "posture", "side"]
+        "muscle_groups_expected": [
+          "shoulders",
+          "triceps"
+        ],
+        "impression_keywords": [
+          "profile",
+          "posture",
+          "side"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "legs-quads-good-light",
       "image_url": "https://example.com/evals/physique/legs-quads.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 15, "high": 20 },
+        "estimated_bf_range": {
+          "low": 15,
+          "high": 20
+        },
         "lighting_quality": "good",
-        "muscle_groups_expected": ["quads", "calves"],
-        "impression_keywords": ["legs", "quad", "lower body"]
+        "muscle_groups_expected": [
+          "quads",
+          "calves"
+        ],
+        "impression_keywords": [
+          "legs",
+          "quad",
+          "lower body"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "pumped-gym-mirror-excellent-light",
       "image_url": "https://example.com/evals/physique/gym-mirror-pump.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 13, "high": 17 },
+        "estimated_bf_range": {
+          "low": 13,
+          "high": 17
+        },
         "lighting_quality": "excellent",
-        "muscle_groups_expected": ["shoulders", "arms", "chest"],
-        "impression_keywords": ["pump", "fuller", "gym"]
+        "muscle_groups_expected": [
+          "shoulders",
+          "arms",
+          "chest"
+        ],
+        "impression_keywords": [
+          "pump",
+          "fuller",
+          "gym"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     },
     {
       "id": "morning-flat-fair-light",
       "image_url": "https://example.com/evals/physique/morning-flat.jpg",
       "golden": {
-        "estimated_bf_range": { "low": 17, "high": 22 },
+        "estimated_bf_range": {
+          "low": 17,
+          "high": 22
+        },
         "lighting_quality": "fair",
-        "muscle_groups_expected": ["abs", "shoulders"],
-        "impression_keywords": ["flat", "morning", "rested", "unflexed"]
+        "muscle_groups_expected": [
+          "abs",
+          "shoulders"
+        ],
+        "impression_keywords": [
+          "flat",
+          "morning",
+          "rested",
+          "unflexed"
+        ],
+        "trend_keywords": [
+          "baseline",
+          "no prior",
+          "first photo",
+          "reference"
+        ]
       }
     }
   ]

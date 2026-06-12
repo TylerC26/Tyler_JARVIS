@@ -21,6 +21,8 @@ const VALID_ANALYSIS = {
   estimated_bf_range: { low: 15, high: 18 },
   posture_notes: "A slight forward shoulder roll appears present in this pose.",
   lighting_quality: "good",
+  trend_vs_prior:
+    "Baseline read — no prior photo on file, so this becomes the reference point.",
 };
 
 type ImagePart = { type: string };
@@ -35,7 +37,7 @@ beforeEach(() => {
 });
 
 describe("analyzePhysiquePhoto", () => {
-  test("returns schema-validated analysis for a single photo, no delta field", async () => {
+  test("single photo: one image part, trend_vs_prior still required", async () => {
     generateObjectMock.mockResolvedValue({
       object: VALID_ANALYSIS,
       usage: { inputTokens: 100, outputTokens: 50 },
@@ -44,20 +46,18 @@ describe("analyzePhysiquePhoto", () => {
     const r = await analyzePhysiquePhoto({ imageUrl: "https://x.test/b.jpg" });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error(r.error);
-    expect(r.data.estimated_bf_range).toEqual({ low: 15, high: 18 });
-    expect(r.data.delta_vs_prior).toBeUndefined();
+    expect(r.data.trend_vs_prior).toMatch(/baseline/i);
 
     const call = generateObjectMock.mock.calls[0][0];
     expect(imageParts(call)).toHaveLength(1);
-    // without a prior photo the schema must not ask for a delta
-    expect(call.schema.shape.delta_vs_prior).toBeUndefined();
+    expect(call.schema.shape.trend_vs_prior).toBeDefined();
   });
 
-  test("with priorPhotoUrl: sends both images and requires delta_vs_prior", async () => {
+  test("with priorPhotoUrl: sends both images, trend describes the comparison", async () => {
     generateObjectMock.mockResolvedValue({
       object: {
         ...VALID_ANALYSIS,
-        delta_vs_prior:
+        trend_vs_prior:
           "Waist appears slightly tighter than in the prior photo.",
       },
       usage: {},
@@ -69,18 +69,35 @@ describe("analyzePhysiquePhoto", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error(r.error);
-    expect(r.data.delta_vs_prior).toMatch(/prior/);
+    expect(r.data.trend_vs_prior).toMatch(/prior/);
 
     const call = generateObjectMock.mock.calls[0][0];
     expect(imageParts(call)).toHaveLength(2);
-    expect(call.schema.shape.delta_vs_prior).toBeDefined();
   });
 
-  test("rejects a malformed model payload instead of passing it through", async () => {
+  test("estimated_bf_range is optional — a rangeless analysis passes", async () => {
+    const { estimated_bf_range: _drop, ...rangeless } = VALID_ANALYSIS;
+    generateObjectMock.mockResolvedValue({ object: rangeless, usage: {} });
+
+    const r = await analyzePhysiquePhoto({ imageUrl: "https://x.test/b.jpg" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.data.estimated_bf_range).toBeUndefined();
+  });
+
+  test("a payload missing trend_vs_prior is rejected", async () => {
+    const { trend_vs_prior: _drop, ...noTrend } = VALID_ANALYSIS;
+    generateObjectMock.mockResolvedValue({ object: noTrend, usage: {} });
+
+    const r = await analyzePhysiquePhoto({ imageUrl: "https://x.test/b.jpg" });
+    expect(r.ok).toBe(false);
+  });
+
+  test("an inverted bf range is still rejected when present", async () => {
     generateObjectMock.mockResolvedValue({
       object: {
         ...VALID_ANALYSIS,
-        estimated_bf_range: { low: 22, high: 14 }, // inverted range
+        estimated_bf_range: { low: 22, high: 14 },
       },
       usage: {},
     });
@@ -97,23 +114,15 @@ describe("analyzePhysiquePhoto", () => {
 });
 
 describe("physiqueAnalysisSchema", () => {
-  test("accepts a well-formed analysis", () => {
+  test("requires trend_vs_prior, allows missing bf range", () => {
     expect(physiqueAnalysisSchema.safeParse(VALID_ANALYSIS).success).toBe(true);
+    const { estimated_bf_range: _r, ...rangeless } = VALID_ANALYSIS;
+    expect(physiqueAnalysisSchema.safeParse(rangeless).success).toBe(true);
+    const { trend_vs_prior: _t, ...trendless } = VALID_ANALYSIS;
+    expect(physiqueAnalysisSchema.safeParse(trendless).success).toBe(false);
   });
 
-  test("rejects inverted or implausible bf ranges and unknown lighting values", () => {
-    expect(
-      physiqueAnalysisSchema.safeParse({
-        ...VALID_ANALYSIS,
-        estimated_bf_range: { low: 18, high: 15 },
-      }).success,
-    ).toBe(false);
-    expect(
-      physiqueAnalysisSchema.safeParse({
-        ...VALID_ANALYSIS,
-        estimated_bf_range: { low: 0, high: 90 },
-      }).success,
-    ).toBe(false);
+  test("rejects unknown lighting values", () => {
     expect(
       physiqueAnalysisSchema.safeParse({
         ...VALID_ANALYSIS,

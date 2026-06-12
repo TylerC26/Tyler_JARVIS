@@ -8,6 +8,7 @@ const BASE: PhysiqueAnalysis = {
   estimated_bf_range: { low: 15, high: 18 },
   posture_notes: "Slight forward shoulder roll appears present.",
   lighting_quality: "good",
+  trend_vs_prior: "Waist appears slightly tighter than the prior photo.",
 };
 
 describe("formatPhysiqueSummary", () => {
@@ -18,13 +19,18 @@ describe("formatPhysiqueSummary", () => {
     expect(s).toContain("shoulders, abs");
   });
 
-  test("includes the delta sentence only when present", () => {
-    expect(formatPhysiqueSummary(BASE)).not.toContain("Vs last photo");
-    const s = formatPhysiqueSummary({
-      ...BASE,
-      delta_vs_prior: "Waist appears slightly tighter.",
-    });
-    expect(s).toContain("Vs last photo: Waist appears slightly tighter.");
+  test("always includes the trend sentence", () => {
+    const s = formatPhysiqueSummary(BASE);
+    expect(s).toContain(
+      "Trend: Waist appears slightly tighter than the prior photo.",
+    );
+  });
+
+  test("omits the body-fat line when the range was not readable", () => {
+    const { estimated_bf_range: _drop, ...rangeless } = BASE;
+    const s = formatPhysiqueSummary(rangeless as PhysiqueAnalysis);
+    expect(s).not.toContain("ballpark");
+    expect(s).not.toContain("%");
   });
 
   test("adds a lighting caveat only for poor/fair photos", () => {

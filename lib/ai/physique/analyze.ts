@@ -30,8 +30,9 @@ export const physiqueAnalysisSchema = z.object({
       high: z.number().min(3).max(60),
     })
     .refine((r) => r.low <= r.high, { message: "low must be <= high" })
+    .optional()
     .describe(
-      "Visual body-fat ballpark as a RANGE in percent (e.g. 15-18). A single photo cannot measure body composition — keep the range honest, typically 3+ points wide.",
+      "OPTIONAL visual ballpark as a RANGE in percent (e.g. 15-18) — context only, never the headline. OMIT entirely when lighting/pose makes it unreadable. A single photo cannot measure body composition; keep any range honest, typically 3+ points wide.",
     ),
   posture_notes: z
     .string()
@@ -43,28 +44,23 @@ export const physiqueAnalysisSchema = z.object({
     .describe(
       "How readable the photo is for trend comparison. Poor lighting inflates or hides definition — comparisons should weight this.",
     ),
-});
-
-export const physiqueAnalysisWithDeltaSchema = physiqueAnalysisSchema.extend({
-  delta_vs_prior: z
+  trend_vs_prior: z
     .string()
     .describe(
-      "Direction of visible change vs the PRIOR photo, trend language only ('waist appears slightly tighter', 'shoulders look a touch fuller'). Never quantified loss/gain claims. Note if lighting/pose differences limit the comparison.",
+      "THE HEADLINE FIELD — always trend-relative, never absolute. With a PRIOR photo: the direction of visible change ('appears leaner than the last photo', 'more definition visible than prior'), with any lighting/pose caveat. Without one: state plainly that this is the baseline photo and there is no prior to compare yet.",
     ),
 });
 
-export type PhysiqueAnalysis = z.infer<typeof physiqueAnalysisSchema> & {
-  delta_vs_prior?: string;
-};
+export type PhysiqueAnalysis = z.infer<typeof physiqueAnalysisSchema>;
 
 const SYSTEM_PROMPT = `You analyze body-progress photos for a personal fitness tracker. You are not a medical professional, and these are casual phone photos — your job is directional observation, not measurement.
 
 Framing rules, applying to EVERY field:
 - Observations and trends only, never absolutes: write "appears", "looks", "suggests" — never "is", "has reached", or a precise single number.
-- Body fat is a wide visual ballpark from one photo. Lighting, pump, hydration, and time of day all move the visual. Keep the range honest.
+- trend_vs_prior is the headline: relative to the prior photo when one is given ("appears leaner than the last photo"), or an explicit baseline statement when none is.
+- The body-fat range is optional context, never a verdict — omit it when the photo isn't readable, and never let a number carry the message the trend should.
 - No medical or diagnostic statements. Posture notes are casual observations.
-- Say when lighting or pose limits what can be read — that is what lighting_quality is for.
-- When a prior photo is provided, describe only the direction of visible change, and call out lighting/pose differences that weaken the comparison.`;
+- Say when lighting or pose limits what can be read — that is what lighting_quality is for, and trend_vs_prior should repeat the caveat when it weakens the comparison.`;
 
 type ContentPart =
   | { type: "text"; text: string }
@@ -81,9 +77,7 @@ export async function analyzePhysiquePhoto(input: {
   priorPhotoUrl?: string;
 }): Promise<CoreResult<PhysiqueAnalysis>> {
   const withPrior = Boolean(input.priorPhotoUrl);
-  const schema = withPrior
-    ? physiqueAnalysisWithDeltaSchema
-    : physiqueAnalysisSchema;
+  const schema = physiqueAnalysisSchema;
 
   const content: ContentPart[] = withPrior
     ? [
@@ -93,12 +87,15 @@ export async function analyzePhysiquePhoto(input: {
         { type: "image", image: toImage(input.imageUrl) },
         {
           type: "text",
-          text: "Analyze PHOTO B. In delta_vs_prior, describe the direction of visible change from PHOTO A to PHOTO B.",
+          text: "Analyze PHOTO B. In trend_vs_prior, describe the direction of visible change from PHOTO A to PHOTO B.",
         },
       ]
     : [
         { type: "image", image: toImage(input.imageUrl) },
-        { type: "text", text: "Analyze this physique photo." },
+        {
+          type: "text",
+          text: "Analyze this physique photo. There is no prior photo — trend_vs_prior should say this is the baseline.",
+        },
       ];
 
   try {
