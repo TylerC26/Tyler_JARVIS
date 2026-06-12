@@ -66,6 +66,20 @@ export async function attachAnalysis(
   return { ok: true, data: data as ProgressPhoto };
 }
 
+export async function getProgressPhoto(
+  id: string,
+): Promise<ProgressPhoto | null> {
+  const supabase = await getSupabaseServer();
+  if (!supabase || !id) return null;
+  const { data } = await supabase
+    .from("progress_photos")
+    .select("*")
+    .eq("user_id", getOwnerId())
+    .eq("id", id)
+    .maybeSingle();
+  return (data as ProgressPhoto | null) ?? null;
+}
+
 // Newest-first (gallery order), optionally windowed to taken_at >= since.
 export async function listProgressPhotos(opts?: {
   limit?: number;

@@ -35,6 +35,7 @@ import { createMealCore, listMealsCore } from "@/lib/db/core/meals";
 import { logBodyWeightTool } from "@/lib/chat/tools/log-body-weight";
 import { logBodyPhotoTool } from "@/lib/chat/tools/log-body-photo";
 import { analyzeProgressPhotoTool } from "@/lib/chat/tools/analyze-progress-photo";
+import { compareProgressPhotosTool } from "@/lib/chat/tools/compare-progress-photos";
 import { getMealPhotoContext, getTelegramContext } from "@/lib/chat/request-context";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
@@ -2452,6 +2453,7 @@ export const ALL_TOOLS = {
   log_body_weight: logBodyWeightTool,
   log_body_photo: logBodyPhotoTool,
   analyze_progress_photo: analyzeProgressPhotoTool,
+  compare_progress_photos: compareProgressPhotosTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;
