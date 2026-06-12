@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { deleteTask, updateTask } from "@/lib/db/actions/tasks";
 import type { Task, TaskStatus } from "@/lib/db/types";
@@ -57,7 +58,11 @@ export function TaskDetailModal({
   }
 
   async function onDelete() {
-    if (!confirm(`Delete "${task.title}"?`)) return;
+    const ok = await confirmDialog(`Delete "${task.title}"?`, {
+      title: "delete task",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     setPending(true);
     const result = await deleteTask(task.id);
     setPending(false);

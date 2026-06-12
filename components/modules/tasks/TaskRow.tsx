@@ -7,7 +7,9 @@ import {
   cycleTaskStatus,
   deleteTask,
   setTaskImportant,
+  setTaskStatus,
 } from "@/lib/db/actions/tasks";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { fmtRelativeDay } from "@/lib/date";
 import type { Task } from "@/lib/db/types";
 import { TaskDetailModal } from "./TaskDetailModal";
@@ -161,14 +163,45 @@ export function TaskRow({
             aria-label="Delete task"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm("Delete task?"))
-                startTransition(() => void deleteTask(task.id));
+              // confirmDialog, not window.confirm: the desktop webview's
+              // confirm() returns false without ever showing a dialog.
+              void confirmDialog(`Delete "${task.title}"?`, {
+                title: "delete task",
+                confirmText: "delete",
+              }).then((ok) => {
+                if (ok) startTransition(() => void deleteTask(task.id));
+              });
             }}
             // Persistently visible (dimmed) instead of pure hover-reveal so
             // the affordance exists on touch devices where there's no hover.
-            className="grid h-11 w-11 place-items-center font-mono text-[12px] text-fg-dim opacity-50 hover:opacity-100 hover:text-danger transition-opacity"
+            className="grid h-11 w-7 place-items-center font-mono text-[12px] text-fg-dim opacity-50 hover:opacity-100 hover:text-danger transition-opacity"
           >
             ✕
+          </button>
+          <button
+            type="button"
+            aria-label={task.status === "done" ? "Reopen task" : "Mark done"}
+            aria-pressed={task.status === "done"}
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              startTransition(
+                () =>
+                  void setTaskStatus(
+                    task.id,
+                    task.status === "done" ? "todo" : "done",
+                  ),
+              );
+            }}
+            title={task.status === "done" ? "Done · click to reopen" : "Mark done"}
+            className={[
+              "grid h-11 w-9 place-items-center font-mono text-[14px] transition-opacity",
+              task.status === "done"
+                ? "text-success opacity-100"
+                : "text-fg-dim opacity-50 hover:opacity-100 hover:text-success",
+            ].join(" ")}
+          >
+            ✓
           </button>
         </div>
       </div>

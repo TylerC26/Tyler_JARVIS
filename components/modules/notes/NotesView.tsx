@@ -8,6 +8,7 @@ import {
   updateNoteAction,
 } from "@/app/(app)/notes/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Note } from "@/lib/db/types";
@@ -137,10 +138,14 @@ export function NotesView({ initialNotes, initialCategories }: Props) {
   }
 
   async function handleDelete(note: Note) {
-    if (!confirm(`Delete "${note.title || note.body.slice(0, 40)}"?`)) return;
+    const ok = await confirmDialog(
+      `Delete "${note.title || note.body.slice(0, 40)}"?`,
+      { title: "delete note", confirmText: "delete" },
+    );
+    if (!ok) return;
     const result = await deleteNoteAction(note.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setNotes((prev) => prev.filter((n) => n.id !== note.id));
@@ -152,7 +157,7 @@ export function NotesView({ initialNotes, initialCategories }: Props) {
   ): Promise<boolean> {
     const result = await updateNoteAction(note.id, patch);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "update failed" });
       return false;
     }
     setNotes((prev) =>

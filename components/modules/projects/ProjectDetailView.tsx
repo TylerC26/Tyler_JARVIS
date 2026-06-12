@@ -13,6 +13,7 @@ import {
 import { PageAgentHint } from "@/components/modules/chat/PageAgentHint";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LaunchBar } from "./LaunchBar";
@@ -117,7 +118,7 @@ export function ProjectDetailView({
     );
     setBusyId(null);
     if (!result.ok) {
-      alert(`Failed: ${result.error}`);
+      await alertDialog(`Failed: ${result.error}`, { title: "milestone" });
       return;
     }
     setMilestones((prev) =>
@@ -126,12 +127,16 @@ export function ProjectDetailView({
   }
 
   async function onDeleteMilestone(m: ProjectMilestone) {
-    if (!confirm(`Delete milestone "${m.title}"?`)) return;
+    const ok = await confirmDialog(`Delete milestone "${m.title}"?`, {
+      title: "delete milestone",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     setBusyId(m.id);
     const result = await deleteMilestoneAction(m.id, project.slug);
     setBusyId(null);
     if (!result.ok) {
-      alert(`Failed: ${result.error}`);
+      await alertDialog(`Failed: ${result.error}`, { title: "delete failed" });
       return;
     }
     setMilestones((prev) => prev.filter((x) => x.id !== m.id));
@@ -174,15 +179,14 @@ export function ProjectDetailView({
   }
 
   async function onDeleteProject() {
-    if (
-      !confirm(
-        `Delete project "${project.name}"?\nMilestones will be deleted. Tasks tagged to this project will become un-tagged.`,
-      )
-    )
-      return;
+    const ok = await confirmDialog(
+      `Delete project "${project.name}"?\nMilestones will be deleted. Tasks tagged to this project will become un-tagged.`,
+      { title: "delete project", confirmText: "delete" },
+    );
+    if (!ok) return;
     const result = await deleteProjectAction(project.id);
     if (!result.ok) {
-      alert(`Failed: ${result.error}`);
+      await alertDialog(`Failed: ${result.error}`, { title: "delete failed" });
       return;
     }
     if (typeof window !== "undefined") window.location.href = backHref;

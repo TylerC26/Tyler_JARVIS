@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/agents/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -156,18 +157,16 @@ export function AgentsView({
   }
 
   async function disconnectTelegram(agent: Agent) {
-    if (
-      !confirm(
-        `Disconnect @${agent.telegram_bot_username} from ${agent.name}? The bot stays in BotFather, but stops receiving updates here.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog(
+      `Disconnect @${agent.telegram_bot_username} from ${agent.name}? The bot stays in BotFather, but stops receiving updates here.`,
+      { title: "disconnect telegram", confirmText: "disconnect" },
+    );
+    if (!ok) return;
     setBusyId(agent.id);
     try {
       const res = await disconnectAgentTelegramBotAction(agent.id);
       if (!res.ok) {
-        alert(res.error);
+        await alertDialog(res.error, { title: "disconnect failed" });
         return;
       }
       setAgents((prev) =>
@@ -295,7 +294,11 @@ export function AgentsView({
   }
 
   async function remove(agent: Agent) {
-    if (!confirm(`Delete agent "${agent.name}"?`)) return;
+    const ok = await confirmDialog(`Delete agent "${agent.name}"?`, {
+      title: "delete agent",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     setBusyId(agent.id);
     try {
       const res = await deleteAgentAction(agent.id);

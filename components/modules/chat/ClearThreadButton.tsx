@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { clearThreadAction } from "@/app/(app)/chat/actions";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 
 export function ClearThreadButton({
   agentSlug = null,
@@ -17,15 +18,15 @@ export function ClearThreadButton({
       type="button"
       disabled={pending}
       onClick={() => {
-        if (
-          !confirm(
-            "Clear this thread's history? This cannot be undone.",
-          )
-        )
-          return;
-        startTransition(async () => {
-          await clearThreadAction(agentSlug);
-          onCleared?.();
+        void confirmDialog(
+          "Clear this thread's history? This cannot be undone.",
+          { title: "clear thread", confirmText: "clear" },
+        ).then((ok) => {
+          if (!ok) return;
+          startTransition(async () => {
+            await clearThreadAction(agentSlug);
+            onCleared?.();
+          });
         });
       }}
       className="font-mono text-[10px] uppercase tracking-wider text-fg-dim hover:text-danger disabled:opacity-50"

@@ -11,6 +11,7 @@ import {
   moveEventAction,
   updateEventAction,
 } from "@/app/(app)/calendar/actions";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CategoryKey } from "@/lib/calendar/categories";
 import { monthRange, weekRange } from "@/lib/calendar/grid";
@@ -176,7 +177,11 @@ export function CalendarView({
 
   async function handleDelete() {
     if (drawer.kind !== "edit") return;
-    if (!confirm(`Delete "${drawer.event.title}"?`)) return;
+    const ok = await confirmDialog(`Delete "${drawer.event.title}"?`, {
+      title: "delete event",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     setDrawerPending(true);
     try {
       const result = await deleteEventAction(drawer.event.id);

@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/skills/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -207,7 +208,9 @@ export function SkillsView({
     const result = await toggleSkillActiveAction(skill.id, !skill.active);
     setBusyId(null);
     if (!result.ok) {
-      alert(`Toggle failed: ${result.error}`);
+      await alertDialog(`Toggle failed: ${result.error}`, {
+        title: "toggle failed",
+      });
       return;
     }
     setSkills((prev) =>
@@ -216,12 +219,18 @@ export function SkillsView({
   }
 
   async function onDelete(skill: Skill) {
-    if (!confirm(`Delete skill "${skill.name}"?`)) return;
+    const ok = await confirmDialog(`Delete skill "${skill.name}"?`, {
+      title: "delete skill",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     setBusyId(skill.id);
     const result = await deleteSkillAction(skill.id);
     setBusyId(null);
     if (!result.ok) {
-      alert(`Delete failed: ${result.error}`);
+      await alertDialog(`Delete failed: ${result.error}`, {
+        title: "delete failed",
+      });
       return;
     }
     setSkills((prev) => prev.filter((s) => s.id !== skill.id));

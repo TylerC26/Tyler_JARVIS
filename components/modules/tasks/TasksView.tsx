@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { alertDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -52,7 +53,9 @@ export function TasksView({
     const result = await setTaskStatus(id, target);
     if (!result.ok) {
       setTasks(before);
-      alert(`Could not move task: ${result.error}`);
+      await alertDialog(`Could not move task: ${result.error}`, {
+        title: "move failed",
+      });
     }
   }
 

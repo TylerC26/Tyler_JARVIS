@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { alertDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { TaskRow } from "@/components/modules/tasks/TaskRow";
 import { quickAddTask, setTaskStatus } from "@/lib/db/actions/tasks";
@@ -40,7 +41,9 @@ export function ProjectTaskBoard({
     const result = await setTaskStatus(id, target);
     if (!result.ok) {
       setTasks(before);
-      alert(`Could not move task: ${result.error}`);
+      await alertDialog(`Could not move task: ${result.error}`, {
+        title: "move failed",
+      });
     }
   }
 
@@ -49,7 +52,9 @@ export function ProjectTaskBoard({
     if (!title) return;
     setNewTitle("");
     const result = await quickAddTask(title, projectId);
-    if (!result.ok) alert(`Failed: ${result.error}`);
+    if (!result.ok) {
+      await alertDialog(`Failed: ${result.error}`, { title: "add failed" });
+    }
   }
 
   const grouped = STATUS_GROUPS.map((g) => ({

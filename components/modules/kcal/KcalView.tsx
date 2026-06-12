@@ -6,6 +6,7 @@ import {
   deleteMealAction,
   updateMealAction,
 } from "@/app/(app)/kcal/actions";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { fmtDate } from "@/lib/date";
@@ -86,10 +87,14 @@ export function KcalView({ initialMeals }: Props) {
   const todayTotals = totalsFor(todayList);
 
   async function handleDelete(meal: Meal) {
-    if (!confirm(`Delete "${meal.title}"?`)) return;
+    const ok = await confirmDialog(`Delete "${meal.title}"?`, {
+      title: "delete meal",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     const result = await deleteMealAction(meal.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setMeals((prev) => prev.filter((m) => m.id !== meal.id));
@@ -101,7 +106,7 @@ export function KcalView({ initialMeals }: Props) {
   ): Promise<boolean> {
     const result = await updateMealAction(id, patch);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "update failed" });
       return false;
     }
     setMeals((prev) => prev.map((m) => (m.id === id ? result.data : m)));
@@ -112,7 +117,7 @@ export function KcalView({ initialMeals }: Props) {
   async function handleCreate(input: Parameters<typeof createMealAction>[0]) {
     const result = await createMealAction(input);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "add failed" });
       return false;
     }
     setMeals((prev) =>

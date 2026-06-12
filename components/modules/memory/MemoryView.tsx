@@ -10,6 +10,7 @@ import {
   updateMemoryAction,
 } from "@/app/(app)/memory/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -222,8 +223,11 @@ export function MemoryView({
   }
 
   async function destroy(memory: MemoryEntry) {
-    if (!confirm(`Permanently delete "${memory.key}"? This cannot be undone.`))
-      return;
+    const ok = await confirmDialog(
+      `Permanently delete "${memory.key}"? This cannot be undone.`,
+      { title: "delete memory", confirmText: "delete" },
+    );
+    if (!ok) return;
     setBusyId(memory.id);
     try {
       const res = await deleteMemoryAction(memory.id);

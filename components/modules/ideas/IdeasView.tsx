@@ -11,6 +11,7 @@ import {
   updateIdeaAction,
 } from "@/app/(app)/ideas/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Idea } from "@/lib/db/types";
@@ -79,10 +80,14 @@ export function IdeasView({ initialActive, initialArchived }: Props) {
   }
 
   async function handleDelete(idea: Idea) {
-    if (!confirm(`Delete "${idea.title}"?`)) return;
+    const ok = await confirmDialog(`Delete "${idea.title}"?`, {
+      title: "delete idea",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     const result = await deleteIdeaAction(idea.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setActive((prev) => prev.filter((i) => i.id !== idea.id));
@@ -90,10 +95,14 @@ export function IdeasView({ initialActive, initialArchived }: Props) {
   }
 
   async function handlePromoteTask(idea: Idea) {
-    if (!confirm(`Promote "${idea.title}" to a Task? The idea will be archived.`)) return;
+    const ok = await confirmDialog(
+      `Promote "${idea.title}" to a Task? The idea will be archived.`,
+      { title: "promote to task", confirmText: "promote" },
+    );
+    if (!ok) return;
     const result = await promoteIdeaToTaskAction(idea.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "promote failed" });
       return;
     }
     setActive((prev) => prev.filter((i) => i.id !== idea.id));
@@ -101,10 +110,14 @@ export function IdeasView({ initialActive, initialArchived }: Props) {
   }
 
   async function handlePromoteProject(idea: Idea) {
-    if (!confirm(`Promote "${idea.title}" to a Project? The idea will be archived.`)) return;
+    const ok = await confirmDialog(
+      `Promote "${idea.title}" to a Project? The idea will be archived.`,
+      { title: "promote to project", confirmText: "promote" },
+    );
+    if (!ok) return;
     const result = await promoteIdeaToProjectAction(idea.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "promote failed" });
       return;
     }
     setActive((prev) => prev.filter((i) => i.id !== idea.id));
@@ -202,7 +215,7 @@ export function IdeasView({ initialActive, initialArchived }: Props) {
                 onSaveTitle={async (next) => {
                   const result = await updateIdeaAction(idea.id, { title: next });
                   if (!result.ok) {
-                    alert(result.error);
+                    await alertDialog(result.error, { title: "update failed" });
                     return false;
                   }
                   const list = idea.archived_at ? archived : active;
@@ -217,7 +230,7 @@ export function IdeasView({ initialActive, initialArchived }: Props) {
                 onSaveBody={async (next) => {
                   const result = await updateIdeaAction(idea.id, { body: next });
                   if (!result.ok) {
-                    alert(result.error);
+                    await alertDialog(result.error, { title: "update failed" });
                     return false;
                   }
                   const list = idea.archived_at ? archived : active;

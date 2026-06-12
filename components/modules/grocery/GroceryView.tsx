@@ -8,6 +8,7 @@ import {
   setGroceryCheckedAction,
   updateGroceryItemAction,
 } from "@/app/(app)/grocery/actions";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Select } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -94,7 +95,7 @@ export function GroceryView({ initialItems }: Props) {
     );
     const result = await setGroceryCheckedAction(item.id, target);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "update failed" });
       setItems((prev) => prev.map((p) => (p.id === item.id ? item : p)));
     } else {
       setItems((prev) =>
@@ -104,10 +105,14 @@ export function GroceryView({ initialItems }: Props) {
   }
 
   async function handleDelete(item: GroceryItem) {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+    const ok = await confirmDialog(`Delete "${item.name}"?`, {
+      title: "delete item",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     const result = await deleteGroceryItemAction(item.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setItems((prev) => prev.filter((p) => p.id !== item.id));
@@ -119,7 +124,7 @@ export function GroceryView({ initialItems }: Props) {
   ): Promise<boolean> {
     const result = await updateGroceryItemAction(item.id, patch);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "update failed" });
       return false;
     }
     setItems((prev) => prev.map((p) => (p.id === item.id ? result.data : p)));
@@ -139,7 +144,7 @@ export function GroceryView({ initialItems }: Props) {
       source: "manual",
     });
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "add failed" });
       return;
     }
     if (result.data.inserted.length > 0) {
@@ -155,17 +160,19 @@ export function GroceryView({ initialItems }: Props) {
 
   function handleClearChecked() {
     if (checkedCount === 0) return;
-    if (
-      !confirm(`Clear ${checkedCount} checked item${checkedCount === 1 ? "" : "s"}?`)
-    )
-      return;
-    startTransition(async () => {
-      const result = await clearCheckedGroceryAction();
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      setItems((prev) => prev.filter((p) => !p.checked));
+    void confirmDialog(
+      `Clear ${checkedCount} checked item${checkedCount === 1 ? "" : "s"}?`,
+      { title: "clear checked", confirmText: "clear" },
+    ).then((ok) => {
+      if (!ok) return;
+      startTransition(async () => {
+        const result = await clearCheckedGroceryAction();
+        if (!result.ok) {
+          await alertDialog(result.error, { title: "clear failed" });
+          return;
+        }
+        setItems((prev) => prev.filter((p) => !p.checked));
+      });
     });
   }
 

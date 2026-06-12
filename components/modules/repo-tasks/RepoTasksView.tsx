@@ -9,6 +9,7 @@ import {
   retryRepoTaskAction,
 } from "@/app/(app)/repo-tasks/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -111,20 +112,28 @@ export function RepoTasksView({ initialTasks, allowedSlugs }: Props) {
 
   async function handleCancel(t: RepoTask) {
     if (t.status !== "queued") return;
-    if (!confirm("Cancel this queued task?")) return;
+    const ok = await confirmDialog("Cancel this queued task?", {
+      title: "cancel task",
+      confirmText: "cancel task",
+    });
+    if (!ok) return;
     const result = await cancelRepoTaskAction(t.id);
-    if (!result.ok) alert(result.error);
+    if (!result.ok) await alertDialog(result.error, { title: "cancel failed" });
   }
 
   async function handleRetry(t: RepoTask) {
     const result = await retryRepoTaskAction(t.id);
-    if (!result.ok) alert(result.error);
+    if (!result.ok) await alertDialog(result.error, { title: "retry failed" });
   }
 
   async function handleCleanup(t: RepoTask) {
-    if (!confirm(`Discard branch "${t.branch}" and clear any leftover changes on the Mac?`)) return;
+    const ok = await confirmDialog(
+      `Discard branch "${t.branch}" and clear any leftover changes on the Mac?`,
+      { title: "discard branch", confirmText: "discard" },
+    );
+    if (!ok) return;
     const result = await requestCleanupAction(t.id);
-    if (!result.ok) alert(result.error);
+    if (!result.ok) await alertDialog(result.error, { title: "cleanup failed" });
   }
 
   const activeCount = tasks.filter((t) => !TERMINAL_STATUSES.includes(t.status)).length;

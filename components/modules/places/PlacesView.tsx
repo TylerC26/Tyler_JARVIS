@@ -6,6 +6,7 @@ import {
   updatePlaceAction,
 } from "@/app/(app)/places/actions";
 import { Button } from "@/components/ui/Button";
+import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -132,7 +133,7 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
   ): Promise<boolean> {
     const result = await updatePlaceAction(place.id, patch);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "save failed" });
       return false;
     }
     setPlaces((prev) =>
@@ -142,10 +143,14 @@ export function PlacesView({ initialPlaces, initialCities }: Props) {
   }
 
   async function handleDelete(place: Place) {
-    if (!confirm(`Delete "${place.name}" from your places?`)) return;
+    const ok = await confirmDialog(
+      `Delete "${place.name}" from your places?`,
+      { title: "delete place", confirmText: "delete" },
+    );
+    if (!ok) return;
     const result = await deletePlaceAction(place.id);
     if (!result.ok) {
-      alert(result.error);
+      await alertDialog(result.error, { title: "delete failed" });
       return;
     }
     setPlaces((prev) => prev.filter((p) => p.id !== place.id));

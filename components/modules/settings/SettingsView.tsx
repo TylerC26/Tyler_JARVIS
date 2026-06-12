@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { savePromptSettingsAction } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -103,7 +104,11 @@ export function SettingsView({ initialSettings, defaults }: Props) {
   async function reset(key: FieldKey) {
     setError(null);
     setStatus(null);
-    if (!confirm("Clear this override and fall back to the default?")) return;
+    const ok = await confirmDialog(
+      "Clear this override and fall back to the default?",
+      { title: "reset override", confirmText: "reset" },
+    );
+    if (!ok) return;
     setPendingField(key);
     const result = await savePromptSettingsAction({ [key]: null });
     setPendingField(null);

@@ -7,6 +7,7 @@ import {
   toggleCronJobAction,
 } from "@/app/(app)/cron/actions";
 import { Button } from "@/components/ui/Button";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CronJob } from "@/lib/db/types";
@@ -105,7 +106,11 @@ export function CronView({ initialJobs }: Props) {
   }
 
   async function handleDelete(job: CronJob) {
-    if (!confirm(`Delete "${job.name}"?`)) return;
+    const ok = await confirmDialog(`Delete "${job.name}"?`, {
+      title: "delete cron job",
+      confirmText: "delete",
+    });
+    if (!ok) return;
     const result = await deleteCronJobAction(job.id);
     if (result.ok) setJobs((prev) => prev.filter((j) => j.id !== job.id));
   }
