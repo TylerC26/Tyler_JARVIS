@@ -18,6 +18,7 @@ import {
   signProgressPhotoUrl,
   uploadProgressPhoto,
 } from "@/lib/storage/progress-photos";
+import { redactPhotoUrlsIfEnabled } from "@/lib/storage/photo-redaction";
 import {
   insertProgressPhoto,
   listProgressPhotos,
@@ -109,11 +110,13 @@ export const logBodyPhotoTool = tool({
           ? `Photo saved (private). ${formatPhysiqueSummary(analysis.data)}`
           : `Photo saved (private), but the analysis failed (${analysis.error}). Run analyze_progress_photo to retry.`;
 
-    return {
+    // PHOTO_REDACTION: tool results are persisted to chat_messages and
+    // rendered client-side — strip any signed URL before it leaves.
+    return redactPhotoUrlsIfEnabled({
       ok: true,
       photo_id: saved.data.id,
       compared_to_prior: Boolean(priorPhotoUrl),
       message,
-    };
+    });
   },
 });

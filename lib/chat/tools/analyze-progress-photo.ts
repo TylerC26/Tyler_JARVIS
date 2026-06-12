@@ -11,6 +11,7 @@ import { z } from "zod";
 import { analyzePhysiquePhoto } from "@/lib/ai/physique/analyze";
 import { formatPhysiqueSummary } from "@/lib/ai/physique/summary";
 import { signProgressPhotoUrl } from "@/lib/storage/progress-photos";
+import { redactPhotoUrlsIfEnabled } from "@/lib/storage/photo-redaction";
 import {
   attachAnalysis,
   getPhotoWithPriorForCompare,
@@ -75,12 +76,14 @@ export const analyzeProgressPhotoTool = tool({
       };
     }
 
-    return {
+    // PHOTO_REDACTION: tool results are persisted to chat_messages and
+    // rendered client-side — strip any signed URL before it leaves.
+    return redactPhotoUrlsIfEnabled({
       ok: true,
       photo_id: pair.photo.id,
       taken_at: pair.photo.taken_at,
       compared_to_prior: Boolean(pair.prior),
       message: formatPhysiqueSummary(analysis.data),
-    };
+    });
   },
 });

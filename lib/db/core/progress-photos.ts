@@ -6,6 +6,7 @@
 
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { stripSignedPhotoUrls } from "@/lib/storage/photo-redaction";
 import type { ProgressPhoto } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
 
@@ -32,7 +33,9 @@ export async function insertProgressPhoto(
       storage_path: input.storage_path,
       taken_at: input.taken_at ?? new Date().toISOString(),
       body_metric_id: input.body_metric_id ?? null,
-      analysis: input.analysis ?? null,
+      // Always sanitized: a signed URL must never be persisted, even if the
+      // vision model echoed one into an analysis string.
+      analysis: input.analysis ? stripSignedPhotoUrls(input.analysis) : null,
     })
     .select()
     .single();
@@ -52,7 +55,8 @@ export async function attachAnalysis(
 
   const { data, error } = await supabase
     .from("progress_photos")
-    .update({ analysis: json })
+    // Always sanitized — see insertProgressPhoto.
+    .update({ analysis: stripSignedPhotoUrls(json) })
     .eq("user_id", getOwnerId())
     .eq("id", id)
     .select()
