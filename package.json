@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
     "telegram:setup": "tsx scripts/setup-telegram-webhook.ts",
     "telegram:agent-bot": "tsx scripts/setup-telegram-agent-bot.ts",
     "agent:start": "tsx scripts/mac-agent/index.ts",
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.6"
   }
 }

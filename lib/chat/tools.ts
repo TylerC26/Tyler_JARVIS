@@ -32,6 +32,9 @@ import {
   setGroceryItemCheckedCore,
 } from "@/lib/db/core/grocery";
 import { createMealCore, listMealsCore } from "@/lib/db/core/meals";
+import { logBodyWeightTool } from "@/lib/chat/tools/log-body-weight";
+import { logBodyPhotoTool } from "@/lib/chat/tools/log-body-photo";
+import { analyzeProgressPhotoTool } from "@/lib/chat/tools/analyze-progress-photo";
 import { getMealPhotoContext, getTelegramContext } from "@/lib/chat/request-context";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
@@ -2446,6 +2449,9 @@ export const ALL_TOOLS = {
   delete_grocery_item: deleteGroceryItemTool,
   log_meal: logMealTool,
   read_meals: readMealsTool,
+  log_body_weight: logBodyWeightTool,
+  log_body_photo: logBodyPhotoTool,
+  analyze_progress_photo: analyzeProgressPhotoTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;
