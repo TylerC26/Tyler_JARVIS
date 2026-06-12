@@ -5,50 +5,10 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTask, setTaskStatus, updateTask } from "@/lib/db/actions/tasks";
+import { createTask, setTaskStatus } from "@/lib/db/actions/tasks";
 import type { Task } from "@/lib/db/types";
 import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
-
-// Board columns. IMPORTANT is a focus lane: it shows ONLY starred, still-open
-// tasks — those same tasks also stay in OPEN, which lists every open item.
-// `match` decides membership; `patch`/`commit` are the optimistic + server
-// effect of dropping a card onto the column.
-type BoardColumn = {
-  key: string;
-  label: string;
-  code: string;
-  match: (t: Task) => boolean;
-  patch: Partial<Task>;
-  commit: (id: string) => Promise<{ ok: boolean; error?: string }>;
-};
-
-const COLUMNS: BoardColumn[] = [
-  {
-    key: "important",
-    label: "Important",
-    code: "IMPORTANT",
-    match: (t) => t.important && t.status !== "done",
-    patch: { important: true, status: "todo", completed_at: null },
-    commit: (id) => updateTask(id, { important: true, status: "todo" }),
-  },
-  {
-    key: "open",
-    label: "Open",
-    code: "OPEN",
-    match: (t) => t.status === "todo",
-    patch: { status: "todo", completed_at: null },
-    commit: (id) => setTaskStatus(id, "todo"),
-  },
-  {
-    key: "done",
-    label: "Done",
-    code: "DONE",
-    match: (t) => t.status === "done",
-    patch: { status: "done" },
-    commit: (id) => setTaskStatus(id, "done"),
-  },
-];
 
 export type ProjectsById = Record<string, { name: string; slug: string }>;
 
@@ -71,23 +31,25 @@ export function TasksView({
   useEffect(() => setTasks(initialTasks), [initialTasks]);
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [hoverZone, setHoverZone] = useState<"open" | "done" | null>(null);
+  const [showDone, setShowDone] = useState(false);
 
-  async function onDropTo(col: BoardColumn) {
+  async function onDropTo(target: "todo" | "done") {
     const id = draggingId;
     setDraggingId(null);
-    setHoverKey(null);
+    setHoverZone(null);
     if (!id) return;
     const current = tasks.find((t) => t.id === id);
-    // No-op if the card already belongs to the target column.
-    if (!current || col.match(current)) return;
+    if (!current || current.status === target) return;
 
-    // Optimistic — apply the column's patch in-place; revert on server error.
+    // Optimistic — flip status in-place; revert on server error.
     const before = tasks;
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...col.patch } : t)),
-    );
-    const result = await col.commit(id);
+    const patch: Partial<Task> =
+      target === "todo"
+        ? { status: "todo", completed_at: null }
+        : { status: "done" };
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    const result = await setTaskStatus(id, target);
     if (!result.ok) {
       setTasks(before);
       alert(`Could not move task: ${result.error}`);
@@ -107,16 +69,20 @@ export function TasksView({
     setOpen(false);
   }
 
-  const grouped = COLUMNS.map((g) => ({
-    ...g,
-    items: tasks.filter((t) => g.match(t)),
-  }));
+  // Starred tasks pin to the top of OPEN; sort is stable, so the server
+  // order (priority → due → created) is preserved within each group.
+  const openTasks = tasks
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => Number(b.important) - Number(a.important));
+  const doneTasks = tasks.filter((t) => t.status === "done");
 
   const dragged = draggingId
     ? tasks.find((t) => t.id === draggingId) ?? null
     : null;
+  const draggingOpen = dragged != null && dragged.status !== "done";
+  const draggingDone = dragged != null && dragged.status === "done";
 
-  const openCount = tasks.filter((t) => t.status !== "done").length;
+  const openCount = openTasks.length;
 
   return (
     <>
@@ -150,87 +116,147 @@ export function TasksView({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          {grouped.map((g) => {
-            const isHover = hoverKey === g.key;
-            const isSource = dragged ? g.match(dragged) : false;
-            return (
-              <section
-                key={g.key}
-                onDragOver={(e) => {
-                  if (!draggingId) return;
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  if (hoverKey !== g.key) setHoverKey(g.key);
-                }}
-                onDragLeave={(e) => {
-                  // Only clear when leaving the section entirely, not a child.
-                  if (e.currentTarget.contains(e.relatedTarget as Node | null))
-                    return;
-                  if (hoverKey === g.key) setHoverKey(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  void onDropTo(g);
-                }}
-                className={[
-                  "rounded-md border bg-surface/40 transition-colors",
-                  isHover && !isSource
-                    ? "border-accent bg-accent/5"
-                    : "border-edge",
-                ].join(" ")}
-              >
-                <header className="flex items-center justify-between border-b border-edge px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    {g.key === "important" && (
-                      <span className="text-warn text-[12px]" aria-hidden>
-                        ★
-                      </span>
-                    )}
-                    <span
-                      className={[
-                        "font-mono text-[10px] uppercase tracking-[0.2em]",
-                        g.key === "important" ? "text-warn" : "text-fg-dim",
-                      ].join(" ")}
-                    >
-                      {g.code}
-                    </span>
-                    <span className="font-mono text-[12px] text-fg">
-                      {g.label}
-                    </span>
-                  </div>
-                  <span className="font-mono text-[10px] tabular text-fg-muted">
-                    {g.items.length}
+        <div className="flex flex-col gap-4">
+          {/* OPEN — single full-width list, starred pinned on top. Also the
+              drop target for re-opening a done task dragged out of DONE. */}
+          <section
+            onDragOver={(e) => {
+              if (!draggingDone) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (hoverZone !== "open") setHoverZone("open");
+            }}
+            onDragLeave={(e) => {
+              // Only clear when leaving the section entirely, not a child.
+              if (e.currentTarget.contains(e.relatedTarget as Node | null))
+                return;
+              if (hoverZone === "open") setHoverZone(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              void onDropTo("todo");
+            }}
+            className={[
+              "rounded-md border bg-surface/40 transition-colors",
+              hoverZone === "open" && draggingDone
+                ? "border-accent bg-accent/5"
+                : "border-edge",
+            ].join(" ")}
+          >
+            <header className="flex items-center justify-between border-b border-edge px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+                  OPEN
+                </span>
+                <span className="font-mono text-[12px] text-fg">Open</span>
+              </div>
+              <span className="font-mono text-[10px] tabular text-fg-muted">
+                {openTasks.length}
+              </span>
+            </header>
+            <div className="p-2 flex flex-col gap-1.5 min-h-[60px]">
+              {openTasks.length === 0 ? (
+                <span className="px-2 py-3 font-mono text-[11px] text-fg-dim">
+                  {hoverZone === "open" && draggingDone
+                    ? "// drop to reopen"
+                    : "// all clear"}
+                </span>
+              ) : (
+                openTasks.map((t) => (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    project={
+                      t.project_id ? projectsById[t.project_id] ?? null : null
+                    }
+                    isDragging={draggingId === t.id}
+                    onDragStart={() => setDraggingId(t.id)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setHoverZone(null);
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* DONE — collapsed to a slim bar; expands on click. The bar is the
+              drop target for completing a task, and lights up mid-drag. */}
+          <section
+            onDragOver={(e) => {
+              if (!draggingOpen) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (hoverZone !== "done") setHoverZone("done");
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node | null))
+                return;
+              if (hoverZone === "done") setHoverZone(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              void onDropTo("done");
+            }}
+            className={[
+              "rounded-md border transition-colors",
+              hoverZone === "done" && draggingOpen
+                ? "border-success bg-success/10"
+                : "border-edge bg-surface/40",
+            ].join(" ")}
+          >
+            <button
+              type="button"
+              onClick={() => setShowDone((v) => !v)}
+              aria-expanded={showDone}
+              className="flex w-full items-center justify-between px-3 py-2 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-fg-dim" aria-hidden>
+                  {showDone ? "▾" : "▸"}
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+                  DONE
+                </span>
+                {hoverZone === "done" && draggingOpen && (
+                  <span className="font-mono text-[11px] text-success">
+                    // drop to mark done
                   </span>
-                </header>
-                <div className="p-2 flex flex-col gap-1.5 min-h-[60px]">
-                  {g.items.length === 0 ? (
-                    <span className="px-2 py-3 font-mono text-[11px] text-fg-dim">
-                      {isHover && !isSource ? "// drop here" : "// empty"}
-                    </span>
-                  ) : (
-                    g.items.map((t) => (
-                      <TaskRow
-                        key={t.id}
-                        task={t}
-                        project={
-                          t.project_id
-                            ? projectsById[t.project_id] ?? null
-                            : null
-                        }
-                        isDragging={draggingId === t.id}
-                        onDragStart={() => setDraggingId(t.id)}
-                        onDragEnd={() => {
-                          setDraggingId(null);
-                          setHoverKey(null);
-                        }}
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-            );
-          })}
+                )}
+              </div>
+              <span className="font-mono text-[10px] tabular text-fg-muted">
+                {doneTasks.length}
+              </span>
+            </button>
+            {showDone && (
+              <div className="border-t border-edge p-2 flex flex-col gap-1.5">
+                {doneTasks.length === 0 ? (
+                  <span className="px-2 py-3 font-mono text-[11px] text-fg-dim">
+                    // nothing done yet
+                  </span>
+                ) : (
+                  doneTasks.map((t) => (
+                    <TaskRow
+                      key={t.id}
+                      task={t}
+                      project={
+                        t.project_id
+                          ? projectsById[t.project_id] ?? null
+                          : null
+                      }
+                      isDragging={draggingId === t.id}
+                      onDragStart={() => setDraggingId(t.id)}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setHoverZone(null);
+                      }}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </section>
         </div>
       )}
 

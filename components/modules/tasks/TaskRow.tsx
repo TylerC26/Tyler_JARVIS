@@ -8,7 +8,6 @@ import {
   deleteTask,
   setTaskImportant,
 } from "@/lib/db/actions/tasks";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fmtRelativeDay } from "@/lib/date";
 import type { Task } from "@/lib/db/types";
 import { TaskDetailModal } from "./TaskDetailModal";
@@ -93,7 +92,7 @@ export function TaskRow({
         >
           <span
             className={[
-              "font-mono text-sm truncate",
+              "font-mono text-sm line-clamp-2",
               task.status === "done" ? "line-through text-fg-muted" : "text-fg",
             ].join(" ")}
           >
@@ -106,6 +105,20 @@ export function TaskRow({
           )}
           <span className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
             <span>P{task.priority}</span>
+            {task.due_at && (
+              <>
+                <span className="text-edge-strong">·</span>
+                <span
+                  className={[
+                    "rounded-sm border px-1.5 py-0.5 tabular-nums",
+                    dueClass(task.due_at, task.status === "done"),
+                  ].join(" ")}
+                  title={new Date(task.due_at).toLocaleString()}
+                >
+                  {fmtRelativeDay(task.due_at)}
+                </span>
+              </>
+            )}
             {project && (
               <>
                 <span className="text-edge-strong">·</span>
@@ -143,18 +156,6 @@ export function TaskRow({
           >
             {task.important ? "★" : "☆"}
           </button>
-          {task.due_at && (
-            <span
-              className={[
-                "rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tabular-nums tracking-wider",
-                dueClass(task.due_at, task.status === "done"),
-              ].join(" ")}
-              title={new Date(task.due_at).toLocaleString()}
-            >
-              {fmtRelativeDay(task.due_at)}
-            </span>
-          )}
-          <StatusBadge status={task.status} />
           <button
             type="button"
             aria-label="Delete task"
