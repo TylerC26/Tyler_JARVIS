@@ -5,6 +5,7 @@
 // need to re-show a photo later mint a fresh URL; never persist signedUrl.
 
 import { randomUUID } from "node:crypto";
+import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { CoreResult } from "@/lib/db/core/tasks";
 
@@ -42,11 +43,16 @@ function extFor(mediaType: string): string {
 
 // Fresh short-lived URL for an already-stored photo (signedUrls are never
 // persisted — see header). Null when unconfigured or the object is missing.
+// Owner-gated: paths are laid out as <userId>/<file> (see uploadProgressPhoto),
+// and only paths under the ACTIVE owner's folder are ever signed — a stray or
+// attacker-supplied path belonging to another user is refused before storage
+// is even asked (mirrors the DB-side RLS in migration 0053).
 export async function signProgressPhotoUrl(
   path: string,
 ): Promise<string | null> {
+  if (!path || !path.startsWith(`${getOwnerId()}/`)) return null;
   const supabase = await getSupabaseServer();
-  if (!supabase || !path) return null;
+  if (!supabase) return null;
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
