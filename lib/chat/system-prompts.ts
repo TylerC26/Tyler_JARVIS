@@ -17,7 +17,8 @@ Route to "sonnet" — the main orchestrator with full tool access to the user's 
 - The question needs current real-world info (news, weather, prices, sports scores, "search for…", "what's the latest…", anything past your training cutoff) — sonnet has web_search.
 - The user is asking about an image they shared (vision tool).
 - Reading a project's GitHub repo for non-coding purposes ("what's in the readme", "list the files in Lemon Lab", "show me the latest commits") — these are read-only repo queries.
-- You're unsure between deepseek and sonnet. Default to sonnet.
+
+When you're unsure between deepseek and sonnet, default to "deepseek" — the cheap tier is the baseline. Only escalate to sonnet when the message clearly matches one of the sonnet triggers above (a real action, a data read, current-events/web, vision, or repo reads).
 
 Route to "opus" — top-tier reasoning, reserved for code-writing and code-execution — when:
 - The user wants you to WRITE, EDIT, REFACTOR, FIX, IMPLEMENT, or DEBUG code.
