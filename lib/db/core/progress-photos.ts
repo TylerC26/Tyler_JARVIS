@@ -7,6 +7,7 @@
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { stripSignedPhotoUrls } from "@/lib/storage/photo-redaction";
+import { deleteProgressPhotoObject } from "@/lib/storage/progress-photos";
 import type { ProgressPhoto } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
 
@@ -78,6 +79,31 @@ export async function getProgressPhoto(
     .eq("id", id)
     .maybeSingle();
   return (data as ProgressPhoto | null) ?? null;
+}
+
+// Delete a progress photo: drop the bytes from the private bucket, then the
+// row. Storage removal is best-effort — if the object is already gone we still
+// delete the row so the (invalid) timeline entry clears. Owner-scoped on the
+// row delete; the storage helper is owner-gated on its own.
+export async function deleteProgressPhotoCore(
+  id: string,
+): Promise<CoreResult<{ id: string }>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Photo id is required." };
+
+  const photo = await getProgressPhoto(id);
+  if (!photo) return { ok: false, error: "Photo not found." };
+
+  await deleteProgressPhotoObject(photo.storage_path);
+
+  const { error } = await supabase
+    .from("progress_photos")
+    .delete()
+    .eq("user_id", getOwnerId())
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { id } };
 }
 
 // Newest-first (gallery order), optionally windowed to taken_at >= since.

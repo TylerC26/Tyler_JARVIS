@@ -68,6 +68,22 @@ export async function listBodyMetrics(opts?: {
   return (data as BodyMetric[] | null) ?? [];
 }
 
+// Delete a single weigh-in (clearing a bad reading). Owner-scoped.
+export async function deleteBodyMetricCore(
+  id: string,
+): Promise<CoreResult<{ id: string }>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!id) return { ok: false, error: "Metric id is required." };
+  const { error } = await supabase
+    .from("body_metrics")
+    .delete()
+    .eq("user_id", getOwnerId())
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { id } };
+}
+
 export async function latestBodyMetric(): Promise<BodyMetric | null> {
   const supabase = await getSupabaseServer();
   if (!supabase) return null;

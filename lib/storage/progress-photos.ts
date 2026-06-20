@@ -60,6 +60,27 @@ export async function signProgressPhotoUrl(
   return data.signedUrl;
 }
 
+// Remove a stored object from the private bucket. Owner-gated identically to
+// signProgressPhotoUrl — a path outside the active owner's folder is refused
+// before storage is touched. Best-effort by nature: removing an
+// already-missing object is not treated as a hard failure by callers (the row
+// delete is what clears the timeline entry).
+export async function deleteProgressPhotoObject(
+  path: string,
+): Promise<CoreResult<{ path: string }>> {
+  if (!path || !path.startsWith(`${getOwnerId()}/`)) {
+    return {
+      ok: false,
+      error: "Refusing to delete a path outside the owner's folder.",
+    };
+  }
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  const { error } = await supabase.storage.from(BUCKET).remove([path]);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { path } };
+}
+
 export async function uploadProgressPhoto(
   file: File,
   opts: { userId: string },

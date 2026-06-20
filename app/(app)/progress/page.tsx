@@ -9,9 +9,17 @@
 // the app's real auth does (see app/(auth)/login).
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { DeletePhotoButton } from "@/components/modules/progress/DeletePhotoButton";
+import {
+  WeightCard,
+  type WeightEntry,
+} from "@/components/modules/progress/WeightCard";
 import { listBodyMetrics } from "@/lib/db/core/body-metrics";
 import { listProgressPhotos } from "@/lib/db/core/progress-photos";
-import { extractPhotoDelta } from "@/lib/db/core/body-metrics-trends";
+import {
+  calcMovingAvgKg,
+  extractPhotoDelta,
+} from "@/lib/db/core/body-metrics-trends";
 import { signProgressPhotoUrl } from "@/lib/storage/progress-photos";
 import { getOwnerTz } from "@/lib/auth/currentUser";
 
@@ -82,8 +90,55 @@ async function loadCards(): Promise<Card[]> {
   );
 }
 
+type WeightSummary = {
+  latestKg: number | null;
+  latestAt: string | null;
+  avg7: number | null;
+  avg28: number | null;
+  entries: WeightEntry[];
+};
+
+const RECENT_WEIGH_INS = 30;
+
+async function loadWeight(): Promise<WeightSummary> {
+  // Weigh-in volumes are tiny (a dense year is ~365 rows — see body-metrics
+  // header), so one unbounded fetch covers both the trailing averages and the
+  // recent list. listBodyMetrics is oldest-first.
+  const metrics = await listBodyMetrics();
+  if (metrics.length === 0) {
+    return { latestKg: null, latestAt: null, avg7: null, avg28: null, entries: [] };
+  }
+
+  const series = metrics.map((m) => ({
+    recorded_at: m.recorded_at,
+    weight_kg: Number(m.weight_kg),
+  }));
+  const now = new Date();
+  const a7 = calcMovingAvgKg(series, 7, now);
+  const a28 = calcMovingAvgKg(series, 28, now);
+  const latest = metrics[metrics.length - 1];
+
+  const entries: WeightEntry[] = [...metrics]
+    .reverse()
+    .slice(0, RECENT_WEIGH_INS)
+    .map((m) => ({
+      id: m.id,
+      weight_kg: Number(m.weight_kg),
+      bf_percent: m.bf_percent != null ? Number(m.bf_percent) : null,
+      recorded_at: m.recorded_at,
+    }));
+
+  return {
+    latestKg: Number(latest.weight_kg),
+    latestAt: latest.recorded_at,
+    avg7: a7?.avg_kg ?? null,
+    avg28: a28?.avg_kg ?? null,
+    entries,
+  };
+}
+
 export default async function ProgressPage() {
-  const cards = await loadCards();
+  const [cards, weight] = await Promise.all([loadCards(), loadWeight()]);
   const tz = getOwnerTz();
 
   return (
@@ -92,6 +147,15 @@ export default async function ProgressPage() {
         code="PRG-09"
         title="Progress"
         subtitle="Photo timeline — every read is a trend vs the prior photo, not a verdict."
+      />
+
+      <WeightCard
+        latestKg={weight.latestKg}
+        latestAt={weight.latestAt}
+        avg7={weight.avg7}
+        avg28={weight.avg28}
+        entries={weight.entries}
+        tz={tz}
       />
 
       {cards.length === 0 ? (
@@ -123,13 +187,16 @@ export default async function ProgressPage() {
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-3 border-b border-edge/40 pb-1">
+                  <div className="flex items-center justify-between gap-3 border-b border-edge/40 pb-1">
                     <span className="font-mono text-xs font-semibold text-fg">
                       {prettyDate(c.takenAt, tz)}
                     </span>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-                      {c.weightKg != null ? `${c.weightKg} kg that day` : "no weigh-in that day"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+                        {c.weightKg != null ? `${c.weightKg} kg that day` : "no weigh-in that day"}
+                      </span>
+                      <DeletePhotoButton id={c.id} label={prettyDate(c.takenAt, tz)} />
+                    </div>
                   </div>
 
                   <div className="mt-2 space-y-1 font-mono text-xs leading-relaxed">
