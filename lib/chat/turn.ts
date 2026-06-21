@@ -209,7 +209,10 @@ async function runChatTurnInner(
   await appendMessage({ role: "user", content: latestUserText });
 
   const route = await decideRoute(modelMessages, { forceRoute });
-  if ((route === "sonnet" || route === "opus") && !isAnthropicConfigured()) {
+  if (
+    (route === "sonnet" || route === "opus" || route === "haiku") &&
+    !isAnthropicConfigured()
+  ) {
     throw new Error("ANTHROPIC_API_KEY not configured.");
   }
   if (route === "deepseek" && !isDeepseekConfigured()) {
@@ -223,7 +226,11 @@ async function runChatTurnInner(
       ? await streamDeepseekResponse(modelMessages)
       : await streamClaudeResponse(
           modelMessages,
-          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          route === "opus"
+            ? "claude-opus-4-7"
+            : route === "haiku"
+              ? "claude-haiku-4-5"
+              : "claude-sonnet-4-6",
         );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so

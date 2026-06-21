@@ -46,19 +46,25 @@ export function recordModelUsage(
 }
 
 const RouteSchema = z.object({
-  route: z.enum(["deepseek", "sonnet", "opus"]),
+  route: z.enum(["haiku", "sonnet", "opus"]),
 });
 
 // Resolved routing decision:
-// - deepseek → lightweight chitchat, no tools
-// - sonnet   → orchestrator with full tool access — handles DB CRUD, queries,
-//              skills, web search, vision, etc. Default for any action turn.
+// - haiku    → lightweight orchestrator with full tool access — the everyday
+//              default for chitchat plus simple single-step actions and reads.
+// - sonnet   → heavier orchestrator — multi-step/ambiguous work, web search,
+//              vision, repo reads, long-form. Same tools as haiku, more reasoning.
 // - opus     → reserved for coding-execution turns — writing/editing/refactoring
 //              code, repo questions, dispatching remote code tasks.
-export type ChatRoute = "deepseek" | "sonnet" | "opus";
+// - deepseek → only reached when Claude is disabled (kill switch / missing key);
+//              the non-Claude fallback so the assistant still answers at all.
+export type ChatRoute = "deepseek" | "haiku" | "sonnet" | "opus";
 
 // Anthropic model ids the Claude routes can run on.
-export type ClaudeModelId = "claude-opus-4-7" | "claude-sonnet-4-6";
+export type ClaudeModelId =
+  | "claude-opus-4-7"
+  | "claude-sonnet-4-6"
+  | "claude-haiku-4-5";
 
 // Identifier persisted to chat_messages.model for a resolved route.
 export type ChatModelId = ClaudeModelId | "deepseek-chat";
@@ -66,10 +72,11 @@ export type ChatModelId = ClaudeModelId | "deepseek-chat";
 export function modelIdForRoute(route: ChatRoute): ChatModelId {
   if (route === "deepseek") return "deepseek-chat";
   if (route === "opus") return "claude-opus-4-7";
+  if (route === "haiku") return "claude-haiku-4-5";
   return "claude-sonnet-4-6";
 }
 
-export type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
+export type ForceRoute = "auto" | "deepseek" | "haiku" | "sonnet" | "opus";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
@@ -102,13 +109,14 @@ export async function decideRoute(
 
   if (opts.forceRoute === "opus") return "opus";
   if (opts.forceRoute === "sonnet") return "sonnet";
+  if (opts.forceRoute === "haiku") return "haiku";
   if (opts.forceRoute === "deepseek") return "deepseek";
 
   // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
   if (!isDeepseekConfigured()) return "sonnet";
 
   const classifierSystem = opts.pageLabel
-    ? `${CLASSIFIER_SYSTEM_PROMPT}\n\nNote: the user is currently viewing ${opts.pageLabel} in the app. Short or ambiguous messages ("what's the status?", "summarize this") likely ask about the data on that page and need tools to answer — route those to sonnet, not deepseek.`
+    ? `${CLASSIFIER_SYSTEM_PROMPT}\n\nNote: the user is currently viewing ${opts.pageLabel} in the app. Short or ambiguous messages ("what's the status?", "summarize this") likely ask about the data on that page and may need a careful multi-step read — lean toward sonnet over haiku for those.`
     : CLASSIFIER_SYSTEM_PROMPT;
 
   try {

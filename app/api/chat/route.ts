@@ -273,7 +273,10 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  if ((route === "sonnet" || route === "opus") && !isAnthropicConfigured()) {
+  if (
+    (route === "sonnet" || route === "opus" || route === "haiku") &&
+    !isAnthropicConfigured()
+  ) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY not configured." },
       { status: 503 },
@@ -287,7 +290,11 @@ export async function POST(req: Request) {
         })
       : await streamClaudeResponse(
           modelMessages,
-          route === "opus" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          route === "opus"
+            ? "claude-opus-4-7"
+            : route === "haiku"
+              ? "claude-haiku-4-5"
+              : "claude-sonnet-4-6",
           { pageContext: pageContext?.block ?? null },
         );
 

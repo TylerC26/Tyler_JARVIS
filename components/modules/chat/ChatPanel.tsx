@@ -30,7 +30,7 @@ type Props = {
   pagePath?: string | null;
 };
 
-type ForceRoute = "auto" | "deepseek" | "sonnet" | "opus";
+type ForceRoute = "auto" | "deepseek" | "haiku" | "sonnet" | "opus";
 
 export function ChatPanel({
   initialMessages,
@@ -97,9 +97,11 @@ export function ChatPanel({
         ? "claude-opus-4-7"
         : forceRoute === "sonnet"
           ? "claude-sonnet-4-6"
-          : forceRoute === "deepseek"
-            ? "deepseek-chat"
-            : "routing…"
+          : forceRoute === "haiku"
+            ? "claude-haiku-4-5"
+            : forceRoute === "deepseek"
+              ? "deepseek-chat"
+              : "routing…"
     : null;
 
   useEffect(() => {
@@ -235,14 +237,17 @@ export function ChatPanel({
               title="Routing override"
             >
               <option value="auto">AUTO</option>
-              <option value="deepseek" disabled={!configured.deepseek}>
-                DEEPSEEK
+              <option value="haiku" disabled={!configured.anthropic}>
+                HAIKU
               </option>
               <option value="sonnet" disabled={!configured.anthropic}>
                 SONNET
               </option>
               <option value="opus" disabled={!configured.anthropic}>
                 OPUS
+              </option>
+              <option value="deepseek" disabled={!configured.deepseek}>
+                DEEPSEEK
               </option>
             </select>
           )}

@@ -2,22 +2,23 @@
 
 export const CLASSIFIER_SYSTEM_PROMPT = `You are the routing layer for a personal command-center app called Jarvis.
 
-Your single job: pick the model tier that best fits the user's latest message — cheapest tier that can handle it well. Three tiers.
+Your single job: pick the model tier that best fits the user's latest message — cheapest tier that can handle it well. Three tiers, all with full tool access to the user's database and the web.
 
-Route to "deepseek" — lightweight, no tools, response-only — when:
+Route to "haiku" — the fast, cheap, everyday default — when:
 - Chitchat, greetings, single-word reactions ("lol", "thanks", "ok"), generic banter.
-- Timeless generic knowledge or opinion questions ("what's a good morning routine?", "explain X concept") — nothing time-sensitive, nothing requiring tool use.
-- The user is continuing a non-data conversation that needs only natural language.
-- The user is asking you to explain, summarize, or rephrase a piece of text they pasted (no DB action, no code-writing).
+- A straightforward single action: add/log/create/update/complete/dismiss/remove ONE task, calendar event, project, idea, reminder, memory, cron job, etc.
+- A simple, direct data read ("what tasks are due today", "what's on my calendar Friday", "how many tasks are open").
+- Explaining, summarizing, or rephrasing a piece of text the user pasted; timeless generic knowledge or opinion ("what's a good morning routine?").
+This is the baseline — most messages belong here.
 
-Route to "sonnet" — the main orchestrator with full tool access to the user's database and the web — when:
-- The user wants to add, log, create, update, complete, dismiss, or remove anything (tasks, calendar events, projects, skills, memory, ideas, cron jobs).
-- The user is asking a question that requires reading their actual data ("what tasks are due today", "what's on my calendar Friday", "how's Lemon Lab going").
-- The user wants a brief, summary, or analysis of their state.
-- The question needs current real-world info (news, weather, prices, sports scores, "search for…", "what's the latest…", anything past your training cutoff) — sonnet has web_search.
+Route to "sonnet" — the heavier orchestrator, for work that needs more reasoning or reach — when:
+- The request is multi-step, ambiguous, or spans several tools ("reschedule everything after 3pm and tell Michelle", "clean up my overdue list and re-prioritize").
+- It needs current real-world info: news, weather, prices, sports scores, "search for…", "what's the latest…", anything past your training cutoff — sonnet has web_search.
 - The user is asking about an image they shared (vision tool).
-- Reading a project's GitHub repo for non-coding purposes ("what's in the readme", "list the files in Lemon Lab", "show me the latest commits") — these are read-only repo queries.
-- You're unsure between deepseek and sonnet. Default to sonnet.
+- Reading a project's GitHub repo for non-coding purposes ("what's in the readme", "list the files in Lemon Lab", "show me the latest commits") — read-only repo queries.
+- A substantial brief, analysis, or long-form composition (a long email/message/post, marketing copy, an essay, an in-depth summary of their state).
+
+When you're unsure between haiku and sonnet, prefer "haiku" — it has the same tools. Escalate to "sonnet" only on a clear signal above (multi-step/ambiguous, web, vision, repo, or long-form).
 
 Route to "opus" — top-tier reasoning, reserved for code-writing and code-execution — when:
 - The user wants you to WRITE, EDIT, REFACTOR, FIX, IMPLEMENT, or DEBUG code.
@@ -26,9 +27,7 @@ Route to "opus" — top-tier reasoning, reserved for code-writing and code-execu
 
 Read-only repo questions ("what's in the readme") → sonnet, NOT opus. Opus is only for code that needs reasoning.
 
-Substantial long-form writing or composition (draft a long email/message/post, marketing copy, an essay, a story, brainstorm at length) → sonnet, unless it is code, in which case → opus.
-
-Output strictly { route: "deepseek" | "sonnet" | "opus" }. No prose.`;
+Output strictly { route: "haiku" | "sonnet" | "opus" }. No prose.`;
 
 // Prepended to the orchestrator prompt when DeepSeek is acting as orchestrator
 // (Claude killed via dashboard toggle). DeepSeek-chat reads tool schemas but
