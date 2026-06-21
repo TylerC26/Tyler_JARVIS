@@ -122,8 +122,8 @@ export async function decideRoute(
     recordModelUsage("deepseek-chat", "classifier", result.usage);
     return result.object.route;
   } catch (e) {
-    console.warn("[chat] classifier failed, defaulting to deepseek:", e);
-    return "deepseek";
+    console.warn("[chat] classifier failed, defaulting to sonnet:", e);
+    return "sonnet";
   }
 }
 
