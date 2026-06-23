@@ -55,28 +55,38 @@ Adding a model later is a one-line registry edit.
 `lib/ai/model-prefs.ts`:
 
 - **`FEATURES`** — canonical list of call-sites. Each:
-  `{ key, label, description, group, defaultTier, visionRequired }`.
-  - Groups: `Routing`, `Skills`, `Memory`, `Briefs & Suggestions`, `Analyzers`.
-  - Keys: `chat`, `classifier`, `memory`, `skill_judge`, `skill_propose`,
-    `brief`, `suggestion`, `meal_analysis`, `physique_analysis`,
-    `place_extraction`, `agent_draft`.
-  - `defaultTier` per key reflects today's behavior:
-    - `chat` → classifier (no fixed tier)
-    - `classifier` → `deepseek`
-    - `memory` → `haiku` (`llmFast`)
-    - `skill_judge`, `skill_propose`, `meal_analysis`, `physique_analysis`,
-      `place_extraction`, `agent_draft` → `sonnet` (`llmAuto`)
-    - `brief`, `suggestion` → `opus` (`llmOpus`)
-  - `visionRequired: true` for `meal_analysis`, `physique_analysis` (these take
-    image input).
+  `{ key, label, description, group, defaultTier, visionRequired }`. Discovered by
+  grepping every `llmAuto()`/`llmFast()`/`llmOpus()` and direct
+  `anthropic("claude-…")` call. Full set (the route classifier itself is excluded
+  — overriding the routing brain is a footgun):
 
-- **`modelForFeature(key): Promise<LanguageModel>`** — resolves pref → concrete
-  AI-SDK model:
+  | key | group | default tier | call-site(s) | vision |
+  |---|---|---|---|---|
+  | `chat` | Routing | classifier (auto) | `decideRoute` via forceRoute | — |
+  | `memory` | Memory | haiku | `lib/ai/memory/reconcile.ts:112` | no |
+  | `skill_judge` | Skills | sonnet | `lib/ai/skills/judge.ts:45` | no |
+  | `skill_propose` | Skills | sonnet | `lib/ai/skills/propose.ts:60` | no |
+  | `skill_generate` | Skills | sonnet | `app/api/skills/generate/route.ts:57` | no |
+  | `brief` | Briefs | opus | `lib/ai/engine/claude.ts:172`, `lib/chat/tools.ts:1590,1661` | no |
+  | `suggestion` | Briefs | opus | `lib/ai/engine/claude.ts:224` | no |
+  | `cron_generate` | Briefs | opus | `app/api/cron/generate/route.ts:91` | no |
+  | `meal_analysis` | Analyzers | sonnet | `lib/ai/meals/analyze.ts:80` | yes |
+  | `physique_analysis` | Analyzers | sonnet | `lib/ai/physique/{analyze:103,compare:65,synthesize:100}.ts` | yes |
+  | `place_extraction` | Extractors | sonnet | `lib/places/extract.ts:113,198` | yes |
+  | `calendar_extract` | Extractors | sonnet | `app/api/calendar/extract/route.ts:92` | yes |
+  | `wife_shifts_extract` | Extractors | sonnet | `app/api/wife-shifts/extract/route.ts:113` | yes |
+  | `meeting_finalize` | Extractors | sonnet | `app/api/meetings/finalize/route.ts:215` | no |
+  | `agent_draft` | Agents | sonnet | `lib/ai/agents/draft.ts:93` | no |
+
+- **`modelForFeature(key): Promise<{ model: LanguageModel; modelId: string }>`** —
+  returns both the AI-SDK model and its id so the usage ledger label stays accurate
+  (it feeds the spend strip). Resolution:
   1. On `auto`/missing → the key's coded default tier.
   2. Honors the Claude kill switch: when `isClaudeEnabled()` is false, any Claude
      pref falls back to DeepSeek (mirrors existing call-site behavior).
   3. **Vision guard:** a `deepseek` pref on a `visionRequired` feature is dropped
-     back to the default tier (`deepseek-chat` isn't vision-capable).
+     back to the default tier (`deepseek-chat` isn't vision-capable). The page also
+     hides DeepSeek in those selectors.
   4. Never throws on the hot path: a DB read error → coded default.
 
 - **`chatForceRoute(): Promise<ForceRoute | undefined>`** — maps the `chat` pref
@@ -102,18 +112,24 @@ default.
 
 ## Wiring (where the resolver plugs in)
 
-- **Chat**: at the turn entrypoint (`lib/chat/turn.ts` / `app/api/chat/route.ts`),
-  compute `effectiveForceRoute = requestForceRoute ?? (await chatForceRoute())` and
-  pass to `decideRoute`. `decideRoute` itself stays pure. Precedence:
-  request dropdown > saved `chat` pref > classifier.
-- **Background tasks**: each `llmAuto()` / `llmFast()` / `llmOpus()` call-site
-  swapped for `await modelForFeature("<key>")`. The provider helpers remain as the
-  default-tier implementations the resolver falls back to.
+- **Chat (web)**: `app/api/chat/route.ts` calls `decideRoute` directly →
+  `forceRoute: forceRoute ?? (await chatForceRoute())`. Request dropdown wins over
+  the saved global pin.
+- **Chat (cron + Telegram)**: both go through `runChatTurn` (`lib/chat/turn.ts`),
+  which gains the same `forceRoute ?? (await chatForceRoute())` fallback. So the
+  global "MAIN JARVIS" pin applies to scheduled and Telegram turns too.
+- **Cron per-job**: `runJob` (`app/api/cron/route.ts`) passes
+  `forceRoute: forceRouteForPref(job.model_pref)` (`auto` → `undefined`). Combined
+  with the fallback above, precedence is **job pin > global pin > classifier**.
+- **`decideRoute` itself stays pure** — all fallback logic lives at the call layer.
+- **Background tasks**: each `llmAuto()` / `llmFast()` / `llmOpus()` / direct
+  `anthropic("claude-…")` call-site swapped for
+  `const { model, modelId } = await modelForFeature("<key>")`; any adjacent
+  `recordModelUsage(MODEL_X, …)` label switched to `modelId`. The provider helpers
+  remain as the default-tier implementations the resolver falls back to.
 - **Agents**: extend `pickModel` in `lib/ai/agents/run.ts` to map
   `opus/sonnet/haiku/deepseek`, keeping legacy `claude` → opus and `auto` → sonnet.
   Broaden the `AgentModelPref` type.
-- **Cron**: `runJob` (`app/api/cron/route.ts`) passes a `forceRoute` derived from
-  the job's `model_pref` into the chat turn.
 
 ## Page (`/llm`)
 
