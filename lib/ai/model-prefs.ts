@@ -27,7 +27,9 @@ export type FeatureKey =
   | "calendar_extract"
   | "wife_shifts_extract"
   | "meeting_finalize"
-  | "agent_draft";
+  | "agent_draft"
+  | "vision_analyze"
+  | "ocr_extract";
 
 export type Tier = "opus" | "sonnet" | "haiku";
 export type ConcreteModelId =
@@ -43,7 +45,8 @@ export type FeatureGroup =
   | "Briefs & Suggestions"
   | "Analyzers"
   | "Extractors"
-  | "Agents";
+  | "Agents"
+  | "Tools";
 
 export type FeatureDef = {
   key: FeatureKey;
@@ -192,6 +195,24 @@ export const FEATURES: FeatureDef[] = [
     group: "Agents",
     defaultTier: "sonnet",
     visionRequired: false,
+    routed: false,
+  },
+  {
+    key: "vision_analyze",
+    label: "Vision analyze",
+    description: "The vision_analyze chat tool — describes an image.",
+    group: "Tools",
+    defaultTier: "sonnet",
+    visionRequired: true,
+    routed: false,
+  },
+  {
+    key: "ocr_extract",
+    label: "OCR extract",
+    description: "The ocr_extract chat tool — transcribes/extracts image text.",
+    group: "Tools",
+    defaultTier: "sonnet",
+    visionRequired: true,
     routed: false,
   },
 ];

@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
-import { llmOpus } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
@@ -168,14 +168,15 @@ async function generateBriefViaClaude(
   systemPrompt: string,
 ): Promise<BriefDraft | null> {
   try {
+    const { model, modelId } = await modelForFeature("brief");
     const result = await generateObject({
-      model: llmOpus(),
+      model,
       schema: BriefSchema,
       system: systemPrompt,
       prompt: ctxToPrompt(ctx),
       maxOutputTokens: 1500,
     });
-    recordModelUsage(BRIEF_MODEL_LABEL, "brief", result.usage);
+    recordModelUsage(modelId, "brief", result.usage);
     return { summary: result.object.summary, bullets: result.object.bullets };
   } catch (e) {
     console.warn("[ai] brief generation failed, falling back to placeholder:", e);
@@ -220,14 +221,15 @@ export const claudeEngine: AIEngine = {
 
   async generateSuggestions(ctx) {
     try {
+      const { model, modelId } = await modelForFeature("suggestion");
       const result = await generateObject({
-        model: llmOpus(),
+        model,
         schema: SuggestionsSchema,
         system: SUGGESTIONS_SYSTEM,
         prompt: ctxToPrompt(ctx),
         maxOutputTokens: 1200,
       });
-      recordModelUsage(BRIEF_MODEL_LABEL, "suggestion", result.usage);
+      recordModelUsage(modelId, "suggestion", result.usage);
       return result.object.suggestions.map<SuggestionDraft>((s) => ({
         kind: s.kind,
         title: s.title,

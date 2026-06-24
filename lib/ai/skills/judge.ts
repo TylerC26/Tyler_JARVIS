@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { recordSkillUsageCore } from "@/lib/db/core/skill-usages";
@@ -41,14 +41,15 @@ User message: ${opts.userText.trim()}
 
 Assistant reply: ${opts.assistantText.trim()}`;
 
+    const { model, modelId } = await modelForFeature("skill_judge");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: JudgeSchema,
       system: SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 400,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
     return result.object;
   } catch (e) {
     console.warn("[skills.judge] failed:", e);

@@ -1,5 +1,5 @@
 import { generateText, tool } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { z } from "zod";
 import { runBrief } from "@/lib/ai/run";
 import { fmtDate } from "@/lib/date";
@@ -1586,8 +1586,9 @@ export const visionAnalyzeTool = tool({
       const image = image_url.startsWith("http")
         ? new URL(image_url)
         : image_url; // data URI or raw base64
+      const { model } = await modelForFeature("vision_analyze");
       const { text } = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
+        model,
         messages: [
           {
             role: "user",
@@ -1657,8 +1658,9 @@ export const ocrExtractTool = tool({
         ? (prompt ?? "Extract every labeled field you can read.")
         : (prompt ??
           "Transcribe all text in this image. Preserve layout where it carries meaning.");
+      const { model } = await modelForFeature("ocr_extract");
       const { text } = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
+        model,
         system,
         messages: [
           {

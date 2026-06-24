@@ -9,7 +9,7 @@
 
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import type { CoreResult } from "@/lib/db/core/tasks";
 
@@ -99,14 +99,15 @@ export async function analyzePhysiquePhoto(input: {
       ];
 
   try {
+    const { model, modelId } = await modelForFeature("physique_analysis");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       maxOutputTokens: 1200,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
 
     // generateObject validates against the schema already; re-parsing makes
     // the guarantee explicit and local (and covers mocked/odd transports).

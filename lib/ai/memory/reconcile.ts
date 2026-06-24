@@ -10,7 +10,7 @@
 
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmFast, MODEL_HAIKU } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import {
@@ -108,14 +108,15 @@ export async function reconcileMemoriesFromTurn(
           .join("\n");
 
   try {
+    const { model, modelId } = await modelForFeature("memory");
     const result = await generateObject({
-      model: llmFast(),
+      model,
       schema: ReconcileSchema,
       system: SYSTEM_PROMPT,
       prompt: `CURRENT MEMORY STORE:\n${memoryList}\n\n---\n\nLATEST TURN:\nUser: ${userMsg.trim()}\n\nAssistant: ${assistantMsg.trim()}`,
       maxOutputTokens: 700,
     });
-    recordModelUsage(MODEL_HAIKU, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
 
     // Only act on ids the model was actually shown — guards against
     // hallucinated update/supersede targets.
