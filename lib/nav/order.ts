@@ -63,6 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "system",
     items: [
       { href: "/settings", label: "Settings", code: "SET", glyph: "◇", status: "live" },
+      { href: "/llm", label: "LLM", code: "LLM", glyph: "◈", status: "live" },
     ],
   },
 ];

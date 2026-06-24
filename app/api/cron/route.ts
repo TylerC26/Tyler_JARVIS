@@ -4,6 +4,7 @@
 
 import { convertToModelMessages, type UIMessage } from "ai";
 import { NextResponse } from "next/server";
+import { forceRouteForPref } from "@/lib/ai/model-prefs";
 import { listMessages } from "@/lib/chat/persist";
 import { runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
@@ -88,6 +89,7 @@ async function runJob(job: CronJob): Promise<void> {
   const { assistantText } = await runChatTurn({
     modelMessages,
     latestUserText: promptForModel,
+    forceRoute: forceRouteForPref(job.model_pref),
   });
 
   if (isSilentResponse(assistantText)) return;

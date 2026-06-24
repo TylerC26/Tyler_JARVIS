@@ -5,8 +5,8 @@
 // it already has the photo in context.
 
 import { generateObject } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 
 const ItemSchema = z.object({
   name: z.string().describe("Short descriptive name, e.g. 'grilled chicken breast'."),
@@ -76,8 +76,9 @@ export async function analyzeMealImage(opts: {
     const captionLine = opts.userCaption?.trim()
       ? `\n\nUser's caption (use as a hint when ambiguous, but trust the photo first): "${opts.userCaption.trim()}"`
       : "";
+    const { model } = await modelForFeature("meal_analysis");
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       schema: ResultSchema,
       messages: [
         {

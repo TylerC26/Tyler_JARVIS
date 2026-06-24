@@ -235,8 +235,19 @@ export type Skill = {
   updated_at: string | null;
 };
 
-export type AgentModelPref = "claude" | "deepseek" | "auto";
+// Legacy "claude" is kept as an alias for opus so existing agent rows keep
+// working; the /llm + agents UIs offer the explicit tiers.
+export type AgentModelPref =
+  | "auto"
+  | "claude"
+  | "opus"
+  | "sonnet"
+  | "haiku"
+  | "deepseek";
 export type AgentSource = "manual" | "seeded";
+
+// Per-call-site model override. 'auto' = use the call-site's coded default.
+export type ModelPref = "auto" | "opus" | "sonnet" | "haiku" | "deepseek";
 
 export type Agent = {
   id: string;
@@ -400,6 +411,7 @@ export type CronJob = {
   schedule: string;
   prompt: string;
   active: boolean;
+  model_pref: ModelPref;
   last_run_at: string | null;
   next_run_at: string | null;
   created_at: string;
@@ -1021,12 +1033,34 @@ export type Database = {
           schedule: string;
           prompt: string;
           active?: boolean;
+          model_pref?: ModelPref;
           last_run_at?: string | null;
           next_run_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<CronJob>;
+        Relationships: [];
+      };
+      model_prefs: {
+        Row: {
+          owner_id: string;
+          feature_key: string;
+          model_pref: ModelPref;
+          updated_at: string | null;
+        };
+        Insert: {
+          owner_id: string;
+          feature_key: string;
+          model_pref?: ModelPref;
+          updated_at?: string | null;
+        };
+        Update: Partial<{
+          owner_id: string;
+          feature_key: string;
+          model_pref: ModelPref;
+          updated_at: string | null;
+        }>;
         Relationships: [];
       };
       repo_tasks: {

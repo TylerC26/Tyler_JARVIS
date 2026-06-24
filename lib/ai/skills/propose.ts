@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { createSkillCore, listSkillsCore } from "@/lib/db/core/skills";
@@ -56,14 +56,15 @@ Tools called in order: ${toolSummary}
 
 Final assistant reply: ${opts.assistantText.trim()}`;
 
+    const { model, modelId } = await modelForFeature("skill_propose");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: ProposalSchema,
       system: SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 1200,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
 
     const p = result.object;
     if (!p.reusable) return;

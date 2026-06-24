@@ -1,5 +1,5 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { z } from "zod";
 import { ALL_TOOL_NAMES } from "@/lib/ai/agents/tools";
 import { isAnthropicConfigured, recordModelUsage } from "@/lib/chat/router";
@@ -89,13 +89,14 @@ export async function draftAgentFromDescription(
   }
 
   try {
+    const { model, modelId } = await modelForFeature("agent_draft");
     const result = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       schema: DraftSchema,
       system: drafterSystem(),
       prompt: desc,
     });
-    recordModelUsage("claude-sonnet-4-6", "suggestion", result.usage);
+    recordModelUsage(modelId, "suggestion", result.usage);
 
     // Drop any tool the model invented that isn't in the real catalog.
     const allowed = new Set<string>(ALL_TOOL_NAMES as string[]);

@@ -6,7 +6,7 @@
 // synthesize_progress chat tool.
 
 import { generateText } from "ai";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import {
   photoDeltaVsLast,
@@ -96,13 +96,14 @@ export async function synthesizeProgress(): Promise<
   const data = await gatherProgressData();
 
   try {
+    const { model, modelId } = await modelForFeature("physique_analysis");
     const result = await generateText({
-      model: llmAuto(),
+      model,
       system: SYSTEM_PROMPT,
       prompt: `Data (last ${WINDOW_DAYS} days unless noted):\n${JSON.stringify(data, null, 2)}`,
       maxOutputTokens: 700,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
     const narrative = result.text.trim();
     if (!narrative) return { ok: false, error: "Synthesis came back empty." };
     return { ok: true, data: { narrative, data } };

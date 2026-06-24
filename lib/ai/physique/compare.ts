@@ -6,7 +6,7 @@
 
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { getProgressPhoto } from "@/lib/db/core/progress-photos";
 import { signProgressPhotoUrl } from "@/lib/storage/progress-photos";
@@ -61,8 +61,9 @@ export async function comparePhysiquePhotos(input: {
   }
 
   try {
+    const { model, modelId } = await modelForFeature("physique_analysis");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: physiqueCompareSchema,
       system: SYSTEM_PROMPT,
       messages: [
@@ -88,7 +89,7 @@ export async function comparePhysiquePhotos(input: {
       ],
       maxOutputTokens: 800,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
 
     const parsed = physiqueCompareSchema.safeParse(result.object);
     if (!parsed.success) {

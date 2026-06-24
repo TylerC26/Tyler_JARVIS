@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
-import { llmAuto } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
@@ -109,8 +109,9 @@ export async function POST(req: Request) {
     const now = new Date();
     const contextLine = `Current local time: ${formatInTimeZone(now, tz, "yyyy-MM-dd HH:mm:ss")} (${tz}). Today's date: ${formatInTimeZone(now, tz, "yyyy-MM-dd")} (${formatInTimeZone(now, tz, "EEEE")}).${wifeName ? ` Wife's name on the roster: "${wifeName}". Extract ONLY her row.` : " No wife-name hint provided — extract the primary subject's row."}`;
 
+    const { model } = await modelForFeature("wife_shifts_extract");
     const { text, finishReason, usage } = await generateText({
-      model: llmAuto(),
+      model,
       system: SYSTEM_PROMPT,
       messages: [
         {

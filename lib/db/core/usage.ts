@@ -142,3 +142,17 @@ export async function getSpendSummaryCore(
     rangeStart,
   };
 }
+
+// Per-model rollup of today's usage (UTC day) for the /llm spend strip.
+// Built on getSpendSummaryCore so the aggregation lives in one place.
+export async function getModelUsageTodayCore(): Promise<
+  { model: string; calls: number; costUsd: number }[]
+> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const summary = await getSpendSummaryCore(startOfDay.toISOString());
+  return summary.byProvider
+    .flatMap((p) => p.models)
+    .map((m) => ({ model: m.model, calls: m.calls, costUsd: m.cost_usd }))
+    .sort((a, b) => b.costUsd - a.costUsd);
+}

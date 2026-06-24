@@ -1,5 +1,6 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { after, NextResponse } from "next/server";
+import { chatForceRoute } from "@/lib/ai/model-prefs";
 import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { appendMessage, latestActiveThreadSlug } from "@/lib/chat/persist";
 import {
@@ -263,7 +264,7 @@ export async function POST(req: Request) {
   }
 
   const route = await decideRoute(modelMessages, {
-    forceRoute,
+    forceRoute: forceRoute ?? (await chatForceRoute()),
     pageLabel: pageContext?.label ?? null,
   });
 

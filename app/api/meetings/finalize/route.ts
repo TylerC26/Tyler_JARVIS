@@ -14,7 +14,7 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llmAuto } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { getEventCore } from "@/lib/db/core/events";
@@ -211,8 +211,9 @@ export async function POST(req: Request) {
 
   let summary: Summary;
   try {
+    const { model } = await modelForFeature("meeting_finalize");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: SummarySchema,
       system: SUMMARY_SYSTEM,
       prompt:

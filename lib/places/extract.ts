@@ -20,7 +20,7 @@
 
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
-import { llmAuto, MODEL_SONNET } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { PLACE_CATEGORIES } from "@/lib/db/types";
@@ -109,8 +109,9 @@ async function readImageText(imageUrl: string): Promise<string | null> {
   }
 
   try {
+    const { model, modelId } = await modelForFeature("place_extraction");
     const result = await generateText({
-      model: llmAuto(),
+      model,
       messages: [
         {
           role: "user",
@@ -126,7 +127,7 @@ async function readImageText(imageUrl: string): Promise<string | null> {
       ],
       maxOutputTokens: 500,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
     const text = result.text.trim();
     if (!text || text === "NO_TEXT") return null;
     return text;
@@ -194,14 +195,15 @@ export async function extractPlace(input: {
     .join("\n");
 
   try {
+    const { model, modelId } = await modelForFeature("place_extraction");
     const result = await generateObject({
-      model: llmAuto(),
+      model,
       schema: ExtractSchema,
       system: SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 600,
     });
-    recordModelUsage(MODEL_SONNET, "classifier", result.usage);
+    recordModelUsage(modelId, "classifier", result.usage);
 
     // Deterministic anti-hallucination guard: the model must justify its
     // name against the source text. If the major tokens of `name` don't
