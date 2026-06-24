@@ -20,6 +20,7 @@ function bump() {
   revalidatePath("/");
   revalidatePath("/chat");
   revalidatePath("/assistant");
+  revalidatePath("/llm");
 }
 
 export async function createAgentAction(input: CreateAgentInput) {
