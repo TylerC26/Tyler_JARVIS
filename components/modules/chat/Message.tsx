@@ -13,6 +13,7 @@ function modelLabel(model: string): string {
   if (model === "claude-sonnet-4-6") return "sonnet 4.6";
   if (model === "claude-haiku-4-5") return "haiku 4.5";
   if (model === "deepseek-chat") return "deepseek";
+  if (model === "MiniMax-M3") return "minimax m3";
   return model;
 }
 

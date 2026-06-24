@@ -67,12 +67,16 @@ export async function StatusRail() {
   const deepseekStatus: Status = process.env.DEEPSEEK_API_KEY
     ? "online"
     : "offline";
+  const minimaxStatus: Status = process.env.MINIMAX_API_KEY
+    ? "online"
+    : "offline";
 
   return (
     <div className="hidden items-center gap-4 lg:flex">
       <Indicator label="DB" status="online" />
       <ClaudeToggleIndicator status={claudeStatus} />
       <Indicator label="DEEPSEEK" status={deepseekStatus} />
+      <Indicator label="MINIMAX" status={minimaxStatus} />
       <Indicator label="SYNC" status="online" />
     </div>
   );

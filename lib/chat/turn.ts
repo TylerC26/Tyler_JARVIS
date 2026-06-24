@@ -23,9 +23,11 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  isMinimaxConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
+  streamMinimaxResponse,
   type ForceRoute,
 } from "./router";
 
@@ -221,20 +223,25 @@ async function runChatTurnInner(
   if (route === "deepseek" && !isDeepseekConfigured()) {
     throw new Error("DEEPSEEK_API_KEY not configured.");
   }
+  if (route === "minimax" && !isMinimaxConfigured()) {
+    throw new Error("MINIMAX_API_KEY not configured.");
+  }
 
   const model: ChatModel = modelIdForRoute(route);
 
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages)
-      : await streamClaudeResponse(
-          modelMessages,
-          route === "opus"
-            ? "claude-opus-4-7"
-            : route === "haiku"
-              ? "claude-haiku-4-5"
-              : "claude-sonnet-4-6",
-        );
+      : route === "minimax"
+        ? await streamMinimaxResponse(modelMessages)
+        : await streamClaudeResponse(
+            modelMessages,
+            route === "opus"
+              ? "claude-opus-4-7"
+              : route === "haiku"
+                ? "claude-haiku-4-5"
+                : "claude-sonnet-4-6",
+          );
 
   // Nothing is piping the stream to a response here, so drain it explicitly so
   // `.steps` / `.text` settle.

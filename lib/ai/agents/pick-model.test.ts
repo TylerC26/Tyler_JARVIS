@@ -18,7 +18,15 @@ describe("agentModelId", () => {
   it("falls back to deepseek when Claude is not ready", () => {
     expect(agentModelId("sonnet", false, true)).toBe("deepseek-chat");
   });
+  it("minimax pref maps to MiniMax-M3 when minimax is ready", () => {
+    expect(agentModelId("minimax", true, true, true)).toBe("MiniMax-M3");
+  });
+  it("minimax pref falls back to opus, then deepseek, when minimax is unavailable", () => {
+    expect(agentModelId("minimax", true, false, false)).toBe("claude-opus-4-7");
+    expect(agentModelId("minimax", false, true, false)).toBe("deepseek-chat");
+  });
   it("returns null when no provider is available", () => {
     expect(agentModelId("auto", false, false)).toBeNull();
+    expect(agentModelId("minimax", false, false, false)).toBeNull();
   });
 });

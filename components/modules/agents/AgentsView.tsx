@@ -686,6 +686,7 @@ export function AgentsView({
                   >
                     <option value="claude">claude (opus 4.7)</option>
                     <option value="deepseek">deepseek</option>
+                    <option value="minimax">minimax (M3)</option>
                     <option value="auto">auto (whichever configured)</option>
                   </Select>
                 </Field>

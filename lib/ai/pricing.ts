@@ -45,6 +45,18 @@ const PRICES: Record<string, ModelPrice> = {
     cacheRead: 0.07,
     cacheWrite: 0.27,
   },
+  // MiniMax-M3 standard Pay-as-You-Go (the launch 50%-off promo lapsed ~Jun 7).
+  // Requests over 512K tokens bill at 2× — out of range for our payloads.
+  // CONFIRM: cache rates are an estimate (M3's MSA caching discount is
+  // unpublished); the Anthropic-compatible response may not report cache tokens
+  // at all, in which case these never apply.
+  "MiniMax-M3": {
+    provider: "minimax",
+    input: 0.6,
+    output: 2.4,
+    cacheRead: 0.06,
+    cacheWrite: 0.6,
+  },
 };
 
 export function getModelPricing(model: string): ModelPrice | null {

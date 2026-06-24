@@ -243,11 +243,18 @@ export type AgentModelPref =
   | "opus"
   | "sonnet"
   | "haiku"
-  | "deepseek";
+  | "deepseek"
+  | "minimax";
 export type AgentSource = "manual" | "seeded";
 
 // Per-call-site model override. 'auto' = use the call-site's coded default.
-export type ModelPref = "auto" | "opus" | "sonnet" | "haiku" | "deepseek";
+export type ModelPref =
+  | "auto"
+  | "opus"
+  | "sonnet"
+  | "haiku"
+  | "deepseek"
+  | "minimax";
 
 export type Agent = {
   id: string;
@@ -462,7 +469,7 @@ export type SiteSettings = {
   updated_at: string | null;
 };
 
-export type UsageProvider = "anthropic" | "deepseek";
+export type UsageProvider = "anthropic" | "deepseek" | "minimax";
 export type UsageSource = "chat" | "classifier" | "brief" | "suggestion";
 
 export type UsageEvent = {
