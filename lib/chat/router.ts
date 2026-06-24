@@ -1,5 +1,6 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
+import { minimax } from "vercel-minimax-ai-provider";
 import {
   generateObject,
   stepCountIs,
@@ -58,7 +59,9 @@ const RouteSchema = z.object({
 //              code, repo questions, dispatching remote code tasks.
 // - deepseek → only reached when Claude is disabled (kill switch / missing key);
 //              the non-Claude fallback so the assistant still answers at all.
-export type ChatRoute = "deepseek" | "haiku" | "sonnet" | "opus";
+// - minimax  → only reached by an explicit pin (chat global pin / per-turn
+//              forceRoute). The classifier never auto-routes to it.
+export type ChatRoute = "deepseek" | "minimax" | "haiku" | "sonnet" | "opus";
 
 // Anthropic model ids the Claude routes can run on.
 export type ClaudeModelId =
@@ -67,16 +70,23 @@ export type ClaudeModelId =
   | "claude-haiku-4-5";
 
 // Identifier persisted to chat_messages.model for a resolved route.
-export type ChatModelId = ClaudeModelId | "deepseek-chat";
+export type ChatModelId = ClaudeModelId | "deepseek-chat" | "MiniMax-M3";
 
 export function modelIdForRoute(route: ChatRoute): ChatModelId {
   if (route === "deepseek") return "deepseek-chat";
+  if (route === "minimax") return "MiniMax-M3";
   if (route === "opus") return "claude-opus-4-7";
   if (route === "haiku") return "claude-haiku-4-5";
   return "claude-sonnet-4-6";
 }
 
-export type ForceRoute = "auto" | "deepseek" | "haiku" | "sonnet" | "opus";
+export type ForceRoute =
+  | "auto"
+  | "deepseek"
+  | "minimax"
+  | "haiku"
+  | "sonnet"
+  | "opus";
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
@@ -97,10 +107,20 @@ export function isDeepseekConfigured(): boolean {
   return Boolean(process.env.DEEPSEEK_API_KEY);
 }
 
+export function isMinimaxConfigured(): boolean {
+  return Boolean(process.env.MINIMAX_API_KEY);
+}
+
 export async function decideRoute(
   messages: ModelMessage[],
   opts: RouteOptions = {},
 ): Promise<ChatRoute> {
+  // Explicit non-Claude pins are honored regardless of the Claude kill switch —
+  // they aren't Claude, so killing Claude shouldn't override them. (Key
+  // presence is enforced downstream by the turn entrypoints.)
+  if (opts.forceRoute === "minimax") return "minimax";
+  if (opts.forceRoute === "deepseek") return "deepseek";
+
   // Claude disabled (via dashboard StatusRail toggle or missing key) → every
   // turn goes to DeepSeek. No classifier needed since DeepSeek is the only
   // option, and the classifier itself would just waste a call.
@@ -110,7 +130,6 @@ export async function decideRoute(
   if (opts.forceRoute === "opus") return "opus";
   if (opts.forceRoute === "sonnet") return "sonnet";
   if (opts.forceRoute === "haiku") return "haiku";
-  if (opts.forceRoute === "deepseek") return "deepseek";
 
   // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
   if (!isDeepseekConfigured()) return "sonnet";
@@ -241,6 +260,42 @@ export async function streamDeepseekResponse(
   }
 
   recordModelUsage("deepseek-chat", "chat", result.totalUsage);
+  return result;
+}
+
+// MiniMax-M3 as the main orchestrator — reached only by an explicit pin. Runs
+// the same orchestrator prompt + full tool set as the DeepSeek-orchestrator
+// path, including the structured-tool-calling preamble and the action-verb
+// toolChoice nudge. M3 speaks the Anthropic Messages format and is strongly
+// tool-capable, but the hardening is cheap insurance against a "✅ Done"
+// hallucination on a model we haven't battle-tested in this app. The web_search
+// tool in ALL_TOOLS still works — it calls Anthropic directly, not the model.
+export async function streamMinimaxResponse(
+  messages: ModelMessage[],
+  streamOpts: StreamOptions = {},
+) {
+  const userText = extractLatestUserText(messages);
+  const [prefixContent, baseSystem] = await Promise.all([
+    buildContextPrefix(userText, { pageContext: streamOpts.pageContext }),
+    getActiveOrchestratorPrompt(),
+  ]);
+  const system = `${DEEPSEEK_ORCHESTRATOR_PREAMBLE}${baseSystem}`;
+  const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
+  const forceTool = looksLikeAction(userText);
+
+  const result = streamText({
+    model: minimax("MiniMax-M3"),
+    system,
+    messages: [ctxPrefix, ...messages],
+    tools: ALL_TOOLS,
+    stopWhen: stepCountIs(8),
+    toolChoice: forceTool ? "required" : "auto",
+    onError: ({ error }) => {
+      console.warn("[chat] minimax stream error:", error);
+    },
+  });
+
+  recordModelUsage("MiniMax-M3", "chat", result.totalUsage);
   return result;
 }
 

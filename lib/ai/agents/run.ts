@@ -1,5 +1,6 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
+import { minimax } from "vercel-minimax-ai-provider";
 import {
   generateText,
   stepCountIs,
@@ -16,6 +17,7 @@ import {
   type ChatModelId,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  isMinimaxConfigured,
   recordModelUsage,
 } from "@/lib/chat/router";
 import { buildContextPrefix } from "@/lib/chat/system-prompts";
@@ -55,11 +57,15 @@ export function agentModelId(
   pref: AgentModelPref,
   claudeReady: boolean,
   deepseekReady: boolean,
+  minimaxReady = false,
 ): ChatModelId | null {
-  let want: "opus" | "sonnet" | "haiku" | "deepseek";
+  let want: "opus" | "sonnet" | "haiku" | "deepseek" | "minimax";
   switch (pref) {
     case "deepseek":
       want = "deepseek";
+      break;
+    case "minimax":
+      want = "minimax";
       break;
     case "opus":
     case "claude":
@@ -73,6 +79,12 @@ export function agentModelId(
       break;
     default: // "auto"
       want = "sonnet";
+  }
+  if (want === "minimax") {
+    if (minimaxReady) return "MiniMax-M3";
+    if (claudeReady) return "claude-opus-4-7";
+    if (deepseekReady) return "deepseek-chat";
+    return null;
   }
   if (want === "deepseek") {
     if (deepseekReady) return "deepseek-chat";
@@ -96,9 +108,20 @@ async function pickModel(agent: Agent): Promise<PickedModel | null> {
   // Claude is reachable when the dashboard kill switch is on AND the key is set.
   const claudeReady = (await isClaudeEnabled()) && isAnthropicConfigured();
   const deepseekReady = isDeepseekConfigured();
-  const id = agentModelId(agent.model_pref, claudeReady, deepseekReady);
+  const minimaxReady = isMinimaxConfigured();
+  const id = agentModelId(
+    agent.model_pref,
+    claudeReady,
+    deepseekReady,
+    minimaxReady,
+  );
   if (!id) return null;
-  const model = id === "deepseek-chat" ? deepseek("deepseek-chat") : anthropic(id);
+  const model =
+    id === "deepseek-chat"
+      ? deepseek("deepseek-chat")
+      : id === "MiniMax-M3"
+        ? minimax("MiniMax-M3")
+        : anthropic(id);
   return { model, modelId: id };
 }
 

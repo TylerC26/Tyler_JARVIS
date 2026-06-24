@@ -21,6 +21,7 @@ export default async function OfficePage() {
   const configured = {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+    minimax: Boolean(process.env.MINIMAX_API_KEY),
   };
 
   return (

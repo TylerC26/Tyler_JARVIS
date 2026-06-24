@@ -12,7 +12,7 @@ import { ClearThreadButton } from "./ClearThreadButton";
 
 type Props = {
   initialMessages?: JarvisUIMessage[];
-  configured: { anthropic: boolean; deepseek: boolean };
+  configured: { anthropic: boolean; deepseek: boolean; minimax: boolean };
   variant?: "drawer" | "page";
   onClose?: () => void;
   // When set, this panel is a direct sub-agent thread rather than main Jarvis:
@@ -30,7 +30,7 @@ type Props = {
   pagePath?: string | null;
 };
 
-type ForceRoute = "auto" | "deepseek" | "haiku" | "sonnet" | "opus";
+type ForceRoute = "auto" | "deepseek" | "minimax" | "haiku" | "sonnet" | "opus";
 
 export function ChatPanel({
   initialMessages,
@@ -85,7 +85,8 @@ export function ChatPanel({
     });
 
   const pending = status === "submitted" || status === "streaming";
-  const noKeys = !configured.anthropic && !configured.deepseek;
+  const noKeys =
+    !configured.anthropic && !configured.deepseek && !configured.minimax;
   // A sub-agent whose preferred provider isn't configured has no model to run.
   const agentOffline = Boolean(agent) && !agent?.modelId;
   const inputDisabled = noKeys || agentOffline;
@@ -101,7 +102,9 @@ export function ChatPanel({
             ? "claude-haiku-4-5"
             : forceRoute === "deepseek"
               ? "deepseek-chat"
-              : "routing…"
+              : forceRoute === "minimax"
+                ? "MiniMax-M3"
+                : "routing…"
     : null;
 
   useEffect(() => {
@@ -248,6 +251,9 @@ export function ChatPanel({
               </option>
               <option value="deepseek" disabled={!configured.deepseek}>
                 DEEPSEEK
+              </option>
+              <option value="minimax" disabled={!configured.minimax}>
+                MINIMAX
               </option>
             </select>
           )}

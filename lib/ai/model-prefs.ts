@@ -7,6 +7,7 @@
 
 import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
+import { minimax } from "vercel-minimax-ai-provider";
 import type { LanguageModel } from "ai";
 import { getModelPrefsCore } from "@/lib/db/core/model-prefs";
 import type { ForceRoute } from "@/lib/chat/router";
@@ -36,7 +37,8 @@ export type ConcreteModelId =
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5"
-  | "deepseek-chat";
+  | "deepseek-chat"
+  | "MiniMax-M3";
 
 export type FeatureGroup =
   | "Routing"
@@ -221,12 +223,22 @@ export const FEATURE_MAP: Record<FeatureKey, FeatureDef> = Object.fromEntries(
   FEATURES.map((f) => [f.key, f]),
 ) as Record<FeatureKey, FeatureDef>;
 
-const MODEL_ID: Record<"opus" | "sonnet" | "haiku" | "deepseek", ConcreteModelId> = {
+const MODEL_ID: Record<
+  "opus" | "sonnet" | "haiku" | "deepseek" | "minimax",
+  ConcreteModelId
+> = {
   opus: "claude-opus-4-7",
   sonnet: "claude-sonnet-4-6",
   haiku: "claude-haiku-4-5",
   deepseek: "deepseek-chat",
+  minimax: "MiniMax-M3",
 };
+
+// The non-Claude tiers we treat as text-only: vision-required call-sites fall
+// back to the Claude default tier rather than these. DeepSeek genuinely can't
+// see images; MiniMax-M3 is multimodal upstream but we defer enabling its
+// vision, so it falls back here too.
+const TEXT_ONLY_TIERS = new Set(["deepseek", "minimax"]);
 
 // Pure: stored pref + the call-site's default tier + vision flag -> model id.
 export function resolveModelId(
@@ -234,10 +246,9 @@ export function resolveModelId(
   defaultTier: Tier,
   visionRequired: boolean,
 ): ConcreteModelId {
-  let tier: "opus" | "sonnet" | "haiku" | "deepseek" =
+  let tier: "opus" | "sonnet" | "haiku" | "deepseek" | "minimax" =
     pref === "auto" ? defaultTier : pref;
-  // deepseek-chat can't see images — vision features fall back to the default.
-  if (tier === "deepseek" && visionRequired) tier = defaultTier;
+  if (TEXT_ONLY_TIERS.has(tier) && visionRequired) tier = defaultTier;
   return MODEL_ID[tier];
 }
 
@@ -276,7 +287,11 @@ export async function modelForFeature(
   const pref = prefs[key] ?? "auto";
   const modelId = resolveModelId(pref, def.defaultTier, def.visionRequired);
   const model =
-    modelId === "deepseek-chat" ? deepseek("deepseek-chat") : anthropic(modelId);
+    modelId === "deepseek-chat"
+      ? deepseek("deepseek-chat")
+      : modelId === "MiniMax-M3"
+        ? minimax("MiniMax-M3")
+        : anthropic(modelId);
   return { model, modelId };
 }
 

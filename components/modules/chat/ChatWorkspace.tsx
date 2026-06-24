@@ -18,7 +18,7 @@ type Props = {
   agents: ThreadAgent[];
   activeAgent: ActiveAgent | null;
   initialMessages: JarvisUIMessage[];
-  configured: { anthropic: boolean; deepseek: boolean };
+  configured: { anthropic: boolean; deepseek: boolean; minimax: boolean };
   // Seeded message (e.g. from a calendar "take notes" deep-link) the active
   // panel should auto-send once on mount. Main Jarvis thread only.
   initialPrompt?: string | null;

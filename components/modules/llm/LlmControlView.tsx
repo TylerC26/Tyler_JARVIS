@@ -30,7 +30,7 @@ type Props = {
   usageToday: UsageRow[];
 };
 
-// Display metadata for the four wired models, reused across palette + selects.
+// Display metadata for the wired models, reused across palette + selects.
 const MODELS: {
   id: string;
   label: string;
@@ -43,6 +43,7 @@ const MODELS: {
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6", glyph: "◆", tier: "balanced", vision: true, cost: "$$" },
   { id: "claude-haiku-4-5", label: "Haiku 4.5", glyph: "▸", tier: "fast", vision: true, cost: "$" },
   { id: "deepseek-chat", label: "DeepSeek", glyph: "✦", tier: "fallback", vision: false, cost: "¢" },
+  { id: "MiniMax-M3", label: "MiniMax M3", glyph: "✸", tier: "agentic", vision: false, cost: "¢" },
 ];
 
 const GROUP_ORDER: FeatureGroup[] = [
@@ -55,10 +56,11 @@ const GROUP_ORDER: FeatureGroup[] = [
   "Agents",
 ];
 
-// Options offered for a non-chat feature (DeepSeek hidden when vision is required).
+// Options offered for a non-chat feature. The text-only tiers (DeepSeek,
+// MiniMax) are hidden when the call-site requires vision.
 function featureOptions(def: FeatureDef): ModelPref[] {
   const base: ModelPref[] = ["auto", "opus", "sonnet", "haiku"];
-  return def.visionRequired ? base : [...base, "deepseek"];
+  return def.visionRequired ? base : [...base, "deepseek", "minimax"];
 }
 
 const PREF_LABEL: Record<ModelPref, string> = {
@@ -67,6 +69,7 @@ const PREF_LABEL: Record<ModelPref, string> = {
   sonnet: "sonnet",
   haiku: "haiku",
   deepseek: "deepseek",
+  minimax: "minimax",
 };
 
 export function LlmControlView({
@@ -211,7 +214,7 @@ export function LlmControlView({
               value={chatPref}
               onChange={(e) => setFeature("chat", e.target.value as ModelPref)}
             >
-              {(["auto", "opus", "sonnet", "haiku", "deepseek"] as ModelPref[]).map((p) => (
+              {(["auto", "opus", "sonnet", "haiku", "deepseek", "minimax"] as ModelPref[]).map((p) => (
                 <option key={p} value={p}>
                   {PREF_LABEL[p]}
                 </option>
@@ -292,7 +295,7 @@ export function LlmControlView({
                   value={agentPrefs[a.id]}
                   onChange={(e) => setAgent(a.id, e.target.value as AgentModelPref)}
                 >
-                  {(["auto", "opus", "sonnet", "haiku", "deepseek"] as AgentModelPref[]).map((p) => (
+                  {(["auto", "opus", "sonnet", "haiku", "deepseek", "minimax"] as AgentModelPref[]).map((p) => (
                     <option key={p} value={p}>
                       {p === "auto" ? "AUTO" : p}
                     </option>
@@ -328,7 +331,7 @@ export function LlmControlView({
                   value={cronPrefs[c.id]}
                   onChange={(e) => setCron(c.id, e.target.value as ModelPref)}
                 >
-                  {(["auto", "opus", "sonnet", "haiku", "deepseek"] as ModelPref[]).map((p) => (
+                  {(["auto", "opus", "sonnet", "haiku", "deepseek", "minimax"] as ModelPref[]).map((p) => (
                     <option key={p} value={p}>
                       {PREF_LABEL[p]}
                     </option>

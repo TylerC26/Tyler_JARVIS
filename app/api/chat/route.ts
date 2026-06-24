@@ -14,9 +14,11 @@ import {
   decideRoute,
   isAnthropicConfigured,
   isDeepseekConfigured,
+  isMinimaxConfigured,
   modelIdForRoute,
   streamClaudeResponse,
   streamDeepseekResponse,
+  streamMinimaxResponse,
   type ForceRoute,
 } from "@/lib/chat/router";
 import {
@@ -96,11 +98,15 @@ type IncomingBody = {
 };
 
 export async function POST(req: Request) {
-  if (!isAnthropicConfigured() && !isDeepseekConfigured()) {
+  if (
+    !isAnthropicConfigured() &&
+    !isDeepseekConfigured() &&
+    !isMinimaxConfigured()
+  ) {
     return NextResponse.json(
       {
         error:
-          "No model API keys configured. Set ANTHROPIC_API_KEY and/or DEEPSEEK_API_KEY in .env.local.",
+          "No model API keys configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, and/or MINIMAX_API_KEY in .env.local.",
       },
       { status: 503 },
     );
@@ -274,6 +280,12 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
+  if (route === "minimax" && !isMinimaxConfigured()) {
+    return NextResponse.json(
+      { error: "MINIMAX_API_KEY not configured." },
+      { status: 503 },
+    );
+  }
   if (
     (route === "sonnet" || route === "opus" || route === "haiku") &&
     !isAnthropicConfigured()
@@ -289,15 +301,19 @@ export async function POST(req: Request) {
       ? await streamDeepseekResponse(modelMessages, {
           pageContext: pageContext?.block ?? null,
         })
-      : await streamClaudeResponse(
-          modelMessages,
-          route === "opus"
-            ? "claude-opus-4-7"
-            : route === "haiku"
-              ? "claude-haiku-4-5"
-              : "claude-sonnet-4-6",
-          { pageContext: pageContext?.block ?? null },
-        );
+      : route === "minimax"
+        ? await streamMinimaxResponse(modelMessages, {
+            pageContext: pageContext?.block ?? null,
+          })
+        : await streamClaudeResponse(
+            modelMessages,
+            route === "opus"
+              ? "claude-opus-4-7"
+              : route === "haiku"
+                ? "claude-haiku-4-5"
+                : "claude-sonnet-4-6",
+            { pageContext: pageContext?.block ?? null },
+          );
 
   const modelId = modelIdForRoute(route);
 
@@ -335,5 +351,6 @@ export async function GET() {
   return NextResponse.json({
     anthropic: isAnthropicConfigured(),
     deepseek: isDeepseekConfigured(),
+    minimax: isMinimaxConfigured(),
   });
 }

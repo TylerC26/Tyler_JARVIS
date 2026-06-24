@@ -31,6 +31,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "toml": "^3.0.0",
+    "vercel-minimax-ai-provider": "^0.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {

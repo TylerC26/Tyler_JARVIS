@@ -28,7 +28,7 @@ export function ChatLauncher({
   configured,
   agents = [],
 }: {
-  configured: { anthropic: boolean; deepseek: boolean };
+  configured: { anthropic: boolean; deepseek: boolean; minimax: boolean };
   agents?: LauncherAgent[];
 }) {
   // `open` only governs the slide-over below lg. At lg+ the bar is docked
@@ -65,7 +65,7 @@ export function ChatLauncher({
   // itself, and /office embeds a permanent Jarvis chatbox.
   if (pathname === "/chat" || pathname === "/office") return null;
 
-  const live = configured.anthropic || configured.deepseek;
+  const live = configured.anthropic || configured.deepseek || configured.minimax;
 
   // Page awareness: every turn sent from this panel carries the pathname so
   // the server presets the page's context, and pages with a mapped sub-agent
