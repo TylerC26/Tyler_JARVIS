@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
-import { llmOpus, MODEL_OPUS } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { validateSchedule } from "@/lib/db/core/cron-jobs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
@@ -87,14 +87,15 @@ Automation request:
 ${request}`;
 
   try {
+    const { model, modelId } = await modelForFeature("cron_generate");
     const { object, usage } = await generateObject({
-      model: llmOpus(),
+      model,
       schema: DraftSchema,
       system: SYSTEM,
       prompt: userPrompt,
       maxOutputTokens: 1000,
     });
-    recordModelUsage(MODEL_OPUS, "suggestion", usage);
+    recordModelUsage(modelId, "suggestion", usage);
 
     // Surface an invalid cron up front so the UI can flag it. The draft is
     // still returned — the create form is editable, so the user can fix it.

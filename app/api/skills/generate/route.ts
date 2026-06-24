@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
-import { llmAuto } from "@/lib/ai/providers";
+import { modelForFeature } from "@/lib/ai/model-prefs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 
 export const runtime = "nodejs";
@@ -53,8 +53,9 @@ Trigger keywords: ${triggers.length > 0 ? triggers.join(", ") : "(none yet)"}
 Write the instruction body.`;
 
   try {
+    const { model } = await modelForFeature("skill_generate");
     const { text } = await generateText({
-      model: llmAuto(),
+      model,
       system: SYSTEM,
       prompt: userPrompt,
       maxOutputTokens: 800,
