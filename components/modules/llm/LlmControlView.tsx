@@ -43,7 +43,7 @@ const MODELS: {
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6", glyph: "◆", tier: "balanced", vision: true, cost: "$$" },
   { id: "claude-haiku-4-5", label: "Haiku 4.5", glyph: "▸", tier: "fast", vision: true, cost: "$" },
   { id: "deepseek-chat", label: "DeepSeek", glyph: "✦", tier: "fallback", vision: false, cost: "¢" },
-  { id: "MiniMax-M3", label: "MiniMax M3", glyph: "✸", tier: "agentic", vision: false, cost: "¢" },
+  { id: "MiniMax-M3", label: "MiniMax M3", glyph: "✸", tier: "agentic", vision: true, cost: "¢" },
 ];
 
 const GROUP_ORDER: FeatureGroup[] = [
@@ -56,11 +56,14 @@ const GROUP_ORDER: FeatureGroup[] = [
   "Agents",
 ];
 
-// Options offered for a non-chat feature. The text-only tiers (DeepSeek,
-// MiniMax) are hidden when the call-site requires vision.
+// Options offered for a non-chat feature. DeepSeek is text-only, so it's hidden
+// when the call-site requires vision; MiniMax-M3 is multimodal, so it's offered
+// everywhere.
 function featureOptions(def: FeatureDef): ModelPref[] {
   const base: ModelPref[] = ["auto", "opus", "sonnet", "haiku"];
-  return def.visionRequired ? base : [...base, "deepseek", "minimax"];
+  return def.visionRequired
+    ? [...base, "minimax"]
+    : [...base, "deepseek", "minimax"];
 }
 
 const PREF_LABEL: Record<ModelPref, string> = {

@@ -14,11 +14,13 @@ describe("resolveModelId", () => {
     expect(resolveModelId("minimax", "sonnet", false)).toBe("MiniMax-M3");
   });
 
-  it("drops a text-only pref back to default for vision features", () => {
+  it("drops a deepseek pref back to default for vision features", () => {
     expect(resolveModelId("deepseek", "sonnet", true)).toBe("claude-sonnet-4-6");
-    // MiniMax-M3 is multimodal upstream but treated as text-only here, so
-    // vision call-sites fall back to the coded default the same way.
-    expect(resolveModelId("minimax", "opus", true)).toBe("claude-opus-4-7");
+  });
+
+  it("keeps MiniMax-M3 for vision features (it is multimodal)", () => {
+    expect(resolveModelId("minimax", "opus", true)).toBe("MiniMax-M3");
+    expect(resolveModelId("minimax", "sonnet", true)).toBe("MiniMax-M3");
   });
 });
 
