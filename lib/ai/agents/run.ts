@@ -26,7 +26,7 @@ import {
   startAgentRunCore,
 } from "@/lib/db/core/agent-runs";
 import { isClaudeEnabled } from "@/lib/db/core/site-settings";
-import type { Agent, ChatToolCall } from "@/lib/db/types";
+import type { Agent, AgentModelPref, ChatToolCall } from "@/lib/db/types";
 import { isTelegramConfigured, sendMessage } from "@/lib/telegram/client";
 
 export type AgentToolCallSummary = {
@@ -48,28 +48,58 @@ const AGENT_CHAT_STEP_BUDGET = 8;
 
 export type PickedModel = { model: LanguageModel; modelId: ChatModelId };
 
+// Pure: agent pref + provider readiness -> concrete model id (or null when no
+// provider is configured). Legacy 'claude' = opus; 'auto' = sonnet. Split out
+// of pickModel so the branch table is unit-testable.
+export function agentModelId(
+  pref: AgentModelPref,
+  claudeReady: boolean,
+  deepseekReady: boolean,
+): ChatModelId | null {
+  let want: "opus" | "sonnet" | "haiku" | "deepseek";
+  switch (pref) {
+    case "deepseek":
+      want = "deepseek";
+      break;
+    case "opus":
+    case "claude":
+      want = "opus";
+      break;
+    case "haiku":
+      want = "haiku";
+      break;
+    case "sonnet":
+      want = "sonnet";
+      break;
+    default: // "auto"
+      want = "sonnet";
+  }
+  if (want === "deepseek") {
+    if (deepseekReady) return "deepseek-chat";
+    if (claudeReady) return "claude-opus-4-7";
+    return null;
+  }
+  if (claudeReady) {
+    return want === "opus"
+      ? "claude-opus-4-7"
+      : want === "haiku"
+        ? "claude-haiku-4-5"
+        : "claude-sonnet-4-6";
+  }
+  if (deepseekReady) return "deepseek-chat";
+  return null;
+}
+
 // Resolve the concrete model for an agent from its model_pref, honoring the
 // Claude kill switch and configured keys, with a Claude→DeepSeek fallback.
 async function pickModel(agent: Agent): Promise<PickedModel | null> {
   // Claude is reachable when the dashboard kill switch is on AND the key is set.
   const claudeReady = (await isClaudeEnabled()) && isAnthropicConfigured();
-  const claude = (id: "claude-opus-4-7" | "claude-sonnet-4-6"): PickedModel => ({
-    model: anthropic(id),
-    modelId: id,
-  });
-  const ds: PickedModel = { model: deepseek("deepseek-chat"), modelId: "deepseek-chat" };
-
-  // 'auto' lets the system pick — runs on Claude Sonnet: full tool support,
-  // cheaper than Opus.
-  if (agent.model_pref === "auto" && claudeReady) return claude("claude-sonnet-4-6");
-  if (agent.model_pref === "deepseek" && isDeepseekConfigured()) return ds;
-  if (agent.model_pref === "claude" && claudeReady) return claude("claude-opus-4-7");
-
-  // Fallback chain when the agent's preferred provider isn't configured:
-  // Claude → DeepSeek.
-  if (claudeReady) return claude("claude-opus-4-7");
-  if (isDeepseekConfigured()) return ds;
-  return null;
+  const deepseekReady = isDeepseekConfigured();
+  const id = agentModelId(agent.model_pref, claudeReady, deepseekReady);
+  if (!id) return null;
+  const model = id === "deepseek-chat" ? deepseek("deepseek-chat") : anthropic(id);
+  return { model, modelId: id };
 }
 
 // Resolve which model an agent's direct chat would run on, without making a

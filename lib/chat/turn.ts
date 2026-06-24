@@ -6,6 +6,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ModelMessage } from "ai";
+import { chatForceRoute } from "@/lib/ai/model-prefs";
 import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
 import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
@@ -208,7 +209,9 @@ async function runChatTurnInner(
 
   await appendMessage({ role: "user", content: latestUserText });
 
-  const route = await decideRoute(modelMessages, { forceRoute });
+  const route = await decideRoute(modelMessages, {
+    forceRoute: forceRoute ?? (await chatForceRoute()),
+  });
   if (
     (route === "sonnet" || route === "opus" || route === "haiku") &&
     !isAnthropicConfigured()
