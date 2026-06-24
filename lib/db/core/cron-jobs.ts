@@ -1,17 +1,18 @@
 import { Cron } from "croner";
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import type { CronJob } from "@/lib/db/types";
+import type { CronJob, ModelPref } from "@/lib/db/types";
 
 export type CreateCronJobInput = {
   name: string;
   description?: string | null;
   schedule: string;
   prompt: string;
+  model_pref?: ModelPref;
 };
 
 export type UpdateCronJobInput = Partial<
-  Pick<CronJob, "name" | "description" | "schedule" | "prompt" | "active">
+  Pick<CronJob, "name" | "description" | "schedule" | "prompt" | "active" | "model_pref">
 >;
 
 type CoreResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -78,6 +79,7 @@ export async function createCronJobCore(
       schedule: input.schedule,
       prompt,
       active: true,
+      model_pref: input.model_pref ?? "auto",
       next_run_at: next.toISOString(),
     })
     .select()
@@ -101,6 +103,7 @@ export async function updateCronJobCore(
   if (patch.description !== undefined) updates.description = patch.description;
   if (patch.prompt !== undefined) updates.prompt = patch.prompt.trim();
   if (patch.active !== undefined) updates.active = patch.active;
+  if (patch.model_pref !== undefined) updates.model_pref = patch.model_pref;
   if (patch.schedule !== undefined) {
     const next = nextRunAfter(patch.schedule);
     if (!next) return { ok: false, error: `Invalid cron schedule: "${patch.schedule}".` };
