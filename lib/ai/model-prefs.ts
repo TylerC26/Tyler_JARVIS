@@ -234,11 +234,11 @@ const MODEL_ID: Record<
   minimax: "MiniMax-M3",
 };
 
-// The non-Claude tiers we treat as text-only: vision-required call-sites fall
-// back to the Claude default tier rather than these. DeepSeek genuinely can't
-// see images; MiniMax-M3 is multimodal upstream but we defer enabling its
-// vision, so it falls back here too.
-const TEXT_ONLY_TIERS = new Set(["deepseek", "minimax"]);
+// Non-Claude tiers that can't see images: vision-required call-sites fall back
+// to the Claude default tier when one of these is picked. DeepSeek is text-only
+// so it's listed here; MiniMax-M3 is multimodal, so it stays selectable for
+// vision features and is deliberately NOT in this set.
+const TEXT_ONLY_TIERS = new Set(["deepseek"]);
 
 // Pure: stored pref + the call-site's default tier + vision flag -> model id.
 export function resolveModelId(
