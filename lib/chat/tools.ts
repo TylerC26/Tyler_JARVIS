@@ -37,6 +37,7 @@ import { logBodyPhotoTool } from "@/lib/chat/tools/log-body-photo";
 import { analyzeProgressPhotoTool } from "@/lib/chat/tools/analyze-progress-photo";
 import { compareProgressPhotosTool } from "@/lib/chat/tools/compare-progress-photos";
 import { synthesizeProgressTool } from "@/lib/chat/tools/synthesize-progress";
+import { logWorkoutTool } from "@/lib/chat/tools/log-workout";
 import { getMealPhotoContext, getTelegramContext } from "@/lib/chat/request-context";
 import { detectPostUrl, fetchPost } from "@/lib/places/fetch-post";
 import { extractPlace } from "@/lib/places/extract";
@@ -2458,6 +2459,7 @@ export const ALL_TOOLS = {
   analyze_progress_photo: analyzeProgressPhotoTool,
   compare_progress_photos: compareProgressPhotosTool,
   synthesize_progress: synthesizeProgressTool,
+  log_workout: logWorkoutTool,
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

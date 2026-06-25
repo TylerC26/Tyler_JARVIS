@@ -608,6 +608,55 @@ export type Meal = {
   updated_at: string | null;
 };
 
+// ---------- gym / training log ----------
+// Structured strength log fed by Matt (the personal-trainer agent) via the
+// log_workout chat tool. gym_sessions = one training session (also = one
+// attendance day on the /gym heat map); gym_exercise_logs = one exercise within
+// a session, with its sets as jsonb plus pre-computed summary columns (top set /
+// est. 1RM / volume) so progression charts need no per-row math. The older
+// workout_sessions/exercises/sets tables in the schema are dead legacy with no
+// app code paths (cf. the weight_logs note in migration 0050). See lib/db/core/gym.ts.
+
+export type GymSource = "matt" | "manual" | "apple_watch";
+
+export type GymSet = {
+  reps: number;
+  weight_kg: number;
+  rpe?: number | null;
+  warmup?: boolean;
+};
+
+export type GymSession = {
+  id: string;
+  owner_id: string;
+  performed_at: string;
+  title: string | null;
+  notes: string | null;
+  source: GymSource;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type GymExerciseLog = {
+  id: string;
+  owner_id: string;
+  session_id: string;
+  exercise: string;
+  exercise_slug: string;
+  sets: GymSet[];
+  top_weight_kg: number | null;
+  est_1rm_kg: number | null;
+  total_volume_kg: number | null;
+  performed_at: string;
+  created_at: string;
+};
+
+// A session joined with its exercise logs — the shape /gym reads for the
+// recent-sessions list.
+export type GymSessionWithLogs = GymSession & {
+  exercises: GymExerciseLog[];
+};
+
 export type Place = {
   id: string;
   owner_id: string;
@@ -1271,6 +1320,39 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<ProgressPhoto>;
+        Relationships: [];
+      };
+      gym_sessions: {
+        Row: GymSession;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          performed_at?: string;
+          title?: string | null;
+          notes?: string | null;
+          source?: GymSource;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<GymSession>;
+        Relationships: [];
+      };
+      gym_exercise_logs: {
+        Row: GymExerciseLog;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          session_id: string;
+          exercise: string;
+          exercise_slug: string;
+          sets?: GymSet[];
+          top_weight_kg?: number | null;
+          est_1rm_kg?: number | null;
+          total_volume_kg?: number | null;
+          performed_at: string;
+          created_at?: string;
+        };
+        Update: Partial<GymExerciseLog>;
         Relationships: [];
       };
     };
