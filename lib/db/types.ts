@@ -506,6 +506,7 @@ export type Note = {
   body: string;
   category: string;
   pinned: boolean;
+  project_id: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -1220,6 +1221,7 @@ export type Database = {
           body?: string;
           category?: string;
           pinned?: boolean;
+          project_id?: string | null;
           created_at?: string;
           updated_at?: string | null;
         };
