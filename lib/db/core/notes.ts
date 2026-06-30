@@ -11,10 +11,11 @@ export type CreateNoteInput = {
   body: string;
   category?: string;
   pinned?: boolean;
+  project_id?: string | null;
 };
 
 export type UpdateNoteInput = Partial<
-  Pick<Note, "title" | "body" | "category" | "pinned">
+  Pick<Note, "title" | "body" | "category" | "pinned" | "project_id">
 >;
 
 type CoreResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -28,6 +29,7 @@ function normalizeCategory(c: string | undefined | null): string {
 
 export async function listNotesCore(opts?: {
   category?: string;
+  project_id?: string;
 }): Promise<Note[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
@@ -39,6 +41,7 @@ export async function listNotesCore(opts?: {
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
   if (opts?.category) q = q.eq("category", normalizeCategory(opts.category));
+  if (opts?.project_id) q = q.eq("project_id", opts.project_id);
   const { data } = await q;
   return (data as Note[] | null) ?? [];
 }
@@ -72,6 +75,7 @@ export async function createNoteCore(
       body,
       category: normalizeCategory(input.category),
       pinned: input.pinned ?? false,
+      project_id: input.project_id ?? null,
     })
     .select()
     .single();
@@ -100,6 +104,7 @@ export async function updateNoteCore(
     updates.category = normalizeCategory(patch.category);
   }
   if (patch.pinned !== undefined) updates.pinned = patch.pinned;
+  if (patch.project_id !== undefined) updates.project_id = patch.project_id;
 
   const { data, error } = await supabase
     .from("notes")
@@ -171,4 +176,57 @@ export async function searchNotesCore(
   }
   const { data } = await req;
   return (data as Note[] | null) ?? [];
+}
+
+// Notes linked to a project — the // notes section on the project detail page.
+export async function listNotesByProjectCore(
+  projectId: string,
+): Promise<Note[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  return (data as Note[] | null) ?? [];
+}
+
+// Recent notes not yet attached to any project — the candidate pool for the
+// "attach note" picker on a project page. Capped: a shortlist, not an archive.
+export async function listAttachableNotesCore(limit = 25): Promise<Note[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .is("project_id", null)
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data as Note[] | null) ?? [];
+}
+
+// Attach (projectId) or detach (null) a note. Owner-scoped so a stray id can't
+// reassign someone else's note.
+export async function setNoteProjectCore(
+  noteId: string,
+  projectId: string | null,
+): Promise<CoreResult<Note>> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  if (!noteId) return { ok: false, error: "Note id is required." };
+
+  const { data, error } = await supabase
+    .from("notes")
+    .update({ project_id: projectId, updated_at: new Date().toISOString() })
+    .eq("owner_id", getOwnerId())
+    .eq("id", noteId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as Note };
 }
