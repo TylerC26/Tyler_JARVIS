@@ -84,20 +84,21 @@ export function ProjectNotes({
     }
   }
 
-  async function onDelete(n: Note) {
+  async function onDelete(n: Note): Promise<boolean> {
     const ok = await confirmDialog("Delete this note permanently?", {
       title: "delete note",
       confirmText: "delete",
     });
-    if (!ok) return;
+    if (!ok) return false;
     setBusyId(n.id);
     const result = await deleteProjectNoteAction(n.id, projectSlug);
     setBusyId(null);
     if (!result.ok) {
       await alertDialog(`Failed: ${result.error}`, { title: "delete failed" });
-      return;
+      return false;
     }
     setNotes((prev) => prev.filter((x) => x.id !== n.id));
+    return true;
   }
 
   async function onDetach(n: Note) {
@@ -232,8 +233,7 @@ export function ProjectNotes({
                 onClick={() => {
                   const n = editing;
                   void (async () => {
-                    await onDelete(n);
-                    setEditing(null);
+                    if (await onDelete(n)) setEditing(null);
                   })();
                 }}
               >
