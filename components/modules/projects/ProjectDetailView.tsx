@@ -19,11 +19,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { LaunchBar } from "./LaunchBar";
 import { LinksEditor } from "./LinksEditor";
 import { ProjectMeetings } from "./ProjectMeetings";
+import { ProjectNotes } from "./ProjectNotes";
 import { ProjectTaskBoard } from "./ProjectTaskBoard";
 import { RoadmapStrip } from "./RoadmapStrip";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
 import type { MeetingListRow } from "@/lib/db/queries/meetings";
 import type {
+  Note,
   ProjectCategory,
   ProjectLink,
   ProjectMilestone,
@@ -45,6 +47,8 @@ type Props = {
   tasks: Task[];
   meetings: MeetingListRow[];
   attachableMeetings: MeetingListRow[];
+  notes: Note[];
+  attachableNotes: Note[];
 };
 
 export function ProjectDetailView({
@@ -53,6 +57,8 @@ export function ProjectDetailView({
   tasks,
   meetings,
   attachableMeetings,
+  notes,
+  attachableNotes,
 }: Props) {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>(initialMilestones);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | "new" | null>(null);
@@ -247,10 +253,19 @@ export function ProjectDetailView({
         />
       </div>
 
+      <div className="mt-6">
+        <ProjectNotes
+          projectId={project.id}
+          projectSlug={project.slug}
+          notes={notes}
+          attachable={attachableNotes}
+        />
+      </div>
+
       {project.notes && (
         <div className="mb-6 rounded-md border border-edge bg-surface/40 p-4">
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
-            // notes
+            // summary
           </div>
           <pre className="whitespace-pre-wrap font-mono text-[12px] text-fg-muted">
             {project.notes}
@@ -445,7 +460,7 @@ export function ProjectDetailView({
                 className="flex-1 resize-none"
               />
             </Field>
-            <Field label="Notes" hint="freeform; shown on this page" className="min-h-[160px] md:flex-1">
+            <Field label="Summary" hint="freeform; shown on this page" className="min-h-[160px] md:flex-1">
               <Textarea
                 name="notes"
                 defaultValue={project.notes ?? ""}

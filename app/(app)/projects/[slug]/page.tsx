@@ -9,6 +9,7 @@ import {
   listAttachableMeetings,
   listProjectMeetings,
 } from "@/lib/db/queries/meetings";
+import { listAttachableNotes, listProjectNotes } from "@/lib/db/queries/notes";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,15 @@ export default async function ProjectDetailPage({ params }: Props) {
   const { slug } = await params;
   const project = await getProjectSummary(slug);
   if (!project) notFound();
-  const [milestones, tasks, meetings, attachableMeetings] = await Promise.all([
-    listProjectMilestones(project.id),
-    listProjectTasks(project.id),
-    listProjectMeetings(project.id),
-    listAttachableMeetings(),
-  ]);
+  const [milestones, tasks, meetings, attachableMeetings, notes, attachableNotes] =
+    await Promise.all([
+      listProjectMilestones(project.id),
+      listProjectTasks(project.id),
+      listProjectMeetings(project.id),
+      listAttachableMeetings(),
+      listProjectNotes(project.id),
+      listAttachableNotes(),
+    ]);
   return (
     <ProjectDetailView
       project={project}
@@ -31,6 +35,8 @@ export default async function ProjectDetailPage({ params }: Props) {
       tasks={tasks}
       meetings={meetings}
       attachableMeetings={attachableMeetings}
+      notes={notes}
+      attachableNotes={attachableNotes}
     />
   );
 }
