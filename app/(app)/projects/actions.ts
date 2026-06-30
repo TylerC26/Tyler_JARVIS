@@ -15,6 +15,12 @@ import {
   type UpdateProjectInput,
 } from "@/lib/db/core/projects";
 import { setMeetingProjectCore } from "@/lib/db/core/meetings";
+import {
+  createNoteCore,
+  deleteNoteCore,
+  setNoteProjectCore,
+  updateNoteCore,
+} from "@/lib/db/core/notes";
 
 function bump(slug?: string) {
   revalidatePath("/projects");
@@ -113,5 +119,65 @@ export async function detachMeetingAction(meetingId: string, slug: string) {
   bump(slug);
   return result.ok
     ? { ok: true as const, meeting: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+export async function addProjectNoteAction(
+  input: { project_id: string; title?: string; body: string },
+  slug: string,
+) {
+  const result = await createNoteCore({
+    project_id: input.project_id,
+    title: input.title,
+    body: input.body,
+  });
+  bump(slug);
+  revalidatePath("/notes");
+  return result.ok
+    ? { ok: true as const, note: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+export async function updateProjectNoteAction(
+  id: string,
+  patch: { title?: string; body?: string },
+  slug: string,
+) {
+  const result = await updateNoteCore(id, patch);
+  bump(slug);
+  revalidatePath("/notes");
+  return result.ok
+    ? { ok: true as const, note: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+export async function deleteProjectNoteAction(id: string, slug: string) {
+  const result = await deleteNoteCore(id);
+  bump(slug);
+  revalidatePath("/notes");
+  return result.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: result.error };
+}
+
+export async function attachNoteAction(
+  noteId: string,
+  projectId: string,
+  slug: string,
+) {
+  const result = await setNoteProjectCore(noteId, projectId);
+  bump(slug);
+  revalidatePath("/notes");
+  return result.ok
+    ? { ok: true as const, note: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+export async function detachNoteAction(noteId: string, slug: string) {
+  const result = await setNoteProjectCore(noteId, null);
+  bump(slug);
+  revalidatePath("/notes");
+  return result.ok
+    ? { ok: true as const, note: result.data }
     : { ok: false as const, error: result.error };
 }
