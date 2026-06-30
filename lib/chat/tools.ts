@@ -1247,20 +1247,36 @@ export const saveNoteTool = tool({
       .boolean()
       .optional()
       .describe("Pin if this should float to the top of the notes list."),
+    project: z
+      .string()
+      .optional()
+      .describe(
+        "Optional project (id, slug, or name) to file this note under, so it appears in that project's notes section. Pass the slug of the project Tyler currently has open (see CURRENT PAGE) when the note is about it.",
+      ),
   }),
   execute: async (input) => {
+    let project_id: string | null = null;
+    if (input.project) {
+      const project = await findProjectCore(input.project.trim());
+      if (!project)
+        return { ok: false, error: `No project matches "${input.project}".` };
+      project_id = project.id;
+    }
     const result = await createNoteCore({
       title: input.title,
       body: input.body,
       category: input.category,
       pinned: input.pinned ?? false,
+      project_id,
     });
     if (!result.ok) return { ok: false, error: result.error };
     return {
       ok: true,
       note_id: result.data.id,
       category: result.data.category,
-      message: `Saved to /notes · ${result.data.category}`,
+      message: project_id
+        ? `Saved to /notes and the project · ${result.data.category}`
+        : `Saved to /notes · ${result.data.category}`,
     };
   },
 });
@@ -1299,6 +1315,12 @@ export const readNotesTool = tool({
       .string()
       .optional()
       .describe("Filter to a single category slug."),
+    project: z
+      .string()
+      .optional()
+      .describe(
+        "Filter to notes filed under a project (id, slug, or name).",
+      ),
     list_categories: z
       .boolean()
       .optional()
@@ -1311,15 +1333,25 @@ export const readNotesTool = tool({
       .optional()
       .describe("Max results. Defaults to 20."),
   }),
-  execute: async ({ query, category, list_categories, limit }) => {
+  execute: async ({ query, category, project, list_categories, limit }) => {
     if (list_categories) {
       const cats = await listNoteCategoriesCore();
       return { ok: true, categories: cats };
     }
+    let project_id: string | undefined;
+    if (project) {
+      const p = await findProjectCore(project.trim());
+      if (!p) return { ok: false, error: `No project matches "${project}".` };
+      project_id = p.id;
+    }
     const limitN = limit ?? 20;
-    const notes = query
+    const found = query
       ? await searchNotesCore(query, { limit: limitN, category })
-      : (await listNotesCore({ category })).slice(0, limitN);
+      : (await listNotesCore({ category, project_id })).slice(0, limitN);
+    // searchNotesCore has no project filter, so scope its results here too.
+    const notes = project_id
+      ? found.filter((n) => n.project_id === project_id)
+      : found;
     return {
       ok: true,
       count: notes.length,
@@ -1328,6 +1360,7 @@ export const readNotesTool = tool({
         title: n.title,
         category: n.category,
         pinned: n.pinned,
+        project_id: n.project_id,
         body: n.body,
         updated_at: n.updated_at ?? n.created_at,
       })),
