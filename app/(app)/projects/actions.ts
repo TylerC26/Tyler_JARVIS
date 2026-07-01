@@ -21,6 +21,13 @@ import {
   setNoteProjectCore,
   updateNoteCore,
 } from "@/lib/db/core/notes";
+import { createTaskCore } from "@/lib/db/core/tasks";
+import {
+  assistNote,
+  extractTaskTitles,
+  type NoteAssistMode,
+} from "@/lib/ai/notes/assist";
+import type { Task } from "@/lib/db/types";
 
 function bump(slug?: string) {
   revalidatePath("/projects");
@@ -123,13 +130,14 @@ export async function detachMeetingAction(meetingId: string, slug: string) {
 }
 
 export async function addProjectNoteAction(
-  input: { project_id: string; title?: string; body: string },
+  input: { project_id: string; title?: string; body: string; pinned?: boolean },
   slug: string,
 ) {
   const result = await createNoteCore({
     project_id: input.project_id,
     title: input.title,
     body: input.body,
+    pinned: input.pinned,
   });
   bump(slug);
   revalidatePath("/notes");
@@ -140,7 +148,7 @@ export async function addProjectNoteAction(
 
 export async function updateProjectNoteAction(
   id: string,
-  patch: { title?: string; body?: string },
+  patch: { title?: string; body?: string; pinned?: boolean },
   slug: string,
 ) {
   const result = await updateNoteCore(id, patch);
@@ -180,4 +188,59 @@ export async function detachNoteAction(noteId: string, slug: string) {
   return result.ok
     ? { ok: true as const, note: result.data }
     : { ok: false as const, error: result.error };
+}
+
+// Quick-add a task straight onto the project board. Mirrors quickAddTask but
+// returns the created row so the board can insert it optimistically.
+export async function addProjectTaskAction(
+  title: string,
+  projectId: string,
+  slug: string,
+) {
+  const result = await createTaskCore({ title, project_id: projectId });
+  bump(slug);
+  revalidatePath("/tasks");
+  return result.ok
+    ? { ok: true as const, task: result.data }
+    : { ok: false as const, error: result.error };
+}
+
+// Claudia composer helpers. tidy/summarize return cleaned text for the textarea;
+// no DB writes, so nothing to revalidate.
+export async function claudiaNoteAssistAction(
+  mode: NoteAssistMode,
+  text: string,
+) {
+  const result = await assistNote(mode, text);
+  return result.ok
+    ? { ok: true as const, text: result.data.text }
+    : { ok: false as const, error: result.error };
+}
+
+// EXTRACT TASKS: Claudia pulls action items from the braindump, then we create
+// them as real tasks on this project's board. Returns the created rows so the
+// client can drop them straight into the board without a refetch.
+export async function extractTasksFromNoteAction(
+  text: string,
+  projectId: string,
+  slug: string,
+) {
+  const titles = await extractTaskTitles(text);
+  if (!titles.ok) return { ok: false as const, error: titles.error };
+  if (titles.data.length === 0) {
+    return { ok: true as const, tasks: [] as Task[] };
+  }
+
+  const created: Task[] = [];
+  for (const title of titles.data) {
+    const result = await createTaskCore({ title, project_id: projectId });
+    if (result.ok) created.push(result.data);
+  }
+
+  if (created.length === 0) {
+    return { ok: false as const, error: "Could not create the extracted tasks." };
+  }
+  bump(slug);
+  revalidatePath("/tasks");
+  return { ok: true as const, tasks: created };
 }

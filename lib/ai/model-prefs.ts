@@ -29,6 +29,7 @@ export type FeatureKey =
   | "wife_shifts_extract"
   | "meeting_finalize"
   | "agent_draft"
+  | "note_assist"
   | "vision_analyze"
   | "ocr_extract";
 
@@ -195,6 +196,16 @@ export const FEATURES: FeatureDef[] = [
     label: "Agent drafting",
     description: "Drafts a sub-agent's spec from a description.",
     group: "Agents",
+    defaultTier: "sonnet",
+    visionRequired: false,
+    routed: false,
+  },
+  {
+    key: "note_assist",
+    label: "Note assist (Claudia)",
+    description:
+      "Project-note composer helpers — tidy up, summarize, and extract tasks from a braindump.",
+    group: "Tools",
     defaultTier: "sonnet",
     visionRequired: false,
     routed: false,

@@ -48,6 +48,12 @@ export type Project = {
   description: string | null;
   status: ProjectStatus;
   category: ProjectCategory;
+  // Free-text program phase shown in the detail header metric row (migration
+  // 0061), e.g. "L3 PROGRAM". Distinct from the work/other `category` bucket.
+  phase: string | null;
+  // Free-form chips under the project title (migration 0061), e.g.
+  // ["side-business", "data-center", "commissioning"].
+  tags: string[];
   color: string | null;
   started_at: string | null;
   target_date: string | null;
@@ -943,6 +949,8 @@ export type Database = {
           description?: string | null;
           status?: ProjectStatus;
           category?: ProjectCategory;
+          phase?: string | null;
+          tags?: string[];
           color?: string | null;
           started_at?: string | null;
           target_date?: string | null;

@@ -14,6 +14,8 @@ export type CreateProjectInput = {
   description?: string | null;
   status?: ProjectStatus;
   category?: ProjectCategory;
+  phase?: string | null;
+  tags?: string[];
   color?: string | null;
   started_at?: string | null;
   target_date?: string | null;
@@ -30,6 +32,8 @@ export type UpdateProjectInput = Partial<
     | "description"
     | "status"
     | "category"
+    | "phase"
+    | "tags"
     | "color"
     | "started_at"
     | "target_date"
@@ -50,6 +54,22 @@ function cleanLinks(links: ProjectLink[]): ProjectLink[] {
       url: (l.url || "").trim(),
     }))
     .filter((l) => l.url.length > 0);
+}
+
+// Trim, drop blanks, and de-dupe (case-preserving, first-wins) so the tag chips
+// stay tidy regardless of how the edit form serialized them.
+function cleanTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const t = (raw || "").trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
 }
 
 export type CreateMilestoneInput = {
@@ -188,6 +208,8 @@ export async function createProjectCore(
       description: input.description ?? null,
       status: input.status ?? "active",
       category: input.category ?? "other",
+      phase: input.phase ?? null,
+      tags: input.tags ? cleanTags(input.tags) : [],
       color: input.color ?? null,
       started_at: input.started_at ?? null,
       target_date: input.target_date ?? null,
@@ -220,6 +242,8 @@ export async function updateProjectCore(
   if (patch.description !== undefined) updates.description = patch.description;
   if (patch.status !== undefined) updates.status = patch.status;
   if (patch.category !== undefined) updates.category = patch.category;
+  if (patch.phase !== undefined) updates.phase = patch.phase;
+  if (patch.tags !== undefined) updates.tags = cleanTags(patch.tags);
   if (patch.color !== undefined) updates.color = patch.color;
   if (patch.started_at !== undefined) updates.started_at = patch.started_at;
   if (patch.target_date !== undefined) updates.target_date = patch.target_date;

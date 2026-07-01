@@ -44,17 +44,30 @@ export function ProjectMeetings({
   projectSlug,
   meetings: initialMeetings,
   attachable: initialAttachable,
+  // When embedded inside the Notes panel the host owns the section heading and
+  // the "+ ATTACH MEETING" trigger, so render header-less and let it drive the
+  // picker. Standalone usage keeps its own header + internal picker state.
+  embedded = false,
+  picking: pickingProp,
+  onPickingChange,
 }: {
   projectId: string;
   projectSlug: string;
   meetings: MeetingListRow[];
   attachable: MeetingListRow[];
+  embedded?: boolean;
+  picking?: boolean;
+  onPickingChange?: (open: boolean) => void;
 }) {
   const [meetings, setMeetings] = useState<MeetingListRow[]>(initialMeetings);
   const [attachable, setAttachable] = useState<MeetingListRow[]>(initialAttachable);
-  const [picking, setPicking] = useState(false);
+  const [internalPicking, setInternalPicking] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const picking = pickingProp ?? internalPicking;
+  const setPicking = (open: boolean) =>
+    onPickingChange ? onPickingChange(open) : setInternalPicking(open);
 
   async function onAttach(m: MeetingListRow) {
     setBusyId(m.id);
@@ -89,18 +102,23 @@ export function ProjectMeetings({
   }
 
   return (
-    <section className="mb-6">
+    <section className={embedded ? "" : "mb-6"}>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
-          // meeting notes
+          // meetings
+          {embedded && meetings.length > 0 && (
+            <span className="ml-2 text-fg-dim">{meetings.length}</span>
+          )}
         </h2>
-        <Button variant="ghost" onClick={() => setPicking(true)}>
-          + ATTACH MEETING
-        </Button>
+        {!embedded && (
+          <Button variant="ghost" onClick={() => setPicking(true)}>
+            + ATTACH MEETING
+          </Button>
+        )}
       </div>
 
       {meetings.length === 0 ? (
-        <div className="rounded-md border border-dashed border-edge bg-surface/20 px-3 py-6 text-center font-mono text-[11px] text-fg-dim">
+        <div className="rounded-md border border-dashed border-edge bg-surface/20 px-3 py-5 text-center font-mono text-[11px] text-fg-dim">
           no meetings linked — attach a recorded meeting to surface its notes here
         </div>
       ) : (
