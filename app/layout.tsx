@@ -48,6 +48,12 @@ export const viewport: Viewport = {
   themeColor: "#0a0a0c",
 };
 
+// Applied before first paint to prevent a flash of the wrong theme. This runs
+// before React hydrates, so it cannot import lib/theme — the "jarvis-theme" key
+// and the dark-is-default rule are duplicated here and MUST stay in sync with
+// lib/theme.ts. Dark is the absence of the `light` class.
+const themeInitScript = `(function(){try{if(localStorage.getItem('jarvis-theme')==='light'){document.documentElement.classList.add('light');}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,8 +62,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${chakraPetch.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );
