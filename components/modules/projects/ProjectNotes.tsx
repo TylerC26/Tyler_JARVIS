@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addProjectNoteAction,
   attachNoteAction,
@@ -27,6 +27,15 @@ function fmtShortDate(iso: string | null): string {
 }
 
 const IDLE_STATUS = "Claudia can tidy, summarize, or extract tasks from a braindump";
+
+// Grow the composer textarea to fit its content so notes never scroll inside
+// the box. CSS min-height still floors it, so short notes keep a comfortable
+// height.
+function autoSize(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
 
 export function ProjectNotes({
   projectId,
@@ -63,6 +72,12 @@ export function ProjectNotes({
   const [notePicking, setNotePicking] = useState(false);
   const [meetingPicking, setMeetingPicking] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Keep the textarea sized to its content whenever the body changes —
+  // whether typed, loaded for edit, rewritten by Claudia, or reset.
+  useEffect(() => {
+    autoSize(taRef.current);
+  }, [body]);
 
   function resetComposer() {
     setEditingId(null);
@@ -277,7 +292,8 @@ export function ProjectNotes({
               }
             }}
             placeholder="› dump your messy notes here… Claudia will clean them up"
-            className="min-h-[150px] w-full resize-y bg-transparent px-4 py-3.5 font-mono text-[13px] leading-relaxed text-fg placeholder:text-fg-dim focus:outline-none"
+            rows={1}
+            className="min-h-[150px] w-full resize-none overflow-hidden bg-transparent px-4 py-3.5 font-mono text-[13px] leading-relaxed text-fg placeholder:text-fg-dim focus:outline-none"
           />
           {/* Claudia assist bar */}
           <div className="flex flex-wrap items-center gap-2.5 border-t border-edge bg-[#e8923a]/[0.04] px-3.5 py-2.5">
