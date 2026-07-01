@@ -101,6 +101,33 @@ body {
   box-shadow: none;
 }
 
+/* Inline cyan glow utilities — arbitrary `[text-shadow:0_0_…]` and `shadow-[0_0_…]`
+   values scattered across dashboard + office components — can't be reached by the
+   token swap. Every inline glow in the app is a dark-theme cyan bloom, so
+   neutralize them wholesale in light. The `.light [class*=…]` selectors outrank
+   the single utility class on specificity, so dark mode is untouched. */
+.light [class*="text-shadow:0_0_"] {
+  text-shadow: none;
+}
+.light [class*="shadow-[0_0_"] {
+  box-shadow: none;
+}
+
+/* Panel hover bloom is hardcoded cyan (.hud-panel:hover) — give light a soft
+   neutral elevation instead of a neon glow. */
+.light .hud-panel:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 8px rgba(20, 21, 26, 0.1);
+}
+
+/* ProjectNotes assist/status text is tuned to glow on black — darken to a
+   readable amber on the light note surface (WCAG AA). */
+.light [class*="text-[#e8a868]"],
+.light [class*="text-[#d8a878]"] {
+  color: #b45309;
+}
+
 @keyframes blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }

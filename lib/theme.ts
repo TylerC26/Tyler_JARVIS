@@ -13,16 +13,24 @@ export function normalizeTheme(value: unknown): Theme {
   return value === "light" || value === "dark" ? value : DEFAULT_THEME;
 }
 
-/** Read the persisted theme. SSR-safe: returns the default off the browser. */
+/** Read the persisted theme. SSR-safe; falls back to the default if storage throws. */
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  return normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+  try {
+    return normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+  } catch {
+    return DEFAULT_THEME;
+  }
 }
 
-/** Persist the chosen theme for this device. No-op off the browser. */
+/** Persist the chosen theme for this device. No-op off the browser or if storage throws. */
 export function setStoredTheme(theme: Theme): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // storage may be unavailable (private mode / blocked cookies) — ignore
+  }
 }
 
 /** Reflect the theme on <html>. Dark removes the class; light adds it. */
