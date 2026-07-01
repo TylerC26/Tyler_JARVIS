@@ -46,6 +46,61 @@ body {
   color: var(--color-base);
 }
 
+/* ============================================================
+   LIGHT THEME
+   Re-declares the @theme color tokens for `<html class="light">`.
+   Because every `bg-surface`/`text-fg`/… utility compiles to
+   var(--color-*), overriding the variables here re-themes the whole
+   app with no component changes. Dark = absence of this class.
+   ============================================================ */
+.light {
+  --color-base: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef0f3;
+  --color-edge: #e2e4ea;
+  --color-edge-strong: #cdd0d8;
+
+  --color-fg: #14151a;
+  --color-fg-muted: #5c5f6b;
+  --color-fg-dim: #9aa0ab;
+
+  --color-accent: #0891b2;
+  --color-accent-dim: #7dd3e8;
+
+  --color-success: #15803d;
+  --color-warn: #b45309;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+}
+
+/* --- Decoration overrides: HUD effects hardcoded for the dark base --- */
+
+/* The ambient grid is drawn with faint white lines — invisible on light.
+   Redraw it with faint dark lines at the same 32px cadence. */
+.light body {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+}
+
+/* Panels use heavy dark inset shadows for depth on the black base. On light,
+   swap for a soft top highlight + subtle drop shadow. */
+.light .hud-panel {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(20, 21, 26, 0.06);
+}
+
+/* Cyan phosphor glow reads as a muddy haze on white — flatten to a crisp label. */
+.light .phosphor {
+  text-shadow: none;
+}
+
+/* Drop the neon bloom on the prompt caret for light. */
+.light .block-caret {
+  box-shadow: none;
+}
+
 @keyframes blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
