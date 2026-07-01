@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { savePromptSettingsAction } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/settings/ThemeToggle";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -185,6 +186,19 @@ export function SettingsView({ initialSettings, defaults }: Props) {
       )}
 
       <div className="flex flex-col gap-6">
+        <section className="rounded-md border border-edge bg-surface/40 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+              Appearance
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-mono text-[11px] text-fg-muted">
+              Interface theme · saved on this device
+            </p>
+            <ThemeToggle />
+          </div>
+        </section>
         {fields.map((f) => {
           const current = valueFor(f.key);
           const usingDefault = !current.trim();
