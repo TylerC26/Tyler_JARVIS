@@ -146,18 +146,25 @@ const MAX_PROJECTS_IN_PREFIX = 10;
 // pinned + semantic + recency ranking (see lib/db/core/memory.ts).
 const MAX_MEMORIES_IN_PREFIX = 40;
 
+// UI capability contract for generated HTML: Message.tsx renders fenced html
+// blocks as artifact cards with a popup iframe viewer. Appended to whichever
+// orchestrator prompt is active (default or /settings override) — it describes
+// an app feature, not Tyler's editable persona, so an override must not drop it.
+const HTML_ARTIFACT_PROMPT = `HTML artifacts: when Tyler asks you to build, mock up, or generate a web page, dashboard, chart, form, mockup, mini-app, or any other visual/interactive content, produce a SINGLE self-contained HTML document in a fenced \`\`\`html code block. The chat UI renders that block as an artifact card that opens a live popup preview, so this is how you "show" him things. Inline all CSS and JS in the one document (CDN <script> tags are fine), never reference local files, and make it look polished — real styling, not bare-bones markup. Keep any prose outside the fence to a line or two; the artifact is the deliverable.`;
+
 // Resolve the active orchestrator prompt: if the user has saved a non-empty
 // override on /settings, use it; otherwise fall back to the hard-coded default.
 // Wrapped in try/catch so a DB hiccup never bricks the chat path.
 export async function getActiveOrchestratorPrompt(): Promise<string> {
+  let base = CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT;
   try {
     const settings = await getPromptSettingsCore();
     const override = settings.orchestrator_prompt?.trim();
-    if (override && override.length > 0) return override;
+    if (override && override.length > 0) base = override;
   } catch (e) {
     console.warn("[chat] could not load orchestrator prompt override:", e);
   }
-  return CLAUDE_ORCHESTRATOR_SYSTEM_PROMPT;
+  return `${base}\n\n${HTML_ARTIFACT_PROMPT}`;
 }
 
 export async function getActiveResponderPrompt(): Promise<string> {

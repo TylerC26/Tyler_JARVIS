@@ -1,8 +1,11 @@
 "use client";
 
+import { Fragment } from "react";
 import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
+import { splitHtmlSegments } from "@/lib/chat/htmlArtifacts";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { DelegationCard } from "./DelegationCard";
+import { HtmlArtifact } from "./HtmlArtifact";
 import { ToolCallCard } from "./ToolCallCard";
 
 const ACCENT = "#00d9ff";
@@ -112,13 +115,23 @@ export function Message({
       >
         {message.parts.map((part, i) => {
           if (part.type === "text") {
+            // Generated HTML renders as an artifact card that opens a popup
+            // viewer instead of dumping raw markup into the bubble.
             return (
-              <p
-                key={i}
-                className="whitespace-pre-wrap leading-relaxed text-sm"
-              >
-                {part.text}
-              </p>
+              <Fragment key={i}>
+                {splitHtmlSegments(part.text).map((seg, j) =>
+                  seg.kind === "html" ? (
+                    <HtmlArtifact key={j} html={seg.html} streaming={seg.open} />
+                  ) : (
+                    <p
+                      key={j}
+                      className="whitespace-pre-wrap leading-relaxed text-sm"
+                    >
+                      {seg.text}
+                    </p>
+                  ),
+                )}
+              </Fragment>
             );
           }
           if (part.type === "file") {
