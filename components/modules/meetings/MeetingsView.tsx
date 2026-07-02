@@ -13,7 +13,7 @@ import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeetingListRow } from "@/lib/db/core/meetings";
 import type { MeetingStatus } from "@/lib/db/types";
-import { RecordController } from "./RecordController";
+import { LiveMeetingPanel } from "./LiveMeetingPanel";
 import { StatusPill, fmtAge, fmtDuration } from "./meetingUi";
 
 type Props = {
@@ -93,20 +93,20 @@ export function MeetingsView({ initialMeetings, eventId, eventTitle }: Props) {
       <PageHeader
         code="MTG"
         title="Meetings"
-        subtitle={`${meetings.length} recorded${liveCount ? ` · ${liveCount} in progress` : ""}`}
+        subtitle={`${meetings.length} recorded${liveCount ? ` · ${liveCount} live` : ""}`}
         actions={
           <Button
             variant="primary"
             size="sm"
             onClick={() => setShowForm((v) => !v)}
           >
-            {showForm ? "cancel" : "+ new"}
+            {showForm ? "cancel" : "+ paste transcript"}
           </Button>
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-3 space-y-4">
-        <RecordController eventId={eventId} eventTitle={eventTitle} />
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <LiveMeetingPanel eventId={eventId} eventTitle={eventTitle} />
 
         {showForm && (
           <form
@@ -149,15 +149,24 @@ export function MeetingsView({ initialMeetings, eventId, eventTitle }: Props) {
           </form>
         )}
 
+        <div className="flex items-center gap-3 pt-2">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-dim">
+            // recorded
+          </span>
+          <span className="h-px flex-1 bg-edge" aria-hidden />
+          <span className="font-mono text-[11px] text-fg-dim">
+            {meetings.length} meeting{meetings.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
         {meetings.length === 0 ? (
-          <div className="grid place-items-center h-48">
+          <div className="grid place-items-center h-40">
             <p className="font-mono text-sm text-fg-dim text-center">
-              // no meetings yet — hit ● record above, or + new to summarize a
-              pasted transcript
+              // no meetings yet — hit ● record above, or paste a transcript
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5 pb-2">
             {meetings.map((m) => (
               <MeetingRow
                 key={m.id}
@@ -180,17 +189,17 @@ function MeetingRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="rounded-sm border border-edge bg-surface-2/40 px-4 py-3 flex items-start justify-between gap-4 transition-colors hover:border-edge-strong">
-      <Link href={`/meetings/${meeting.id}`} className="flex-1 min-w-0 group">
-        <div className="flex items-center gap-2 flex-wrap">
-          <StatusPill status={meeting.status} />
-          <span className="font-mono text-sm text-fg group-hover:text-accent transition-colors truncate">
-            {meeting.title || (
-              <span className="text-fg-dim italic">untitled meeting</span>
-            )}
-          </span>
+    <div className="flex items-center gap-4 rounded-sm border border-edge bg-surface-2/40 px-4 py-3.5 transition-colors hover:border-accent/30">
+      <span className="shrink-0">
+        <StatusPill status={meeting.status} />
+      </span>
+      <Link href={`/meetings/${meeting.id}`} className="group min-w-0 flex-1">
+        <div className="truncate font-mono text-sm text-fg transition-colors group-hover:text-accent">
+          {meeting.title || (
+            <span className="text-fg-dim italic">untitled meeting</span>
+          )}
         </div>
-        <p className="font-mono text-[10px] text-fg-dim mt-1">
+        <p className="mt-1.5 font-mono text-[10px] text-fg-dim">
           {fmtAge(meeting.started_at)}
           {meeting.duration_ms != null
             ? ` · ${fmtDuration(meeting.duration_ms)}`
@@ -200,11 +209,19 @@ function MeetingRow({
           {meeting.project_id ? " · project" : ""}
         </p>
       </Link>
-      <div className="shrink-0">
-        <Button size="sm" variant="danger" onClick={onDelete}>
-          del
-        </Button>
-      </div>
+      <Link
+        href={`/meetings/${meeting.id}`}
+        className="shrink-0 rounded-sm border border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition-colors hover:border-accent/40 hover:text-accent"
+      >
+        transcript
+      </Link>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="shrink-0 rounded-sm border border-danger/25 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-danger/80 transition-colors hover:border-danger/50 hover:text-danger"
+      >
+        del
+      </button>
     </div>
   );
 }

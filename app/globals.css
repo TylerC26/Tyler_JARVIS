@@ -178,6 +178,18 @@ body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+/* Live-audio equalizer bars (meetings recorder). Each bar oscillates on its
+   own duration/delay (set inline); the wrapper scales with the input level. */
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.28); }
+  50% { transform: scaleY(1); }
+}
+
+.eq-bar {
+  transform-origin: center;
+  animation: eq-bar 0.9s ease-in-out infinite;
+}
+
 /* Orchestrator → agent delegation card. Packets travel the connector from
    the Jarvis node to the sub-agent node while the delegated task runs. */
 @keyframes delegate-flow {

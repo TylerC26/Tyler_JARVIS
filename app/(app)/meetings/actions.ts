@@ -5,6 +5,7 @@ import {
   createMeetingCore,
   deleteMeetingCore,
   getMeetingCore,
+  listChunksCore,
   setMeetingProjectCore,
   updateMeetingCore,
   type CreateMeetingInput,
@@ -82,6 +83,39 @@ export async function promoteActionItemsAction(
     bumpMeetings();
   }
   return { ok: true, data: await listTasksByMeetingCore(meetingId) };
+}
+
+export type LiveChunkRow = {
+  idx: number;
+  status: "pending" | "uploaded" | "transcribed" | "failed";
+  transcript: string;
+};
+
+// Slim chunk rows for the live-meeting panel's transcript feed. Chunks
+// transcribe as they upload (~every 5 min), so polling this during a recording
+// surfaces each segment's text as soon as Whisper returns it.
+export async function listChunkTranscriptsAction(
+  meetingId: string,
+): Promise<LiveChunkRow[]> {
+  const chunks = await listChunksCore(meetingId);
+  return chunks.map((c) => ({
+    idx: c.idx,
+    status: c.status,
+    transcript: c.transcript,
+  }));
+}
+
+// The finalized meeting's notes for the in-place rail after stop — the summary
+// markdown is parsed client-side by lib/meetings/summarySections.
+export async function getMeetingNotesAction(id: string): Promise<{
+  id: string;
+  title: string;
+  status: string;
+  summary: string;
+} | null> {
+  const m = await getMeetingCore(id);
+  if (!m) return null;
+  return { id: m.id, title: m.title, status: m.status, summary: m.summary };
 }
 
 // Flip a finished meeting back to 'recording' so a new capture session can
