@@ -1,14 +1,11 @@
-import { AgentsPanel } from "@/components/modules/dashboard/AgentsPanel";
 import { BriefPanel } from "@/components/modules/dashboard/BriefPanel";
 import { GreetingStrip } from "@/components/modules/dashboard/GreetingStrip";
 import { GymPanel } from "@/components/modules/dashboard/GymPanel";
 import { HudBackdrop } from "@/components/modules/dashboard/HudBackdrop";
-import { PlacesPanel } from "@/components/modules/dashboard/PlacesPanel";
 import {
   StatRibbon,
   type StatCell,
 } from "@/components/modules/dashboard/StatRibbon";
-import { SystemPanel } from "@/components/modules/dashboard/SystemPanel";
 import { TasksPanel } from "@/components/modules/dashboard/TasksPanel";
 import { TodayPanel } from "@/components/modules/dashboard/TodayPanel";
 import { getLatestBrief } from "@/lib/ai/store";
@@ -25,7 +22,6 @@ import { listAgentsCore } from "@/lib/db/core/agents";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { gymAttendanceCore, gymStreak, listSessionsCore } from "@/lib/db/core/gym";
 import { listMeetingsCore } from "@/lib/db/core/meetings";
-import { listPlacesCore } from "@/lib/db/core/places";
 import { getSpendSummaryCore } from "@/lib/db/core/usage";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { listTasks } from "@/lib/db/queries/tasks";
@@ -50,7 +46,6 @@ export default async function DashboardPage() {
     events,
     shifts,
     allTasks,
-    places,
     spend,
     agents,
     runs,
@@ -62,7 +57,6 @@ export default async function DashboardPage() {
     listEventsInRangeCore(dayStart.toISOString(), dayEnd.toISOString()),
     listWifeShiftsInRangeCore(today, today),
     listTasks(),
-    listPlacesCore({ status: "want_to_go" }),
     getSpendSummaryCore(startOfOwnerMonth().toISOString()),
     listAgentsCore({ activeOnly: true }),
     listRecentAgentRunsCore(14),
@@ -161,30 +155,29 @@ export default async function DashboardPage() {
   return (
     <>
       <HudBackdrop />
-      <div className="flex flex-col gap-4">
+      {/* min-h = viewport minus the h-14 top bar and the main px/py gutters,
+          so the two columns stretch and the page has no dead zone below. */}
+      <div className="flex min-h-[calc(100dvh-3.5rem-2.75rem)] flex-col gap-4">
         <GreetingStrip wifeShift={shifts[0]?.code ?? null} />
         <StatRibbon cells={cells} />
-        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1.35fr_1fr_0.95fr]">
-          <div className="flex min-w-0 flex-col gap-4">
+        {/* Columns are grids (not flex) so the 1fr card absorbs the leftover
+            height — Panel's own h-full fights flex-1 sizing otherwise. */}
+        <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[1.35fr_1fr]">
+          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4">
             <BriefPanel brief={brief} />
             <TodayPanel events={events} />
           </div>
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="grid min-w-0 grid-rows-[1fr_auto] gap-4">
             <TasksPanel
               tasks={byUrgency.slice(0, TASK_ROWS)}
               total={open.length}
               overdue={overdue}
             />
-            <PlacesPanel places={places} />
             <GymPanel
               streak={streak}
               lastSession={gymSessions[0] ?? null}
               attendance={attendance}
             />
-          </div>
-          <div className="flex min-w-0 flex-col gap-4 md:col-span-2 md:grid md:grid-cols-2 md:items-start xl:col-span-1 xl:flex">
-            <SystemPanel />
-            <AgentsPanel agents={agents} runs={runs} />
           </div>
         </div>
       </div>
