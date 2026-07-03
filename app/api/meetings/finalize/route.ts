@@ -12,7 +12,7 @@
 // summarizes whatever transcribed (gaps noted in the transcript).
 
 import { NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { minimax } from "vercel-minimax-ai-provider";
 import { z } from "zod";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
@@ -110,6 +110,74 @@ function renderSummary(
     lines.push("## Attendees", s.attendees.join(", "), "");
   }
   return lines.join("\n").trim();
+}
+
+function eventHeader(event: Event | null): string {
+  if (!event) return "";
+  let when = "";
+  try {
+    when = new Date(event.starts_at).toISOString().slice(0, 10);
+  } catch {
+    when = "";
+  }
+  return `**Event:** ${event.title}${when ? ` — ${when}` : ""}\n\n`;
+}
+
+// Fallback summarizer: ask MiniMax for the summary AS markdown (plain text, no
+// tool-mode object generation) and use it directly. This is the reliable path
+// when generateObject fails schema validation — MiniMax-M3 is a reasoning model
+// behind an Anthropic-compat shim and doesn't always return valid tool output.
+// The section layout matches renderSummary so action items stay checkable and
+// everything downstream is identical.
+const MARKDOWN_SYSTEM = `${SUMMARY_SYSTEM}
+
+Write the result as GitHub-flavored markdown. Begin with a single title line "# <short specific title>". Then include ONLY the sections that apply, in this order, with these exact headings:
+## Summary
+<2-5 sentence prose recap>
+## Key points
+- <point>
+## Decisions
+- <decision>
+## Action items
+- [ ] <action, imperative voice> (<owner if identifiable>)
+## Attendees
+<comma-separated names>
+
+Every action item MUST start with "- [ ] " so it stays checkable. Omit a section entirely rather than pad it; never invent names or facts.`;
+
+async function summarizeAsMarkdown(
+  prompt: string,
+  event: Event | null,
+  checkedTexts: Set<string>,
+): Promise<{ title: string; bodyMd: string }> {
+  const { text } = await generateText({
+    model: minimax("MiniMax-M3"),
+    system: MARKDOWN_SYSTEM,
+    prompt,
+    maxOutputTokens: 2000,
+  });
+
+  // Pull the leading "# Title" line off the top; the rest is the body.
+  let title = "";
+  const bodyLines: string[] = [];
+  for (const line of text.trim().split("\n")) {
+    const m = !title ? line.match(/^#\s+(.+?)\s*$/) : null;
+    if (m) title = m[1].trim();
+    else bodyLines.push(line);
+  }
+
+  // Re-check action items the user had already ticked before a re-finalize.
+  const body = bodyLines
+    .join("\n")
+    .replace(/^(\s*[-*]\s*)\[ \]\s+(.+)$/gm, (full, pre, task) =>
+      checkedTexts.has(task.trim().toLowerCase()) ? `${pre}[x] ${task}` : full,
+    )
+    .trim();
+
+  return {
+    title: (title || "Meeting").slice(0, 120),
+    bodyMd: (eventHeader(event) + body).trim(),
+  };
 }
 
 export async function POST(req: Request) {
@@ -214,27 +282,11 @@ export async function POST(req: Request) {
   // The linked work event gives the summarizer context and the note a backlink.
   const event = meeting.event_id ? await getEventCore(meeting.event_id) : null;
 
-  let summary: Summary;
-  try {
-    const result = await generateObject({
-      model: minimax("MiniMax-M3"),
-      schema: SummarySchema,
-      system: SUMMARY_SYSTEM,
-      prompt:
-        (event
-          ? `This meeting was recorded for the calendar event "${event.title}". `
-          : "") +
-        `Meeting transcript (one merged stream, speakers not labeled):\n\n${transcript}`,
-      maxOutputTokens: 2000,
-    });
-    summary = result.object;
-  } catch (e) {
-    await updateMeetingCore(meetingId, { status: "failed" });
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Summarization failed." },
-      { status: 500 },
-    );
-  }
+  const summaryPrompt =
+    (event
+      ? `This meeting was recorded for the calendar event "${event.title}". `
+      : "") +
+    `Meeting transcript (one merged stream, speakers not labeled):\n\n${transcript}`;
 
   // Action items checked off in the previous summary (re-finalize after
   // resume or continue-recording) keep their ticks through the rewrite.
@@ -244,7 +296,39 @@ export async function POST(req: Request) {
       .map((i) => i.text.toLowerCase()),
   );
 
-  const bodyMd = renderSummary(summary, event, prevChecked);
+  // Primary: structured object → deterministic markdown. If MiniMax's tool-mode
+  // output doesn't validate ("No object generated: response did not match
+  // schema"), fall back to a plain-text markdown summary so a meeting never
+  // dead-ends on a flaky structured call.
+  let title: string;
+  let bodyMd: string;
+  try {
+    const result = await generateObject({
+      model: minimax("MiniMax-M3"),
+      schema: SummarySchema,
+      system: SUMMARY_SYSTEM,
+      prompt: summaryPrompt,
+      maxOutputTokens: 2000,
+    });
+    title = result.object.title;
+    bodyMd = renderSummary(result.object, event, prevChecked);
+  } catch (objErr) {
+    console.warn(
+      "[meetings/finalize] structured summary failed; using markdown fallback:",
+      objErr instanceof Error ? objErr.message : objErr,
+    );
+    try {
+      const fb = await summarizeAsMarkdown(summaryPrompt, event, prevChecked);
+      title = fb.title;
+      bodyMd = fb.bodyMd;
+    } catch (e) {
+      await updateMeetingCore(meetingId, { status: "failed" });
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Summarization failed." },
+        { status: 500 },
+      );
+    }
+  }
 
   // Mirror the summary into a note so it shows up alongside everything else.
   // Re-finalize refreshes the existing note in place (the user may have linked
@@ -252,14 +336,14 @@ export async function POST(req: Request) {
   let noteId = meeting.note_id;
   if (noteId) {
     const r = await updateNoteCore(noteId, {
-      title: summary.title,
+      title,
       body: bodyMd,
     });
     if (!r.ok) noteId = null;
   }
   if (!noteId) {
     const note = await createNoteCore({
-      title: summary.title,
+      title,
       body: bodyMd,
       category: "meetings",
     });
@@ -269,12 +353,12 @@ export async function POST(req: Request) {
   // Extract durable facts into long-term memory. Feed the concise summary (not
   // the raw transcript) so the Haiku reconciliation stays cheap and on-point.
   await reconcileMemoriesFromTurn(
-    `Meeting "${summary.title}" just finished — summary follows.`,
+    `Meeting "${title}" just finished — summary follows.`,
     bodyMd,
   );
 
   const updated = await updateMeetingCore(meetingId, {
-    title: summary.title,
+    title,
     status: "done",
     ended_at: endedAt,
     transcript,
