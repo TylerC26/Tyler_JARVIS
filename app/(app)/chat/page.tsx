@@ -1,6 +1,7 @@
 import { ChatWorkspace } from "@/components/modules/chat/ChatWorkspace";
 import { resolveAgentModelId } from "@/lib/ai/agents/run";
 import { listMessages } from "@/lib/chat/persist";
+import { ALL_TOOLS } from "@/lib/chat/tools";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import { seedDefaultAgentsCore } from "@/lib/db/core/agents";
 import { listActiveAgents } from "@/lib/db/queries/agents";
@@ -57,6 +58,14 @@ export default async function ChatPage({
     (t) => t === "ocr_extract" || t === "vision_analyze",
   );
 
+  // The conversation head advertises how many tools the active thread can reach:
+  // the full orchestrator toolbox on the main Jarvis thread, or the sub-agent's
+  // own allowlist on an agent thread.
+  const mainToolCount = Object.keys(ALL_TOOLS).length;
+  const activeToolCount = activeAgent
+    ? (activeAgent.tool_allowlist ?? []).length
+    : mainToolCount;
+
   return (
     <div className="h-[calc(100dvh-3.5rem-2.5rem)] md:h-[calc(100dvh-3.5rem-3rem)]">
       <ChatWorkspace
@@ -65,6 +74,7 @@ export default async function ChatPage({
           name: a.name,
           description: a.description,
           color: a.color,
+          modelPref: a.model_pref,
         }))}
         activeAgent={
           activeAgent
@@ -73,10 +83,12 @@ export default async function ChatPage({
                 name: activeAgent.name,
                 description: activeAgent.description,
                 color: activeAgent.color,
+                modelPref: activeAgent.model_pref,
                 modelId: activeModelId,
               }
             : null
         }
+        toolCount={activeToolCount}
         initialMessages={initialMessages}
         configured={configured}
         // A "take notes" deep-link from a calendar work event lands here with a

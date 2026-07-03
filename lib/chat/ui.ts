@@ -19,6 +19,10 @@ export type JarvisMessageMetadata = {
   speakerColor?: string | null;
   // Who the message is directed at, when it adds signal (agent threads only).
   target?: string;
+  // ISO timestamp of the row (from chat_messages.created_at). Powers the
+  // per-message clock stamp and the per-day dividers in the transcript. Absent
+  // on live-streamed turns — the client treats those as "today / now".
+  createdAt?: string;
 };
 
 export type JarvisUIMessage = UIMessage<JarvisMessageMetadata>;
@@ -170,6 +174,7 @@ export function dbToUIMessages(
         speakerKind,
         speakerColor,
         ...(target ? { target } : {}),
+        createdAt: m.created_at,
       },
     });
   }

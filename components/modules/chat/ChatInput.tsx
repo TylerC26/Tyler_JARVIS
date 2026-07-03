@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Attachment = { id: string; file: File; url: string };
 
+type QuickAction = { label: string; prompt: string };
+
 type Props = {
   onSend: (text: string, files: File[]) => void;
   disabled?: boolean;
@@ -11,6 +13,13 @@ type Props = {
   // When false, the attach affordance + paste/drop image handling are hidden.
   // Gated on the active agent supporting an OCR/vision tool (Claudia first).
   imageUploadEnabled?: boolean;
+  // Page surface gets a labeled IMAGE affordance + prompt chips; the compact
+  // drawer stays minimal.
+  variant?: "drawer" | "page";
+  // Prompt chips shown above the box — clicking one prefills the composer.
+  quickActions?: QuickAction[];
+  // Right-aligned footer readout, e.g. "DEEPSEEK · 51 tools armed".
+  footerRight?: string;
 };
 
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -20,6 +29,9 @@ export function ChatInput({
   disabled,
   pending,
   imageUploadEnabled = false,
+  variant = "page",
+  quickActions,
+  footerRight,
 }: Props) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -82,6 +94,24 @@ export function ChatInput({
     onSend(trimmed, files);
   }
 
+  // A quick-action chip prefills the composer with a starter prompt and drops
+  // the caret at the end so the user can keep typing (some prompts trail a
+  // colon, e.g. "draft this as an HTML document: ").
+  function applyQuickAction(prompt: string) {
+    if (disabled) return;
+    setValue(prompt);
+    const el = ref.current;
+    if (el) {
+      el.focus();
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = el.value.length;
+      });
+    }
+  }
+
+  const showQuickActions =
+    !disabled && !!quickActions && quickActions.length > 0 && !value.trim();
+
   return (
     <form
       onSubmit={(e) => {
@@ -111,6 +141,20 @@ export function ChatInput({
         dragging ? "ring-1 ring-inset ring-accent/50" : "",
       ].join(" ")}
     >
+      {showQuickActions && (
+        <div className="mb-2.5 hidden flex-wrap gap-2 md:flex">
+          {quickActions?.map((qa) => (
+            <button
+              key={qa.label}
+              type="button"
+              onClick={() => applyQuickAction(qa.prompt)}
+              className="border border-edge px-3 py-1.5 font-mono text-[11px] text-fg-muted transition-colors hover:border-accent/40 hover:text-accent"
+            >
+              {qa.label}
+            </button>
+          ))}
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {attachments.map((a) => (
@@ -136,33 +180,8 @@ export function ChatInput({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 rounded-sm border border-edge bg-surface-2 px-2 py-1.5 focus-within:border-accent/50">
-        <span className="font-mono text-accent shrink-0 mt-1">›</span>
-        {imageUploadEnabled && (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ACCEPTED.join(",")}
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.length) addFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={disabled}
-              aria-label="Attach image"
-              title="Attach image"
-              className="grid min-h-[44px] min-w-[36px] place-items-center self-end rounded-sm font-mono text-base text-fg-dim hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              ＋
-            </button>
-          </>
-        )}
+      <div className="flex items-end gap-2 rounded-sm border border-edge bg-surface-2 px-3 py-2 focus-within:border-accent/50">
+        <span className="mt-1 shrink-0 font-mono text-accent">›</span>
         <textarea
           ref={ref}
           value={value}
@@ -203,18 +222,49 @@ export function ChatInput({
           className="flex-1 resize-none overflow-y-auto bg-transparent font-mono text-sm text-fg placeholder:text-fg-dim outline-none disabled:cursor-not-allowed max-h-40"
           style={{ minHeight: "20px" }}
         />
-        <button
-          type="submit"
-          disabled={disabled || pending || (!value.trim() && attachments.length === 0)}
-          aria-label="Send message"
-          className="grid min-h-[44px] min-w-[44px] place-items-center rounded-sm border border-accent/40 bg-accent/15 px-3 font-mono text-[13px] uppercase tracking-wider text-accent hover:bg-accent/25 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-        >
-          {pending ? "…" : "↵"}
-        </button>
+        {/* Right control cluster: image attach (gated) + send. */}
+        <div className="flex shrink-0 items-center gap-2 self-end">
+          {imageUploadEnabled && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept={ACCEPTED.join(",")}
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={disabled}
+                aria-label="Attach image"
+                title="Attach image"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-sm border border-edge px-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ⌷{variant === "page" && <span className="hidden md:inline">image</span>}
+              </button>
+            </>
+          )}
+          <button
+            type="submit"
+            disabled={disabled || pending || (!value.trim() && attachments.length === 0)}
+            aria-label="Send message"
+            className="grid min-h-[44px] min-w-[44px] place-items-center rounded-sm border border-accent/40 bg-accent/15 px-3 font-mono text-[13px] uppercase tracking-wider text-accent hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {pending ? "…" : "↵"}
+          </button>
+        </div>
       </div>
-      <p className="mt-1.5 hidden px-1 font-mono text-[10px] tracking-wider text-fg-dim md:block">
-        ENTER to send · SHIFT+ENTER for newline · ESC to close
-      </p>
+      <div className="mt-2 hidden items-center gap-4 px-1 font-mono text-[10px] tracking-wider text-fg-dim md:flex">
+        <span>ENTER to send · SHIFT+ENTER for newline · ESC to close</span>
+        {footerRight && (
+          <span className="ml-auto uppercase text-fg-dim/80">{footerRight}</span>
+        )}
+      </div>
     </form>
   );
 }

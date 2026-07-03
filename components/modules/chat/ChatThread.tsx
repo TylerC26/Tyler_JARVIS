@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { Message } from "./Message";
@@ -65,20 +65,64 @@ export function ChatThread({ messages, pending, activeModel, agent }: Props) {
     );
   }
 
+  // Interleave date separators: a divider is emitted whenever a message's day
+  // differs from the previous one. History rows carry createdAt; live-streamed
+  // rows don't, so they fall under "today".
+  const rows: ReactNode[] = [];
+  let lastDay: string | null = null;
+  for (const m of messages) {
+    const iso = m.metadata?.createdAt;
+    const d = iso ? new Date(iso) : new Date();
+    const dayKey = Number.isNaN(d.getTime()) ? null : d.toDateString();
+    if (dayKey && dayKey !== lastDay) {
+      lastDay = dayKey;
+      rows.push(
+        <div
+          key={`day-${dayKey}`}
+          className="py-1 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim"
+        >
+          —{" "}
+          {d.toLocaleDateString(undefined, {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })}{" "}
+          —
+        </div>,
+      );
+    }
+    rows.push(<Message key={m.id} message={m} agent={agent} />);
+  }
+
+  const typingLabel = agent?.name.toLowerCase() ?? "jarvis";
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-    >
-      {messages.map((m) => (
-        <Message key={m.id} message={m} agent={agent} />
-      ))}
-      {pending && (
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-dim">
-          <span className="size-1.5 rounded-full bg-accent pulse-dot" />
-          {activeModel ?? "thinking"}…
-        </div>
-      )}
+    <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-5">
+      <div className="mx-auto flex max-w-4xl flex-col gap-5">
+        {rows}
+        {pending && (
+          <div className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-dim">
+            <span
+              className="grid size-[22px] shrink-0 place-items-center rounded-sm border border-accent/40 bg-accent/10 text-[10px] text-accent"
+              aria-hidden
+            >
+              ◆
+            </span>
+            <span className="text-accent">{typingLabel}</span>
+            <span className="inline-flex items-end gap-1">
+              <span className="size-1 rounded-full bg-accent pulse-dot" />
+              <span
+                className="size-1 rounded-full bg-accent pulse-dot"
+                style={{ animationDelay: "0.2s" }}
+              />
+              <span
+                className="size-1 rounded-full bg-accent pulse-dot"
+                style={{ animationDelay: "0.4s" }}
+              />
+            </span>
+            <span className="text-fg-dim/80">{activeModel ?? "thinking"}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

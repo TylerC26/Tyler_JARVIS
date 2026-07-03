@@ -27,6 +27,15 @@ type Speaker = {
   target?: string;
 };
 
+// HH:MM stamp from the row's ISO timestamp. Live-streamed turns carry no
+// createdAt — they render without a time until the thread reloads from history.
+function messageTime(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 // Resolve who's talking. Historical rows carry this on metadata; live-streamed
 // turns don't, so we fall back to the active thread's identity (the owner +
 // either Jarvis or the open sub-agent).
@@ -73,31 +82,63 @@ export function Message({
   const isUser = message.role === "user";
   const model = !isUser ? message.metadata?.model : undefined;
   const sp = speakerFor(message, agent);
+  const time = messageTime(message.metadata?.createdAt);
 
   const accent = sp.kind === "agent" ? (sp.color ?? ACCENT) : ACCENT;
-  const markerStyle =
-    sp.kind === "agent" ? { color: accent } : undefined;
-  const markerClass =
-    sp.kind === "you" ? "" : sp.kind === "jarvis" ? "text-accent" : "";
+  const nameStyle = sp.kind === "agent" ? { color: accent } : undefined;
+  const nameClass =
+    sp.kind === "you"
+      ? "text-warn"
+      : sp.kind === "jarvis"
+        ? "text-accent"
+        : "";
 
   // Bubble border tracks the author so Jarvis, each agent, and the owner are
   // visually distinct in a shared transcript.
   const bubbleClass =
     sp.kind === "you"
-      ? "border-edge bg-surface-2/40"
+      ? "border-warn/25 bg-warn/[0.04]"
       : sp.kind === "jarvis"
         ? "border-accent/20 bg-surface"
         : "bg-surface";
   const bubbleStyle =
     sp.kind === "agent" ? { borderColor: `${accent}40` } : undefined;
 
+  // Author chip: Jarvis = accent diamond, owner = warm initial, agent = its
+  // color. Squared for the orchestrator, round for people/agents.
+  const avatar =
+    sp.kind === "you"
+      ? { text: "T", round: true, cls: "border-warn/40 bg-warn/10 text-warn", style: undefined }
+      : sp.kind === "jarvis"
+        ? { text: "◆", round: false, cls: "border-accent/40 bg-accent/10 text-accent", style: undefined }
+        : {
+            text: sp.label.charAt(0).toUpperCase(),
+            round: true,
+            cls: "",
+            style: {
+              borderColor: `${accent}66`,
+              backgroundColor: `${accent}1a`,
+              color: accent,
+            } as const,
+          };
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
-        <span className={markerClass} style={markerStyle}>
-          ›
+    <div className={["flex flex-col gap-1.5", isUser ? "items-end" : "items-start"].join(" ")}>
+      <div className="flex max-w-[85%] items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-fg-dim">
+        <span
+          className={[
+            "grid size-[22px] shrink-0 place-items-center border text-[10px] font-bold not-italic normal-case",
+            avatar.round ? "rounded-full" : "rounded-sm",
+            avatar.cls,
+          ].join(" ")}
+          style={avatar.style}
+          aria-hidden
+        >
+          {avatar.text}
         </span>
-        <span style={markerStyle}>{sp.label}</span>
+        <span className={["font-semibold", nameClass].join(" ")} style={nameStyle}>
+          {sp.label}
+        </span>
         {sp.target && (
           <>
             <span className="text-fg-dim/60">→</span>
@@ -105,10 +146,11 @@ export function Message({
           </>
         )}
         {model && <span className="text-fg-dim/70">· {modelLabel(model)}</span>}
+        {time && <span className="tabular text-fg-dim/60">{time}</span>}
       </div>
       <div
         className={[
-          "rounded-sm border px-3 py-2 font-mono text-sm text-fg",
+          "max-w-[85%] rounded-sm border px-3.5 py-2.5 font-mono text-sm text-fg",
           bubbleClass,
         ].join(" ")}
         style={bubbleStyle}

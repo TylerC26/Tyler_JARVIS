@@ -9,6 +9,16 @@ import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { ChatInput } from "./ChatInput";
 import { ChatThread } from "./ChatThread";
 import { ClearThreadButton } from "./ClearThreadButton";
+import { CommandStatusBar } from "./CommandStatusBar";
+
+// Composer quick-actions for the main Jarvis thread — each prefills the input
+// with a prompt that maps to a real orchestrator capability (work to-do skill,
+// HTML artifacts, morning brief). Agent threads get none.
+const JARVIS_QUICK_ACTIONS: { label: string; prompt: string }[] = [
+  { label: "✦ Summarize work tasks", prompt: "summarize my outstanding work tasks" },
+  { label: "✦ Draft as HTML", prompt: "draft this as an HTML document: " },
+  { label: "✦ Morning brief", prompt: "generate my morning brief" },
+];
 
 type Props = {
   initialMessages?: JarvisUIMessage[];
@@ -28,6 +38,9 @@ type Props = {
   // so the server can preset the page's context ("this project", "this
   // meeting"). Null for the dedicated /chat surface.
   pagePath?: string | null;
+  // Tools reachable on this thread, surfaced in the conversation head + composer
+  // footer. Undefined in the compact drawer (launcher), where it's omitted.
+  toolCount?: number;
 };
 
 type ForceRoute = "auto" | "deepseek" | "minimax" | "haiku" | "sonnet" | "opus";
@@ -41,6 +54,7 @@ export function ChatPanel({
   initialPrompt = null,
   imageUploadEnabled = false,
   pagePath = null,
+  toolCount,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
@@ -201,65 +215,77 @@ export function ChatPanel({
           : "rounded-md border border-edge",
       ].join(" ")}
     >
-      <header className="flex items-center justify-between border-b border-edge px-4 py-2.5">
-        <div className="flex items-center gap-2 min-w-0">
+      {/* System status ribbon (page surface only). */}
+      {variant === "page" && <CommandStatusBar configured={configured} />}
+
+      {/* Conversation head: who you're talking to, its reach + status, and the
+          model / clear controls. */}
+      <header className="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           {agent ? (
             <span
-              className="size-2 shrink-0 rounded-full"
+              className="size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: accent }}
               aria-hidden
             />
           ) : (
-            <span className="font-mono text-accent text-sm">◢◤</span>
+            <span
+              className="size-3 shrink-0 rotate-45 border-2 border-accent"
+              aria-hidden
+            />
           )}
-          <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg">
+          <span className="truncate font-mono text-[12px] font-semibold uppercase tracking-[0.2em] text-fg">
             {title}
           </span>
-          {agent && (
-            <span className="hidden font-mono text-[10px] uppercase tracking-wider text-fg-dim sm:inline">
-              /{agent.slug}
-            </span>
-          )}
-          {activeModel && (
-            <span className="font-mono text-[10px] uppercase tracking-wider text-accent">
-              · {activeModel}
-            </span>
-          )}
-          {!activeModel && (
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-              · {agentOffline ? "offline" : "idle"}
-            </span>
-          )}
+          <span className="hidden shrink-0 font-mono text-[10px] tracking-wider text-fg-dim sm:inline">
+            · {agent ? `/${agent.slug}` : "orchestrator"}
+            {typeof toolCount === "number" && ` · ${toolCount} tools`}
+          </span>
+          <span
+            className={[
+              "shrink-0 border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+              pending
+                ? "border-accent/40 text-accent"
+                : agentOffline
+                  ? "border-danger/40 text-danger"
+                  : "border-success/30 text-success",
+            ].join(" ")}
+          >
+            ● {pending ? "streaming" : agentOffline ? "offline" : "idle"}
+          </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2.5">
           {!agent && (
-            <select
-              value={forceRoute}
-              onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
-              className="min-h-[44px] rounded-sm border border-edge bg-surface-2 px-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:border-edge-strong"
-              title="Routing override"
-            >
-              <option value="auto">AUTO</option>
-              <option value="haiku" disabled={!configured.anthropic}>
-                HAIKU
-              </option>
-              <option value="sonnet" disabled={!configured.anthropic}>
-                SONNET
-              </option>
-              <option value="opus" disabled={!configured.anthropic}>
-                OPUS
-              </option>
-              <option value="deepseek" disabled={!configured.deepseek}>
-                DEEPSEEK
-              </option>
-              <option value="minimax" disabled={!configured.minimax}>
-                MINIMAX
-              </option>
-            </select>
+            <label className="hidden items-center gap-2 border border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:border-edge-strong sm:flex">
+              model
+              <select
+                value={forceRoute}
+                onChange={(e) => setForceRoute(e.target.value as ForceRoute)}
+                className="bg-transparent font-mono text-[10px] uppercase tracking-wider text-accent outline-none"
+                title="Routing override"
+              >
+                <option value="auto">auto ⇅</option>
+                <option value="haiku" disabled={!configured.anthropic}>
+                  haiku
+                </option>
+                <option value="sonnet" disabled={!configured.anthropic}>
+                  sonnet
+                </option>
+                <option value="opus" disabled={!configured.anthropic}>
+                  opus
+                </option>
+                <option value="deepseek" disabled={!configured.deepseek}>
+                  deepseek
+                </option>
+                <option value="minimax" disabled={!configured.minimax}>
+                  minimax
+                </option>
+              </select>
+            </label>
           )}
           {agent?.modelId && (
             <span
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-dim"
+              className="hidden border border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-dim sm:inline"
               title="This agent's model preference"
             >
               {agent.modelId}
@@ -324,6 +350,19 @@ export function ChatPanel({
         disabled={inputDisabled}
         pending={pending || uploading}
         imageUploadEnabled={imageUploadEnabled && !inputDisabled}
+        variant={variant}
+        quickActions={!agent && variant === "page" ? JARVIS_QUICK_ACTIONS : undefined}
+        footerRight={
+          typeof toolCount === "number"
+            ? `${
+                agent
+                  ? (agent.modelId ?? "offline")
+                  : forceRoute === "auto"
+                    ? "auto route"
+                    : forceRoute
+              } · ${toolCount} tools armed`
+            : undefined
+        }
         onSend={handleSend}
       />
     </div>
