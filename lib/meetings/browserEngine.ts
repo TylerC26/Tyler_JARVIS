@@ -1,15 +1,19 @@
 // Browser capture engine — the mic-only fallback when Jarvis isn't running in
 // the desktop app. MediaRecorder writes compressed audio (webm/opus, or mp4 on
-// Safari); we rotate by stopping and restarting the recorder every 5 minutes so
-// each blob is an independently decodable file (timeslice blobs are NOT — they
-// share one header), then push each blob through the same upload → transcribe
-// pipeline as the native path. Plain closure, no React: the session belongs to
-// the global recorder store (recorderStore.ts) and survives page navigation.
+// Safari); we rotate by stopping and restarting the recorder every ~10 seconds
+// so each blob is an independently decodable file (timeslice blobs are NOT —
+// they share one header), then push each blob through the same upload →
+// transcribe pipeline as the native path — so transcripts land ~10-15 s behind
+// and read as near-real-time without any WS streaming. Tradeoff of the tight
+// cadence: stop()/start() drops a few ms of audio at each boundary; acceptable
+// for notes, and the native path (gapless WAV) is the primary real-time target.
+// Plain closure, no React: the session belongs to the global recorder store
+// (recorderStore.ts) and survives page navigation.
 
 import { processChunk } from "./pipeline";
 import type { EngineEvents, RecorderEngine, StopResult } from "./recorderTypes";
 
-const CHUNK_MS = 5 * 60 * 1000;
+const CHUNK_MS = 10 * 1000;
 
 function pickMime(): { recorder: string; upload: string; ext: string } | null {
   if (typeof MediaRecorder === "undefined") return null;

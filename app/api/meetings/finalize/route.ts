@@ -162,6 +162,9 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
+    // Chunks are ~10 s, and silence-gated ones come back transcribed-but-empty
+    // (dropped by filter). Space-join the rest into flowing prose rather than a
+    // blank line between every fragment.
     transcript = chunks
       .map((c) =>
         c.status === "transcribed"
@@ -169,7 +172,8 @@ export async function POST(req: Request) {
           : "[segment missing — transcription failed]",
       )
       .filter(Boolean)
-      .join("\n\n")
+      .join(" ")
+      .replace(/\s+/g, " ")
       .trim();
     if (chunks.length === 0) transcript = "";
   }

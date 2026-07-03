@@ -2,11 +2,14 @@
 //
 // Captures the mic (cpal) AND system output audio (ruhear → ScreenCaptureKit),
 // downmixes + resamples both to 16 kHz mono PCM16, mixes them, and appends the
-// result to local WAV files, rotating to a new chunk every ~5 minutes
-// (~9.6 MB — comfortably under Whisper's 25 MB limit). Nothing streams in
-// realtime: v1's OpenAI realtime WebSocket was the unreliable part (removed in
-// 14ece7d). The local files are the durable source of truth until the webview
-// finishes the upload → transcribe → finalize pipeline.
+// result to local WAV files, rotating to a new chunk every ~10 seconds
+// (~320 KB — far under Whisper's 25 MB limit) so transcripts land ~10-15 s
+// behind the mic and read as near-real-time. This is deliberately NOT the WS
+// streaming that made v1 unreliable (OpenAI realtime, removed in 14ece7d):
+// each short chunk is still an independently decodable WAV run through the same
+// batch upload → Whisper → finalize pipeline as the 5-minute chunks were. The
+// local files are the durable source of truth until the webview finishes that
+// pipeline.
 //
 // The webview (the deployed Vercel site, loaded remotely) drives everything:
 // on each `meeting-chunk-ready` event it mints a signed Supabase Storage upload
@@ -36,7 +39,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 const TARGET_RATE: u32 = 16_000;
-const CHUNK_SECONDS: u64 = 300; // rotate WAV files every 5 minutes
+// Rotate WAV files every ~10 s for near-real-time transcripts. Whisper still
+// gets enough context per chunk to punctuate; server-side silence gating drops
+// the empty ones so we don't pay for (or hallucinate on) quiet stretches.
+const CHUNK_SECONDS: u64 = 10;
 const QUEUE_CAP: usize = TARGET_RATE as usize * 2; // ~2 s safety cap against drift
 
 type Queue = Arc<Mutex<VecDeque<i16>>>;

@@ -1,10 +1,10 @@
 // Desktop (Tauri) capture engine. Drives native capture in Rust: mic + system
-// audio are mixed and written to local 5-minute WAV chunks; each
+// audio are mixed and written to local ~10-second WAV chunks; each
 // `meeting-chunk-ready` event kicks that chunk through the upload → transcribe
-// pipeline while the meeting is still going. stop() resolves once Rust has
-// flushed the final chunk AND every chunk pipeline has settled. Plain closure,
-// no React: the session belongs to the global recorder store (recorderStore.ts)
-// and survives page navigation.
+// pipeline while the meeting is still going, so the transcript flows in near
+// real time. stop() resolves once Rust has flushed the final chunk AND every
+// chunk pipeline has settled. Plain closure, no React: the session belongs to
+// the global recorder store (recorderStore.ts) and survives page navigation.
 
 import { processChunk } from "./pipeline";
 import type { EngineEvents, RecorderEngine, StopResult } from "./recorderTypes";

@@ -1,8 +1,15 @@
-// Transcribe one uploaded recording chunk with OpenAI Whisper. Each chunk is
-// ~5 minutes / ~10 MB, so a single call stays well inside both Whisper's 25 MB
-// file limit and this route's maxDuration; the client drives one call per chunk
-// (in order) and retries failures — state lives on the meeting_chunks row, so a
-// resumed pipeline picks up exactly where it stopped.
+// Transcribe one uploaded recording chunk with OpenAI Whisper. Chunks are now
+// ~10 s (near-real-time transcript), so short-chunk quality matters here:
+//   - `prompt` is seeded with the tail of the previous chunk's transcript, so
+//     Whisper keeps terminology/casing consistent and handles words split
+//     across the chunk boundary.
+//   - `verbose_json` + `temperature: 0` let us silence-gate: segments Whisper
+//     flags as non-speech (high no_speech_prob) are dropped, and a chunk that
+//     comes back as nothing but a stock filler phrase ("thank you.", "thanks
+//     for watching") — Whisper's classic hallucination on quiet audio — is
+//     stored as empty rather than polluting the transcript.
+// The client drives one call per chunk and retries failures; state lives on the
+// meeting_chunks row, so a resumed pipeline picks up exactly where it stopped.
 
 import { NextResponse } from "next/server";
 import {
@@ -15,6 +22,53 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 export const maxDuration = 120;
 
 const BUCKET = "meeting-recordings";
+
+// How much of the previous chunk to feed Whisper as context (chars).
+const PROMPT_TAIL = 220;
+// A Whisper segment above this no_speech probability is treated as silence and
+// dropped — the main defense against hallucinated text on quiet chunks.
+const NO_SPEECH_MAX = 0.6;
+
+// Whisper's stock hallucinations on near-silent audio. If a whole chunk reduces
+// to nothing but one of these, it's noise, not speech — drop it.
+const FILLER_ONLY = new Set([
+  "thank you",
+  "thank you.",
+  "thanks for watching",
+  "thanks for watching!",
+  "thank you for watching",
+  "you",
+  "bye",
+  "bye.",
+  "okay",
+  "ok",
+  ".",
+  "。",
+  "please subscribe",
+  "subscribe",
+]);
+
+type WhisperSegment = { text?: string; no_speech_prob?: number };
+
+// Reduce a verbose_json Whisper response to clean text: keep only segments that
+// look like speech, then blank the result if it's just a stock filler phrase.
+function cleanTranscript(data: {
+  text?: string;
+  segments?: WhisperSegment[];
+}): string {
+  const segments = Array.isArray(data.segments) ? data.segments : [];
+  const spoken = segments.length
+    ? segments
+        .filter((s) => (s.no_speech_prob ?? 0) < NO_SPEECH_MAX)
+        .map((s) => (s.text ?? "").trim())
+        .filter(Boolean)
+        .join(" ")
+    : (data.text ?? "").trim();
+
+  const normalized = spoken.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized || FILLER_ONLY.has(normalized)) return "";
+  return spoken.trim();
+}
 
 export async function POST(req: Request) {
   let body: {
@@ -90,12 +144,25 @@ export async function POST(req: Request) {
     return fail(`Download failed: ${dlError?.message ?? "no data"}`);
   }
 
+  // Seed Whisper with the tail of the previous chunk so terminology stays
+  // consistent and words split across the ~10 s boundary decode sensibly.
+  const prev = chunks.find((c) => c.idx === index - 1);
+  const promptTail =
+    prev?.status === "transcribed" && prev.transcript
+      ? prev.transcript.trim().slice(-PROMPT_TAIL)
+      : "";
+
   // Plain fetch + FormData (no SDK) — same pattern as lib/ai/embeddings.ts.
   const form = new FormData();
   const filename = chunk.storage_path.split("/").pop() ?? "chunk.wav";
   form.append("file", new File([blob], filename, { type: chunk.mime_type }));
   form.append("model", "whisper-1");
-  form.append("response_format", "text");
+  // verbose_json exposes per-segment no_speech_prob for silence gating;
+  // temperature 0 makes short-chunk output deterministic and less prone to
+  // fabricating filler on quiet audio.
+  form.append("response_format", "verbose_json");
+  form.append("temperature", "0");
+  if (promptTail) form.append("prompt", promptTail);
 
   let text: string;
   try {
@@ -108,7 +175,11 @@ export async function POST(req: Request) {
       const detail = (await res.text()).slice(0, 400);
       return fail(`Whisper ${res.status}: ${detail}`);
     }
-    text = (await res.text()).trim();
+    const data = (await res.json()) as {
+      text?: string;
+      segments?: WhisperSegment[];
+    };
+    text = cleanTranscript(data);
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Transcription failed.");
   }

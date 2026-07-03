@@ -1,9 +1,11 @@
 // Mint a signed Supabase Storage upload URL for one recording chunk, and
 // register (or refresh) its meeting_chunks row. The client (Tauri Rust or the
 // browser recorder) PUTs the audio file straight to Storage with this URL —
-// chunks are ~10 MB, far over Vercel's request-body limit, so they must never
-// pass through an API route. The signed token authorizes exactly one object
-// path; no Supabase credentials reach the client.
+// chunks are small now (~10 s ≈ a few hundred KB), but going straight to
+// Storage keeps the native Rust PUT off the IPC bridge and gives both engines
+// one upload path that also handles the occasional large (continued/merged)
+// file. The signed token authorizes exactly one object path; no Supabase
+// credentials reach the client.
 
 import { NextResponse } from "next/server";
 import {

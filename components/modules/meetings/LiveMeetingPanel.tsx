@@ -1,14 +1,15 @@
 "use client";
 
-// The Meetings v2 hero: record → live segment transcripts stream in on the
-// left while the notes rail waits on the right → stop → the rail flips to the
+// The Meetings v2 hero: record → the live transcript streams in on the left
+// while the notes rail waits on the right → stop → the rail flips to the
 // finalized summary / key points / action items in place. A richer successor
 // to RecordController over the same global recorder store, so a session
 // started here (or from the TopBar pill) keeps running across navigation.
 //
-// Honest-pipeline note: transcription is per ~5-min chunk (Whisper, post-hoc),
-// not streaming STT — the feed labels segments rather than faking speakers,
-// and the first one lands a few minutes in.
+// Honest-pipeline note: this is near-real-time, not streaming STT. Audio is
+// batch-transcribed by Whisper in ~10 s chunks (see the transcribe route), so
+// the transcript flows in ~10-15 s behind the mic. We render it as one growing
+// stream of prose rather than faking per-speaker turns.
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -26,14 +27,9 @@ import {
 import { useTauriRuntime } from "@/lib/meetings/tauri";
 import { Waveform } from "./Waveform";
 
-const POLL_MS = 10_000;
-
-// Rotating tint for segment avatars, keyed by chunk index.
-const SEG_TONES = [
-  { chip: "border-accent/30 bg-accent/10 text-accent", name: "text-accent" },
-  { chip: "border-warn/30 bg-warn/10 text-warn", name: "text-warn" },
-  { chip: "border-success/30 bg-success/10 text-success", name: "text-success" },
-];
+// Chunks transcribe ~every 10 s; poll fast enough that the transcript feels
+// live without hammering the DB.
+const POLL_MS = 2_500;
 
 type AudioHealth = {
   label: string;
@@ -150,8 +146,8 @@ export function LiveMeetingPanel({
 
   const liveEventTitle = rec.phase === "idle" ? eventTitle : rec.eventTitle;
 
-  // Poll segment transcripts while a session runs — each ~5-min chunk's text
-  // appears as soon as Whisper returns it.
+  // Poll segment transcripts while a session runs — each ~10 s chunk's text
+  // appears within seconds of Whisper returning it.
   useEffect(() => {
     if (!sessionActive || !rec.meetingId) return;
     const id = rec.meetingId;
@@ -196,6 +192,9 @@ export function LiveMeetingPanel({
   const transcribed = liveChunks.filter(
     (c) => c.status === "transcribed" && c.transcript.trim(),
   );
+  // One growing stream of prose — short chunks stitched in order, the way the
+  // finalized transcript will read.
+  const transcriptText = transcribed.map((c) => c.transcript.trim()).join(" ");
   const inFlight = liveChunks.filter(
     (c) => c.status === "pending" || c.status === "uploaded",
   ).length;
@@ -318,8 +317,8 @@ export function LiveMeetingPanel({
       {!showBody ? (
         <p className="px-4 py-3 font-mono text-[11px] leading-relaxed text-fg-dim">
           {native
-            ? "Captures your mic and system audio (Zoom/Teams and anything playing) natively, transcribes in ~5-min segments while you talk, and summarizes when you stop. Recording keeps running if you navigate to other pages."
-            : "Records this device's mic, transcribes in ~5-min segments while you talk, and summarizes when you stop. Recording keeps running if you navigate to other pages. For the other call participants' audio, use the desktop app."}
+            ? "Captures your mic and system audio (Zoom/Teams and anything playing) natively, transcribes live (~10-15 s behind) while you talk, and summarizes when you stop. Recording keeps running if you navigate to other pages."
+            : "Records this device's mic, transcribes live (~10-15 s behind) while you talk, and summarizes when you stop. Recording keeps running if you navigate to other pages. For the other call participants' audio, use the desktop app."}
         </p>
       ) : (
         <div className="grid md:grid-cols-[1fr_340px]">
@@ -341,46 +340,18 @@ export function LiveMeetingPanel({
                   aria-hidden
                 />
                 {recording
-                  ? "listening… the first segment transcribes a few minutes in"
+                  ? "listening… transcript starts flowing in ~10-15 s"
                   : busy
-                    ? "transcribing remaining segments…"
-                    : "no transcript segments"}
+                    ? "transcribing remaining audio…"
+                    : "no transcript yet"}
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
-                {transcribed.map((c, i) => {
-                  const tone = SEG_TONES[c.idx % SEG_TONES.length];
-                  const isLast = i === transcribed.length - 1;
-                  return (
-                    <div key={c.idx} className="flex gap-3.5">
-                      <span
-                        className={`grid size-8 shrink-0 place-items-center rounded-full border font-mono text-[10px] font-semibold ${tone.chip}`}
-                        aria-hidden
-                      >
-                        {String(c.idx + 1).padStart(2, "0")}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2.5">
-                          <span
-                            className={`font-mono text-[11px] font-semibold uppercase tracking-wider ${tone.name}`}
-                          >
-                            segment {String(c.idx + 1).padStart(2, "0")}
-                          </span>
-                          <span className="font-mono text-[10px] tabular text-fg-dim">
-                            ~{fmtClock(c.idx * 5 * 60_000)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm leading-relaxed text-fg-muted">
-                          {c.transcript.trim()}
-                          {isLast && recording && (
-                            <span className="cursor-blink text-accent">▍</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-fg-muted">
+                {transcriptText}
+                {recording && (
+                  <span className="cursor-blink text-accent">▍</span>
+                )}
+              </p>
             )}
 
             {recording && transcribed.length > 0 && (
@@ -389,8 +360,9 @@ export function LiveMeetingPanel({
                   className="size-1.5 rounded-full bg-success pulse-dot"
                   aria-hidden
                 />
-                transcribing in ~5-min segments
-                {inFlight > 0 && ` · ${inFlight} in flight`}
+                live · ~10-15 s behind
+                {inFlight > 0 &&
+                  ` · ${inFlight} segment${inFlight === 1 ? "" : "s"} in flight`}
               </div>
             )}
           </div>

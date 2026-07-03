@@ -92,8 +92,8 @@ export type LiveChunkRow = {
 };
 
 // Slim chunk rows for the live-meeting panel's transcript feed. Chunks
-// transcribe as they upload (~every 5 min), so polling this during a recording
-// surfaces each segment's text as soon as Whisper returns it.
+// transcribe as they upload (~every 10 s), so polling this during a recording
+// surfaces each segment's text within seconds of it being spoken.
 export async function listChunkTranscriptsAction(
   meetingId: string,
 ): Promise<LiveChunkRow[]> {

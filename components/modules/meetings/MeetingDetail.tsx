@@ -35,6 +35,11 @@ import { ChunkPill, StatusPill, fmtAge, fmtDuration } from "./meetingUi";
 
 const BUCKET_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/meeting-recordings`;
 
+// Above this many chunks (near-real-time recordings run ~6/min), the per-row
+// audio-player list becomes hundreds of <audio> elements — collapse to a
+// compact status grid instead; the flowing transcript is the real artifact.
+const COMPACT_SEGMENTS = 30;
+
 // Slim project shape for the link-to-project picker (page passes the roster).
 export type MeetingProjectOption = {
   id: string;
@@ -134,6 +139,7 @@ export function MeetingDetail({
     projects.find((p) => p.id === meeting.project_id) ?? null;
 
   const unfinished = chunks.filter((c) => c.status !== "transcribed");
+  const failedCount = chunks.filter((c) => c.status === "failed").length;
   const stuck =
     !isLive &&
     meeting.status !== "done" &&
@@ -651,56 +657,85 @@ export function MeetingDetail({
 
         {chunks.length > 0 && (
           <section className="space-y-2">
-            <h2 className="font-mono text-[10px] uppercase tracking-widest text-fg-dim border-b border-edge/40 pb-1">
-              // recording segments ({chunks.length})
-            </h2>
-            <div className="space-y-1.5">
-              {chunks.map((c) => {
-                const live = liveChunks[c.idx];
-                return (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-3 rounded-sm border border-edge/60 bg-surface-2/30 px-3 py-1.5"
-                  >
-                    <span className="font-mono text-[10px] text-fg-dim w-8">
-                      #{String(c.idx).padStart(2, "0")}
-                    </span>
-                    {live ? (
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-accent">
-                        {live.status}
-                      </span>
-                    ) : (
-                      <ChunkPill status={c.status} />
-                    )}
-                    <span className="font-mono text-[10px] text-fg-dim">
-                      {c.duration_ms != null ? fmtDuration(c.duration_ms) : ""}
-                    </span>
-                    {c.status !== "pending" && c.storage_path && (
-                      <audio
-                        controls
-                        preload="none"
-                        src={`${BUCKET_BASE}/${c.storage_path}`}
-                        className="h-7 ml-auto max-w-[260px]"
-                      />
-                    )}
-                    {(live?.error ?? c.error) && (
+            <details open={chunks.length <= COMPACT_SEGMENTS}>
+              <summary className="font-mono text-[10px] uppercase tracking-widest text-fg-dim border-b border-edge/40 pb-1 cursor-pointer hover:text-fg">
+                // recording segments ({chunks.length})
+                {failedCount > 0 && (
+                  <span className="text-danger"> · {failedCount} failed</span>
+                )}
+              </summary>
+              {chunks.length > COMPACT_SEGMENTS ? (
+                // Compact status grid — one square per ~10 s chunk. Per-chunk
+                // audio players don't scale to hundreds; the transcript below is
+                // what you actually read.
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {chunks.map((c) => {
+                    const status = liveChunks[c.idx]?.status ?? c.status;
+                    const cls =
+                      status === "transcribed"
+                        ? "bg-success/70"
+                        : status === "failed"
+                          ? "bg-danger/80"
+                          : "bg-accent/60 animate-pulse";
+                    return (
                       <span
-                        className="font-mono text-[10px] text-danger truncate"
-                        title={live?.error ?? c.error ?? ""}
+                        key={c.id}
+                        title={`#${c.idx} ${status}${c.error ? ` — ${c.error}` : ""}`}
+                        className={`h-2.5 w-2.5 rounded-[1px] ${cls}`}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-2 space-y-1.5">
+                  {chunks.map((c) => {
+                    const live = liveChunks[c.idx];
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-3 rounded-sm border border-edge/60 bg-surface-2/30 px-3 py-1.5"
                       >
-                        {live?.error ?? c.error}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                        <span className="font-mono text-[10px] text-fg-dim w-8">
+                          #{String(c.idx).padStart(2, "0")}
+                        </span>
+                        {live ? (
+                          <span className="font-mono text-[10px] uppercase tracking-wider text-accent">
+                            {live.status}
+                          </span>
+                        ) : (
+                          <ChunkPill status={c.status} />
+                        )}
+                        <span className="font-mono text-[10px] text-fg-dim">
+                          {c.duration_ms != null ? fmtDuration(c.duration_ms) : ""}
+                        </span>
+                        {c.status !== "pending" && c.storage_path && (
+                          <audio
+                            controls
+                            preload="none"
+                            src={`${BUCKET_BASE}/${c.storage_path}`}
+                            className="h-7 ml-auto max-w-[260px]"
+                          />
+                        )}
+                        {(live?.error ?? c.error) && (
+                          <span
+                            className="font-mono text-[10px] text-danger truncate"
+                            title={live?.error ?? c.error ?? ""}
+                          >
+                            {live?.error ?? c.error}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </details>
           </section>
         )}
 
         {meeting.transcript && (
           <section className="space-y-2">
-            <details>
+            <details open>
               <summary className="font-mono text-[10px] uppercase tracking-widest text-fg-dim border-b border-edge/40 pb-1 cursor-pointer hover:text-fg">
                 // transcript ({meeting.transcript.length} chars)
               </summary>
