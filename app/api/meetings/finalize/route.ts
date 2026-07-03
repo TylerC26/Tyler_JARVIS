@@ -1,5 +1,5 @@
 // Finalize a meeting: stitch the per-chunk transcripts (or take an inline
-// pasted transcript), summarize with Claude, mirror the summary into a note
+// pasted transcript), summarize with MiniMax, mirror the summary into a note
 // (category 'meetings') linked back to the meeting's work event, reconcile
 // durable facts into long-term memory, and flip the meeting to 'done'.
 // Action items are NOT auto-created as tasks — the meeting detail page's
@@ -13,10 +13,9 @@
 
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
+import { minimax } from "vercel-minimax-ai-provider";
 import { z } from "zod";
-import { modelForFeature } from "@/lib/ai/model-prefs";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
 import { getEventCore } from "@/lib/db/core/events";
 import {
   getMeetingCore,
@@ -189,8 +188,10 @@ export async function POST(req: Request) {
     });
   }
 
-  // Claude disabled — keep the transcript so nothing is lost, skip the AI pass.
-  if (!(await isClaudeEnabled())) {
+  // Summarization is hardwired to MiniMax so it works with the Claude
+  // kill-switch off. No key — keep the transcript so nothing is lost, skip
+  // the AI pass.
+  if (!process.env.MINIMAX_API_KEY) {
     const r = await updateMeetingCore(meetingId, {
       status: "done",
       ended_at: endedAt,
@@ -211,9 +212,8 @@ export async function POST(req: Request) {
 
   let summary: Summary;
   try {
-    const { model } = await modelForFeature("meeting_finalize");
     const result = await generateObject({
-      model,
+      model: minimax("MiniMax-M3"),
       schema: SummarySchema,
       system: SUMMARY_SYSTEM,
       prompt:

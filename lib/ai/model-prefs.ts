@@ -27,7 +27,6 @@ export type FeatureKey =
   | "place_extraction"
   | "calendar_extract"
   | "wife_shifts_extract"
-  | "meeting_finalize"
   | "agent_draft"
   | "note_assist"
   | "vision_analyze"
@@ -182,15 +181,8 @@ export const FEATURES: FeatureDef[] = [
     visionRequired: true,
     routed: false,
   },
-  {
-    key: "meeting_finalize",
-    label: "Meeting finalize",
-    description: "Summarizes a meeting transcript into notes + actions.",
-    group: "Extractors",
-    defaultTier: "sonnet",
-    visionRequired: false,
-    routed: false,
-  },
+  // Meeting finalize is not listed: summarization is hardwired to MiniMax in
+  // app/api/meetings/finalize so it keeps working with the Claude kill-switch off.
   {
     key: "agent_draft",
     label: "Agent drafting",
