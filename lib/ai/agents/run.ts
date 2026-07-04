@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
 import { minimax } from "vercel-minimax-ai-provider";
 import {
@@ -15,9 +14,7 @@ import {
 } from "@/lib/ai/physique/snapshot";
 import {
   type ChatModelId,
-  isAnthropicConfigured,
   isDeepseekConfigured,
-  isMinimaxConfigured,
   recordModelUsage,
 } from "@/lib/chat/router";
 import { buildContextPrefix } from "@/lib/chat/system-prompts";
@@ -27,7 +24,7 @@ import {
   finishAgentRunCore,
   startAgentRunCore,
 } from "@/lib/db/core/agent-runs";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import type { Agent, AgentModelPref, ChatToolCall } from "@/lib/db/types";
 import { isTelegramConfigured, sendMessage } from "@/lib/telegram/client";
 
@@ -51,77 +48,35 @@ const AGENT_CHAT_STEP_BUDGET = 8;
 export type PickedModel = { model: LanguageModel; modelId: ChatModelId };
 
 // Pure: agent pref + provider readiness -> concrete model id (or null when no
-// provider is configured). Legacy 'claude' = opus; 'auto' = sonnet. Split out
-// of pickModel so the branch table is unit-testable.
+// provider is configured). MiniMax replaced Claude as the app's LLM, so every
+// pref except an explicit "deepseek" pin — including "minimax", "auto", and
+// the legacy "claude"/"opus"/"sonnet"/"haiku" tiers from before that migration
+// — resolves to MiniMax-M3 now; there's only one model to pick, not tiers of
+// one. Split out of pickModel so the branch table is unit-testable.
 export function agentModelId(
   pref: AgentModelPref,
-  claudeReady: boolean,
   deepseekReady: boolean,
   minimaxReady = false,
 ): ChatModelId | null {
-  let want: "opus" | "sonnet" | "haiku" | "deepseek" | "minimax";
-  switch (pref) {
-    case "deepseek":
-      want = "deepseek";
-      break;
-    case "minimax":
-      want = "minimax";
-      break;
-    case "opus":
-    case "claude":
-      want = "opus";
-      break;
-    case "haiku":
-      want = "haiku";
-      break;
-    case "sonnet":
-      want = "sonnet";
-      break;
-    default: // "auto"
-      want = "sonnet";
-  }
-  if (want === "minimax") {
+  if (pref === "deepseek") {
+    if (deepseekReady) return "deepseek-chat";
     if (minimaxReady) return "MiniMax-M3";
-    if (claudeReady) return "claude-opus-4-7";
-    if (deepseekReady) return "deepseek-chat";
     return null;
   }
-  if (want === "deepseek") {
-    if (deepseekReady) return "deepseek-chat";
-    if (claudeReady) return "claude-opus-4-7";
-    return null;
-  }
-  if (claudeReady) {
-    return want === "opus"
-      ? "claude-opus-4-7"
-      : want === "haiku"
-        ? "claude-haiku-4-5"
-        : "claude-sonnet-4-6";
-  }
+  if (minimaxReady) return "MiniMax-M3";
   if (deepseekReady) return "deepseek-chat";
   return null;
 }
 
 // Resolve the concrete model for an agent from its model_pref, honoring the
-// Claude kill switch and configured keys, with a Claude→DeepSeek fallback.
+// MiniMax kill switch and configured keys, with a MiniMax<->DeepSeek fallback.
 async function pickModel(agent: Agent): Promise<PickedModel | null> {
-  // Claude is reachable when the dashboard kill switch is on AND the key is set.
-  const claudeReady = (await isClaudeEnabled()) && isAnthropicConfigured();
+  const minimaxReady = await isMinimaxEnabled();
   const deepseekReady = isDeepseekConfigured();
-  const minimaxReady = isMinimaxConfigured();
-  const id = agentModelId(
-    agent.model_pref,
-    claudeReady,
-    deepseekReady,
-    minimaxReady,
-  );
+  const id = agentModelId(agent.model_pref, deepseekReady, minimaxReady);
   if (!id) return null;
   const model =
-    id === "deepseek-chat"
-      ? deepseek("deepseek-chat")
-      : id === "MiniMax-M3"
-        ? minimax("MiniMax-M3")
-        : anthropic(id);
+    id === "deepseek-chat" ? deepseek("deepseek-chat") : minimax("MiniMax-M3");
   return { model, modelId: id };
 }
 
@@ -346,7 +301,7 @@ export async function runAgent(
       text: "",
       tool_calls: [],
       error:
-        "No model configured. Set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY in env.",
+        "No model configured. Set MINIMAX_API_KEY or DEEPSEEK_API_KEY in env.",
     };
   }
   const model = picked.model;

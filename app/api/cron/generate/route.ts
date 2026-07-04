@@ -6,7 +6,7 @@ import { getOwnerTz } from "@/lib/auth/currentUser";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { validateSchedule } from "@/lib/db/core/cron-jobs";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -50,7 +50,7 @@ Output only the structured object — no commentary.`;
 type Body = { request?: string };
 
 export async function POST(req: Request) {
-  if (!(await isClaudeEnabled())) {
+  if (!(await isMinimaxEnabled())) {
     return NextResponse.json(
       {
         error:

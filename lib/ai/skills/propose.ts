@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { createSkillCore, listSkillsCore } from "@/lib/db/core/skills";
 import type { ChatToolCall } from "@/lib/db/types";
 
@@ -44,7 +44,7 @@ export async function runSkillProposer(opts: {
 }): Promise<void> {
   if (opts.toolCalls.length < MIN_TOOL_CALLS) return;
   if (!opts.assistantText.trim()) return;
-  if (!(await isClaudeEnabled())) return;
+  if (!(await isMinimaxEnabled())) return;
 
   try {
     const toolSummary = opts.toolCalls

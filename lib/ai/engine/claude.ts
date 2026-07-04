@@ -9,10 +9,10 @@ import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
 
-// Briefs and suggestions run on Claude Opus 4.7 (direct Anthropic). Usage is
-// logged under the canonical model id "claude-opus-4-7" so lib/ai/pricing.ts
-// can compute a real USD cost.
-const BRIEF_MODEL_LABEL = "claude-opus-4-7";
+// Briefs and suggestions run on MiniMax-M3 (via modelForFeature — see
+// lib/ai/model-prefs.ts). Usage is logged under the canonical model id
+// "MiniMax-M3" so lib/ai/pricing.ts can compute a real USD cost.
+const BRIEF_MODEL_LABEL = "MiniMax-M3";
 
 // Accept both the canonical short form ("info"|"warn"|"crit") used by the rest
 // of the system and the longer form ("warning"|"critical") that user-authored
@@ -163,7 +163,7 @@ ${formatWifeShiftsLine(ctx)}
 ${JSON.stringify(ctx, null, 2)}`;
 }
 
-async function generateBriefViaClaude(
+async function generateBriefViaLLM(
   ctx: AIContext,
   systemPrompt: string,
 ): Promise<BriefDraft | null> {
@@ -202,19 +202,19 @@ async function resolveBriefPrompt(
     : DEFAULT_EVENING_BRIEF_PROMPT;
 }
 
-export const claudeEngine: AIEngine = {
+export const minimaxEngine: AIEngine = {
   name: BRIEF_MODEL_LABEL,
 
   async generateMorning(ctx) {
     const systemPrompt = await resolveBriefPrompt("morning");
-    const result = await generateBriefViaClaude(ctx, systemPrompt);
+    const result = await generateBriefViaLLM(ctx, systemPrompt);
     if (result) return result;
     return placeholderEngine.generateMorning(ctx);
   },
 
   async generateEvening(ctx) {
     const systemPrompt = await resolveBriefPrompt("evening");
-    const result = await generateBriefViaClaude(ctx, systemPrompt);
+    const result = await generateBriefViaLLM(ctx, systemPrompt);
     if (result) return result;
     return placeholderEngine.generateEvening(ctx);
   },

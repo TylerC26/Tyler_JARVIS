@@ -1606,14 +1606,14 @@ export const visionAnalyzeTool = tool({
       ),
   }),
   execute: async ({ image_url, prompt }) => {
-    const { isClaudeEnabled } = await import(
+    const { isMinimaxEnabled } = await import(
       "@/lib/db/core/site-settings"
     );
-    if (!(await isClaudeEnabled())) {
+    if (!(await isMinimaxEnabled())) {
       return {
         ok: false,
         error:
-          "Vision analysis is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
+          "Vision analysis is temporarily disabled. Re-enable MiniMax from the StatusRail toggle on the dashboard.",
       };
     }
     try {
@@ -1672,12 +1672,12 @@ export const ocrExtractTool = tool({
       ),
   }),
   execute: async ({ image_url, mode, prompt }) => {
-    const { isClaudeEnabled } = await import("@/lib/db/core/site-settings");
-    if (!(await isClaudeEnabled())) {
+    const { isMinimaxEnabled } = await import("@/lib/db/core/site-settings");
+    if (!(await isMinimaxEnabled())) {
       return {
         ok: false,
         error:
-          "OCR is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
+          "OCR is temporarily disabled. Re-enable MiniMax from the StatusRail toggle on the dashboard.",
       };
     }
     try {

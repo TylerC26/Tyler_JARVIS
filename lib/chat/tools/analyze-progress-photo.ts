@@ -17,7 +17,7 @@ import {
   getPhotoWithPriorForCompare,
   listProgressPhotos,
 } from "@/lib/db/core/progress-photos";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 
 export const analyzeProgressPhotoTool = tool({
   description:
@@ -31,11 +31,11 @@ export const analyzeProgressPhotoTool = tool({
       ),
   }),
   execute: async (input) => {
-    if (!(await isClaudeEnabled())) {
+    if (!(await isMinimaxEnabled())) {
       return {
         ok: false,
         error:
-          "Photo analysis is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
+          "Photo analysis is temporarily disabled. Re-enable MiniMax from the StatusRail toggle on the dashboard.",
       };
     }
 

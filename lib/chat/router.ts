@@ -1,21 +1,16 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { deepseek } from "@ai-sdk/deepseek";
 import { minimax } from "vercel-minimax-ai-provider";
 import {
-  generateObject,
   stepCountIs,
   streamText,
   type LanguageModelUsage,
   type ModelMessage,
 } from "ai";
-import { z } from "zod";
-import { getOwnerTz } from "@/lib/auth/currentUser";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { recordUsageCore } from "@/lib/db/core/usage";
 import type { UsageSource } from "@/lib/db/types";
 import {
   buildContextPrefix,
-  CLASSIFIER_SYSTEM_PROMPT,
   DEEPSEEK_ORCHESTRATOR_PREAMBLE,
   getActiveOrchestratorPrompt,
   getActiveResponderPrompt,
@@ -46,21 +41,17 @@ export function recordModelUsage(
   );
 }
 
-const RouteSchema = z.object({
-  route: z.enum(["haiku", "sonnet", "opus"]),
-});
-
-// Resolved routing decision:
-// - haiku    → lightweight orchestrator with full tool access — the everyday
-//              default for chitchat plus simple single-step actions and reads.
-// - sonnet   → heavier orchestrator — multi-step/ambiguous work, web search,
-//              vision, repo reads, long-form. Same tools as haiku, more reasoning.
-// - opus     → reserved for coding-execution turns — writing/editing/refactoring
-//              code, repo questions, dispatching remote code tasks.
-// - deepseek → only reached when Claude is disabled (kill switch / missing key);
-//              the non-Claude fallback so the assistant still answers at all.
-// - minimax  → only reached by an explicit pin (chat global pin / per-turn
-//              forceRoute). The classifier never auto-routes to it.
+// Resolved routing decision. MiniMax is the sole orchestrator model now — it
+// replaced the old 3-tier Claude classifier (haiku/sonnet/opus each ran a
+// different Claude model; there's only one MiniMax model, so there's nothing
+// left to classify). The legacy tier values stay in this union for backward
+// compatibility with historical chat_messages.model values and already-
+// persisted ForceRoute/ModelPref data — decideRoute() itself never returns
+// them anymore; see modelIdForRoute().
+// - minimax  → the default orchestrator, reached whenever it's enabled and
+//              configured.
+// - deepseek → reached only by an explicit pin, or as the fallback when
+//              MiniMax is disabled (kill switch off) or unconfigured.
 export type ChatRoute = "deepseek" | "minimax" | "haiku" | "sonnet" | "opus";
 
 // Anthropic model ids the Claude routes can run on.
@@ -90,15 +81,11 @@ export type ForceRoute =
 
 export type RouteOptions = {
   forceRoute?: ForceRoute;
-  // Short label for the page the turn was sent from ("the KIX11 project
-  // page"). Nudges the classifier: ambiguous messages on a data page are
-  // data reads, not chitchat.
-  pageLabel?: string | null;
 };
 
-// Sync env-key check. Used for UI capability gating ("is the key present at
-// all"). The runtime kill switch lives in `site_settings.claude_enabled` and is
-// surfaced via async `isClaudeEnabled()` in lib/db/core/site-settings.ts.
+// Sync env-key check. Claude is no longer the orchestrator (MiniMax is) —
+// this now only gates the web_search tool and the dashboard's plain CLAUDE
+// status indicator.
 export function isAnthropicConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
@@ -112,46 +99,22 @@ export function isMinimaxConfigured(): boolean {
 }
 
 export async function decideRoute(
-  messages: ModelMessage[],
   opts: RouteOptions = {},
-): Promise<ChatRoute> {
-  // Explicit non-Claude pins are honored regardless of the Claude kill switch —
-  // they aren't Claude, so killing Claude shouldn't override them. (Key
-  // presence is enforced downstream by the turn entrypoints.)
-  if (opts.forceRoute === "minimax") return "minimax";
+): Promise<"deepseek" | "minimax"> {
+  // Explicit deepseek pin is honored regardless of the MiniMax kill switch —
+  // it isn't MiniMax, so killing MiniMax shouldn't override it. (Key presence
+  // is enforced downstream by the turn entrypoints.)
   if (opts.forceRoute === "deepseek") return "deepseek";
 
-  // Claude disabled (via dashboard StatusRail toggle or missing key) → every
-  // turn goes to DeepSeek. No classifier needed since DeepSeek is the only
-  // option, and the classifier itself would just waste a call.
-  const claudeOn = await isClaudeEnabled();
-  if (!claudeOn) return "deepseek";
+  // MiniMax disabled (via dashboard StatusRail toggle or missing key) → every
+  // turn goes to DeepSeek — the only option left.
+  if (!(await isMinimaxEnabled())) return "deepseek";
 
-  if (opts.forceRoute === "opus") return "opus";
-  if (opts.forceRoute === "sonnet") return "sonnet";
-  if (opts.forceRoute === "haiku") return "haiku";
-
-  // No DeepSeek key → fall back to Sonnet (cheaper than Opus, full tools).
-  if (!isDeepseekConfigured()) return "sonnet";
-
-  const classifierSystem = opts.pageLabel
-    ? `${CLASSIFIER_SYSTEM_PROMPT}\n\nNote: the user is currently viewing ${opts.pageLabel} in the app. Short or ambiguous messages ("what's the status?", "summarize this") likely ask about the data on that page and may need a careful multi-step read — lean toward sonnet over haiku for those.`
-    : CLASSIFIER_SYSTEM_PROMPT;
-
-  try {
-    const result = await generateObject({
-      model: deepseek("deepseek-chat"),
-      schema: RouteSchema,
-      system: classifierSystem,
-      messages,
-      maxOutputTokens: 30,
-    });
-    recordModelUsage("deepseek-chat", "classifier", result.usage);
-    return result.object.route;
-  } catch (e) {
-    console.warn("[chat] classifier failed, defaulting to sonnet:", e);
-    return "sonnet";
-  }
+  // Everything else — the explicit "minimax" pin, legacy "opus"/"sonnet"/
+  // "haiku" pins from before the Claude->MiniMax migration, and the default
+  // "auto" case — all land on MiniMax. There's only one orchestrator model
+  // now, so there's nothing left to classify.
+  return "minimax";
 }
 
 // Pull the most recent user-authored text out of the ModelMessage list so the
@@ -200,22 +163,22 @@ export async function streamDeepseekResponse(
   messages: ModelMessage[],
   streamOpts: StreamOptions = {},
 ) {
-  // When Claude is the orchestrator (the default), DeepSeek runs as the cheap
+  // When MiniMax is the orchestrator (the default), DeepSeek runs as the cheap
   // chitchat tier — no tools, "responder" prompt that explicitly disclaims
-  // taking actions. When Claude is killed via the StatusRail toggle, every
+  // taking actions. When MiniMax is killed via the StatusRail toggle, every
   // turn lands here, so DeepSeek picks up orchestrator duties: full tool
   // access + the orchestrator prompt so tasks/calendar/skills/etc still work.
   // The web_search tool in ALL_TOOLS still works — it calls Anthropic itself.
-  const claudeOn = await isClaudeEnabled();
+  const minimaxOn = await isMinimaxEnabled();
   const userText = extractLatestUserText(messages);
   const [prefixContent, baseSystem] = await Promise.all([
     buildContextPrefix(userText, { pageContext: streamOpts.pageContext }),
-    claudeOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
+    minimaxOn ? getActiveResponderPrompt() : getActiveOrchestratorPrompt(),
   ]);
   // In orchestrator mode, prepend the DeepSeek-specific tool-calling preamble
   // to push the model toward emitting structured tool calls rather than
   // hallucinating success in prose.
-  const system = claudeOn
+  const system = minimaxOn
     ? baseSystem
     : `${DEEPSEEK_ORCHESTRATOR_PREAMBLE}${baseSystem}`;
   const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
@@ -225,13 +188,13 @@ export async function streamDeepseekResponse(
   // ("✅ Done") without actually invoking the tool. "auto" stays for
   // chitchat-shaped messages so "lol" / "thanks" don't get forced into a
   // pointless tool call.
-  const forceTool = !claudeOn && looksLikeAction(userText);
+  const forceTool = !minimaxOn && looksLikeAction(userText);
 
   const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
     messages: [ctxPrefix, ...messages],
-    ...(claudeOn
+    ...(minimaxOn
       ? {}
       : {
           tools: ALL_TOOLS,
@@ -243,7 +206,7 @@ export async function streamDeepseekResponse(
     },
   });
 
-  if (!claudeOn) {
+  if (!minimaxOn) {
     // Diagnostic: confirm whether DeepSeek emitted structured tool calls.
     // Until DeepSeek tool-use settles, this gives us a fast signal when the
     // model hallucinates "✅ Done" without calling anything.
@@ -263,13 +226,12 @@ export async function streamDeepseekResponse(
   return result;
 }
 
-// MiniMax-M3 as the main orchestrator — reached only by an explicit pin. Runs
-// the same orchestrator prompt + full tool set as the DeepSeek-orchestrator
-// path, including the structured-tool-calling preamble and the action-verb
-// toolChoice nudge. M3 speaks the Anthropic Messages format and is strongly
-// tool-capable, but the hardening is cheap insurance against a "✅ Done"
-// hallucination on a model we haven't battle-tested in this app. The web_search
-// tool in ALL_TOOLS still works — it calls Anthropic directly, not the model.
+// MiniMax-M3 as the main orchestrator — the default chat route now (see
+// decideRoute). Runs the same orchestrator prompt + full tool set as the
+// DeepSeek-orchestrator path, including the structured-tool-calling preamble
+// and the action-verb toolChoice nudge — cheap insurance against a "✅ Done"
+// hallucination. The web_search tool in ALL_TOOLS still works — it calls
+// Anthropic directly, not the model.
 export async function streamMinimaxResponse(
   messages: ModelMessage[],
   streamOpts: StreamOptions = {},
@@ -296,44 +258,5 @@ export async function streamMinimaxResponse(
   });
 
   recordModelUsage("MiniMax-M3", "chat", result.totalUsage);
-  return result;
-}
-
-export async function streamClaudeResponse(
-  messages: ModelMessage[],
-  model: ClaudeModelId = "claude-sonnet-4-6",
-  streamOpts: StreamOptions = {},
-) {
-  const [prefixContent, system] = await Promise.all([
-    buildContextPrefix(extractLatestUserText(messages), {
-      pageContext: streamOpts.pageContext,
-    }),
-    getActiveOrchestratorPrompt(),
-  ]);
-  const ctxPrefix: ModelMessage = { role: "system", content: prefixContent };
-  const result = streamText({
-    model: anthropic(model),
-    system,
-    messages: [ctxPrefix, ...messages],
-    tools: {
-      ...ALL_TOOLS,
-      // Anthropic provider-defined web search — Claude runs the search
-      // server-side (billed via ANTHROPIC_API_KEY, no separate search key).
-      // Kept here rather than in ALL_TOOLS because it's Anthropic-only and
-      // ALL_TOOLS is sliced for sub-agents that may run on DeepSeek.
-      // Using the stable search-only version (the 20260209 variant bundles
-      // server-side code execution, which we don't want here).
-      web_search: anthropic.tools.webSearch_20250305({
-        maxUses: 5,
-        userLocation: {
-          type: "approximate",
-          country: "HK",
-          timezone: getOwnerTz(),
-        },
-      }),
-    },
-    stopWhen: stepCountIs(8),
-  });
-  recordModelUsage(model, "chat", result.totalUsage);
   return result;
 }

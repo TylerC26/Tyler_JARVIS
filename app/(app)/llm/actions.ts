@@ -5,7 +5,7 @@ import { invalidateModelPrefsCache } from "@/lib/ai/model-prefs";
 import { updateAgentCore } from "@/lib/db/core/agents";
 import { updateCronJobCore } from "@/lib/db/core/cron-jobs";
 import { setModelPrefCore } from "@/lib/db/core/model-prefs";
-import { setClaudeEnabledCore } from "@/lib/db/core/site-settings";
+import { setMinimaxEnabledCore } from "@/lib/db/core/site-settings";
 import type { AgentModelPref, ModelPref } from "@/lib/db/types";
 
 function bump() {
@@ -44,8 +44,8 @@ export async function setCronModelAction(cronId: string, modelPref: ModelPref) {
     : { ok: false as const, error: result.error };
 }
 
-export async function setClaudeEnabledAction(enabled: boolean) {
-  const result = await setClaudeEnabledCore(enabled);
+export async function setMinimaxEnabledAction(enabled: boolean) {
+  const result = await setMinimaxEnabledCore(enabled);
   if (result.ok) bump();
   return result.ok
     ? { ok: true as const }

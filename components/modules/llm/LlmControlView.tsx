@@ -6,9 +6,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   setAgentModelAction,
-  setClaudeEnabledAction,
   setCronModelAction,
   setFeatureModelAction,
+  setMinimaxEnabledAction,
 } from "@/app/(app)/llm/actions";
 import { FEATURES, type FeatureDef, type FeatureGroup } from "@/lib/ai/model-prefs";
 import type { AgentModelPref, ModelPref } from "@/lib/db/types";
@@ -26,7 +26,7 @@ type Props = {
   initialPrefs: Record<string, ModelPref>;
   agents: AgentRow[];
   cronJobs: CronRow[];
-  claudeEnabled: boolean;
+  minimaxEnabled: boolean;
   usageToday: UsageRow[];
 };
 
@@ -79,7 +79,7 @@ export function LlmControlView({
   initialPrefs,
   agents,
   cronJobs,
-  claudeEnabled,
+  minimaxEnabled,
   usageToday,
 }: Props) {
   const [prefs, setPrefs] = useState(initialPrefs);
@@ -89,7 +89,7 @@ export function LlmControlView({
   const [cronPrefs, setCronPrefs] = useState<Record<string, ModelPref>>(() =>
     Object.fromEntries(cronJobs.map((c) => [c.id, c.model_pref])),
   );
-  const [claudeOn, setClaudeOn] = useState(claudeEnabled);
+  const [minimaxOn, setMinimaxOn] = useState(minimaxEnabled);
   const [error, setError] = useState<string | null>(null);
 
   async function setFeature(key: string, value: ModelPref) {
@@ -125,13 +125,13 @@ export function LlmControlView({
     }
   }
 
-  async function toggleClaude() {
-    const next = !claudeOn;
-    setClaudeOn(next);
+  async function toggleMinimax() {
+    const next = !minimaxOn;
+    setMinimaxOn(next);
     setError(null);
-    const res = await setClaudeEnabledAction(next);
+    const res = await setMinimaxEnabledAction(next);
     if (!res.ok) {
-      setClaudeOn(!next);
+      setMinimaxOn(!next);
       setError(res.error);
     }
   }
@@ -155,11 +155,11 @@ export function LlmControlView({
       {/* kill switch + spend strip */}
       <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md border border-edge bg-surface/40 p-4">
         <button
-          onClick={toggleClaude}
+          onClick={toggleMinimax}
           className="flex items-center gap-2 font-mono text-xs text-fg"
         >
-          <StatusBadge tone={claudeOn ? "success" : "danger"}>
-            {claudeOn ? "claude on" : "deepseek only"}
+          <StatusBadge tone={minimaxOn ? "success" : "danger"}>
+            {minimaxOn ? "minimax on" : "deepseek only"}
           </StatusBadge>
           <span className="text-fg-dim">(click to toggle)</span>
         </button>

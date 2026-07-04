@@ -31,7 +31,7 @@ export default async function LlmPage() {
         schedule: c.schedule,
         model_pref: c.model_pref,
       }))}
-      claudeEnabled={settings.claude_enabled}
+      minimaxEnabled={settings.minimax_enabled}
       usageToday={usage}
     />
   );

@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { modelForFeature } from "@/lib/ai/model-prefs";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,7 +24,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  if (!(await isClaudeEnabled())) {
+  if (!(await isMinimaxEnabled())) {
     return NextResponse.json(
       {
         error:

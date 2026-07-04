@@ -1,4 +1,4 @@
-import { isAnthropicConfigured } from "@/lib/chat/router";
+import { isAnthropicConfigured, isMinimaxConfigured } from "@/lib/chat/router";
 import { getSiteSettingsCore } from "@/lib/db/core/site-settings";
 import { LiveReactorClock } from "./LiveReactorClock";
 import { Panel } from "./Panel";
@@ -44,12 +44,14 @@ function ProviderRow({
 // The v2 system panel: the reactor clock (the deck's radial identity, kept)
 // over the provider rail. Same status logic as the TopBar's StatusRail.
 export async function SystemPanel() {
-  const hasKey = isAnthropicConfigured();
-  const settings = hasKey ? await getSiteSettingsCore() : null;
-  const claude: Status =
-    hasKey && settings?.claude_enabled ? "online" : "offline";
+  const hasMinimaxKey = isMinimaxConfigured();
+  const settings = hasMinimaxKey ? await getSiteSettingsCore() : null;
+  const minimax: Status =
+    hasMinimaxKey && settings?.minimax_enabled ? "online" : "offline";
   const deepseek: Status = process.env.DEEPSEEK_API_KEY ? "online" : "offline";
-  const minimax: Status = process.env.MINIMAX_API_KEY ? "online" : "offline";
+  // Claude is no longer the orchestrator (MiniMax is) — it only backs the
+  // web_search tool now, so it's excluded from the nominal/degraded verdict.
+  const claude: Status = isAnthropicConfigured() ? "online" : "offline";
   const nominal = [deepseek, minimax].every((s) => s === "online");
 
   return (
@@ -77,9 +79,9 @@ export async function SystemPanel() {
       <div className="flex flex-col items-center gap-4">
         <LiveReactorClock size={150} />
         <ul className="flex w-full flex-col gap-2.5">
-          <ProviderRow name="CLAUDE" meta="anthropic" status={claude} />
-          <ProviderRow name="DEEPSEEK" meta="deepseek-chat" status={deepseek} />
           <ProviderRow name="MINIMAX" meta="minimax-m3" status={minimax} />
+          <ProviderRow name="DEEPSEEK" meta="deepseek-chat" status={deepseek} />
+          <ProviderRow name="CLAUDE" meta="anthropic" status={claude} />
           <ProviderRow name="SYNC" meta="supabase" status="online" />
         </ul>
       </div>

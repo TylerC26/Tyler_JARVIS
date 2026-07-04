@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOwnerTz } from "@/lib/auth/currentUser";
 import { modelForFeature } from "@/lib/ai/model-prefs";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { extractJSON } from "@/lib/ocr/extract-json";
 
 export const runtime = "nodejs";
@@ -75,7 +75,7 @@ Output only the schema above. If you cannot read the roster at all, output
 {"shifts": []}.`;
 
 export async function POST(req: Request) {
-  if (!(await isClaudeEnabled())) {
+  if (!(await isMinimaxEnabled())) {
     return NextResponse.json(
       {
         error:

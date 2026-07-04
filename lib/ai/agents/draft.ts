@@ -2,10 +2,10 @@ import { generateObject } from "ai";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { z } from "zod";
 import { ALL_TOOL_NAMES } from "@/lib/ai/agents/tools";
-import { isAnthropicConfigured, recordModelUsage } from "@/lib/chat/router";
+import { isMinimaxConfigured, recordModelUsage } from "@/lib/chat/router";
 import { ALL_TOOLS } from "@/lib/chat/tools";
 import type { CoreResult } from "@/lib/db/core/tasks";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import type { AgentModelPref } from "@/lib/db/types";
 
 // A fully-formed agent config drafted from a one-line description. Mirrors the
@@ -80,11 +80,11 @@ export async function draftAgentFromDescription(
   const desc = description.trim();
   if (!desc) return { ok: false, error: "Describe the agent first." };
 
-  if (!isAnthropicConfigured() || !(await isClaudeEnabled())) {
+  if (!isMinimaxConfigured() || !(await isMinimaxEnabled())) {
     return {
       ok: false,
       error:
-        "Claude is unavailable — set ANTHROPIC_API_KEY and enable Claude, or fill the form in manually.",
+        "MiniMax is unavailable — set MINIMAX_API_KEY and enable MiniMax, or fill the form in manually.",
     };
   }
 

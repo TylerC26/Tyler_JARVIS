@@ -1,5 +1,5 @@
-import { toggleClaudeAction } from "@/lib/db/actions/site-settings";
-import { isAnthropicConfigured } from "@/lib/chat/router";
+import { toggleMinimaxAction } from "@/lib/db/actions/site-settings";
+import { isAnthropicConfigured, isMinimaxConfigured } from "@/lib/chat/router";
 import { getSiteSettingsCore } from "@/lib/db/core/site-settings";
 
 type Status = "online" | "syncing" | "offline";
@@ -29,54 +29,54 @@ function Indicator({ label, status }: { label: string; status: Status }) {
   );
 }
 
-// Clickable CLAUDE indicator backed by the kill switch in site_settings.
-// Click → toggleClaudeAction flips the flag → revalidatePath("/", "layout")
+// Clickable MINIMAX indicator backed by the kill switch in site_settings.
+// Click → toggleMinimaxAction flips the flag → revalidatePath("/", "layout")
 // re-renders the rail with the new color/label.
-function ClaudeToggleIndicator({ status }: { status: Status }) {
+function MinimaxToggleIndicator({ status }: { status: Status }) {
   const next = status === "online" ? "disable" : "enable";
-  const hasKey = isAnthropicConfigured();
+  const hasKey = isMinimaxConfigured();
   return (
-    <form action={toggleClaudeAction}>
+    <form action={toggleMinimaxAction}>
       <button
         type="submit"
         disabled={!hasKey}
         title={
           hasKey
-            ? `Click to ${next} Claude API site-wide`
-            : "ANTHROPIC_API_KEY not configured — set it in env to enable"
+            ? `Click to ${next} MiniMax site-wide`
+            : "MINIMAX_API_KEY not configured — set it in env to enable"
         }
         className="group flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-fg-muted"
       >
         <span
           className={`size-1.5 rounded-full ${STATUS_COLOR[status]} pulse-dot`}
         />
-        <span>CLAUDE:{STATUS_LABEL[status]}</span>
+        <span>MINIMAX:{STATUS_LABEL[status]}</span>
       </button>
     </form>
   );
 }
 
 export async function StatusRail() {
-  const hasKey = isAnthropicConfigured();
-  const settings = hasKey ? await getSiteSettingsCore() : null;
-  const claudeStatus: Status = !hasKey
+  const hasMinimaxKey = isMinimaxConfigured();
+  const settings = hasMinimaxKey ? await getSiteSettingsCore() : null;
+  const minimaxStatus: Status = !hasMinimaxKey
     ? "offline"
-    : settings?.claude_enabled
+    : settings?.minimax_enabled
       ? "online"
       : "offline";
   const deepseekStatus: Status = process.env.DEEPSEEK_API_KEY
     ? "online"
     : "offline";
-  const minimaxStatus: Status = process.env.MINIMAX_API_KEY
-    ? "online"
-    : "offline";
+  // Claude is no longer the orchestrator (MiniMax is) — it only backs the
+  // web_search tool now, so it's a plain indicator with no kill switch.
+  const claudeStatus: Status = isAnthropicConfigured() ? "online" : "offline";
 
   return (
     <div className="hidden items-center gap-4 lg:flex">
       <Indicator label="DB" status="online" />
-      <ClaudeToggleIndicator status={claudeStatus} />
+      <MinimaxToggleIndicator status={minimaxStatus} />
       <Indicator label="DEEPSEEK" status={deepseekStatus} />
-      <Indicator label="MINIMAX" status={minimaxStatus} />
+      <Indicator label="CLAUDE" status={claudeStatus} />
       <Indicator label="SYNC" status="online" />
     </div>
   );

@@ -22,7 +22,7 @@ import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { PLACE_CATEGORIES } from "@/lib/db/types";
 
 const ExtractSchema = z.object({
@@ -165,8 +165,8 @@ export async function extractPlace(input: {
   imageUrl: string | null;
   platform: string;
 }): Promise<ExtractResult> {
-  if (!(await isClaudeEnabled())) {
-    return { ok: false, error: "Claude is disabled — cannot extract the post." };
+  if (!(await isMinimaxEnabled())) {
+    return { ok: false, error: "MiniMax is disabled — cannot extract the post." };
   }
   const caption = input.caption.trim();
   if (!caption && !input.locationHint && !input.imageUrl) {

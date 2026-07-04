@@ -67,7 +67,7 @@ export const FEATURES: FeatureDef[] = [
     key: "chat",
     label: "Main JARVIS",
     description:
-      "Orchestrator for web chat, Telegram, Discord, and cron turns. AUTO runs the classifier (haiku/sonnet/opus).",
+      "Orchestrator for web chat, Telegram, Discord, and cron turns. AUTO runs on MiniMax.",
     group: "Routing",
     defaultTier: "sonnet",
     visionRequired: false,
@@ -182,7 +182,8 @@ export const FEATURES: FeatureDef[] = [
     routed: false,
   },
   // Meeting finalize is not listed: summarization is hardwired to MiniMax in
-  // app/api/meetings/finalize so it keeps working with the Claude kill-switch off.
+  // app/api/meetings/finalize, gated only on MINIMAX_API_KEY presence — it
+  // bypasses the site_settings.minimax_enabled kill-switch entirely.
   {
     key: "agent_draft",
     label: "Agent drafting",
@@ -226,13 +227,18 @@ export const FEATURE_MAP: Record<FeatureKey, FeatureDef> = Object.fromEntries(
   FEATURES.map((f) => [f.key, f]),
 ) as Record<FeatureKey, FeatureDef>;
 
+// The legacy Claude tiers (opus/sonnet/haiku) all resolve to MiniMax-M3 now —
+// MiniMax replaced Claude as the app's LLM, and it doesn't have separate
+// tiers. The tier labels stay selectable in the /llm UI (and still steer the
+// vision-fallback logic below) for backward compatibility with prefs already
+// persisted as "opus"/"sonnet"/"haiku", but they're no longer distinct models.
 const MODEL_ID: Record<
   "opus" | "sonnet" | "haiku" | "deepseek" | "minimax",
   ConcreteModelId
 > = {
-  opus: "claude-opus-4-7",
-  sonnet: "claude-sonnet-4-6",
-  haiku: "claude-haiku-4-5",
+  opus: "MiniMax-M3",
+  sonnet: "MiniMax-M3",
+  haiku: "MiniMax-M3",
   deepseek: "deepseek-chat",
   minimax: "MiniMax-M3",
 };

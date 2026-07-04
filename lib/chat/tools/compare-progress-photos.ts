@@ -10,7 +10,7 @@ import {
   getPhotoWithPriorForCompare,
   listProgressPhotos,
 } from "@/lib/db/core/progress-photos";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { redactPhotoUrlsIfEnabled } from "@/lib/storage/photo-redaction";
 
 export const compareProgressPhotosTool = tool({
@@ -29,11 +29,11 @@ export const compareProgressPhotosTool = tool({
       ),
   }),
   execute: async (input) => {
-    if (!(await isClaudeEnabled())) {
+    if (!(await isMinimaxEnabled())) {
       return {
         ok: false,
         error:
-          "Photo comparison is temporarily disabled. Re-enable Claude from the StatusRail toggle on the dashboard.",
+          "Photo comparison is temporarily disabled. Re-enable MiniMax from the StatusRail toggle on the dashboard.",
       };
     }
 

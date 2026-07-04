@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import { recordSkillUsageCore } from "@/lib/db/core/skill-usages";
 import { resolveActiveSkillsForTurn } from "@/lib/chat/skills";
 import type { Skill, SkillUsageOutcome } from "@/lib/db/types";
@@ -26,7 +26,7 @@ export async function judgeSkillUsage(opts: {
   userText: string;
   assistantText: string;
 }): Promise<{ outcome: SkillUsageOutcome; critique: string } | null> {
-  if (!(await isClaudeEnabled())) return null;
+  if (!(await isMinimaxEnabled())) return null;
   try {
     const prompt = `Skill: ${opts.skill.name}
 Description: ${opts.skill.description}

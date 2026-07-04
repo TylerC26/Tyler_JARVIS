@@ -16,7 +16,6 @@ import {
   isDeepseekConfigured,
   isMinimaxConfigured,
   modelIdForRoute,
-  streamClaudeResponse,
   streamDeepseekResponse,
   streamMinimaxResponse,
   type ForceRoute,
@@ -98,15 +97,11 @@ type IncomingBody = {
 };
 
 export async function POST(req: Request) {
-  if (
-    !isAnthropicConfigured() &&
-    !isDeepseekConfigured() &&
-    !isMinimaxConfigured()
-  ) {
+  if (!isDeepseekConfigured() && !isMinimaxConfigured()) {
     return NextResponse.json(
       {
         error:
-          "No model API keys configured. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, and/or MINIMAX_API_KEY in .env.local.",
+          "No model API keys configured. Set DEEPSEEK_API_KEY and/or MINIMAX_API_KEY in .env.local.",
       },
       { status: 503 },
     );
@@ -169,7 +164,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "No model configured for this agent. Set ANTHROPIC_API_KEY or DEEPSEEK_API_KEY.",
+            "No model configured for this agent. Set MINIMAX_API_KEY or DEEPSEEK_API_KEY.",
         },
         { status: 503 },
       );
@@ -264,14 +259,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // ---- Main Jarvis thread: classifier-routed orchestrator. ----
+  // ---- Main Jarvis thread: MiniMax orchestrator (DeepSeek fallback). ----
   if (latestUser && !mainUserPersisted) {
     await appendMessage({ role: "user", content: latestUserText });
   }
 
-  const route = await decideRoute(modelMessages, {
+  const route = await decideRoute({
     forceRoute: forceRoute ?? (await chatForceRoute()),
-    pageLabel: pageContext?.label ?? null,
   });
 
   if (route === "deepseek" && !isDeepseekConfigured()) {
@@ -286,34 +280,15 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  if (
-    (route === "sonnet" || route === "opus" || route === "haiku") &&
-    !isAnthropicConfigured()
-  ) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured." },
-      { status: 503 },
-    );
-  }
 
   const result =
     route === "deepseek"
       ? await streamDeepseekResponse(modelMessages, {
           pageContext: pageContext?.block ?? null,
         })
-      : route === "minimax"
-        ? await streamMinimaxResponse(modelMessages, {
-            pageContext: pageContext?.block ?? null,
-          })
-        : await streamClaudeResponse(
-            modelMessages,
-            route === "opus"
-              ? "claude-opus-4-7"
-              : route === "haiku"
-                ? "claude-haiku-4-5"
-                : "claude-sonnet-4-6",
-            { pageContext: pageContext?.block ?? null },
-          );
+      : await streamMinimaxResponse(modelMessages, {
+          pageContext: pageContext?.block ?? null,
+        });
 
   const modelId = modelIdForRoute(route);
 

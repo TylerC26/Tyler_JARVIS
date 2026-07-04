@@ -23,7 +23,7 @@ import {
   insertProgressPhoto,
   listProgressPhotos,
 } from "@/lib/db/core/progress-photos";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 
 async function fileFrom(src: string): Promise<File | null> {
   if (src.startsWith("data:")) {
@@ -84,7 +84,7 @@ export const logBodyPhotoTool = tool({
     const uploaded = await uploadProgressPhoto(file, { userId: getOwnerId() });
     if (!uploaded.ok) return { ok: false, error: uploaded.error };
 
-    const analysis = (await isClaudeEnabled())
+    const analysis = (await isMinimaxEnabled())
       ? await analyzePhysiquePhoto({
           imageUrl: uploaded.data.signedUrl,
           priorPhotoUrl,

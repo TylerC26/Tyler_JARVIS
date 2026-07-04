@@ -18,8 +18,8 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 // Accepts a single image via multipart/form-data (field `image`), re-hosts it
 // in the public chat-uploads bucket, and returns the stable URL the client
-// sends as a file part. Storing is independent of the Claude kill switch — only
-// the OCR/vision tools gate on isClaudeEnabled.
+// sends as a file part. Storing is independent of the MiniMax kill switch — only
+// the OCR/vision tools gate on isMinimaxEnabled.
 export async function POST(req: Request) {
   let form: FormData;
   try {

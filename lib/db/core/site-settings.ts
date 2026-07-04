@@ -1,5 +1,7 @@
-// Site-wide runtime toggles. Currently houses the Claude kill switch shown in
-// the dashboard top-right StatusRail.
+// Site-wide runtime toggles. Currently houses the MiniMax kill switch shown in
+// the dashboard top-right StatusRail (formerly the Claude kill switch —
+// claude_enabled is left in the table, unused, after the Claude->MiniMax
+// migration; minimax_enabled is the live column).
 
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
@@ -7,6 +9,7 @@ import type { SiteSettings } from "@/lib/db/types";
 
 const DEFAULTS: Omit<SiteSettings, "owner_id" | "created_at" | "updated_at"> = {
   claude_enabled: true,
+  minimax_enabled: true,
 };
 
 export async function getSiteSettingsCore(): Promise<SiteSettings> {
@@ -27,7 +30,7 @@ export async function getSiteSettingsCore(): Promise<SiteSettings> {
   return (data as SiteSettings | null) ?? empty;
 }
 
-export async function setClaudeEnabledCore(
+export async function setMinimaxEnabledCore(
   enabled: boolean,
 ): Promise<{ ok: true; data: SiteSettings } | { ok: false; error: string }> {
   const supabase = await getSupabaseServer();
@@ -38,7 +41,7 @@ export async function setClaudeEnabledCore(
     .upsert(
       {
         owner_id: getOwnerId(),
-        claude_enabled: enabled,
+        minimax_enabled: enabled,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "owner_id" },
@@ -50,15 +53,16 @@ export async function setClaudeEnabledCore(
   return { ok: true, data: data as SiteSettings };
 }
 
-// Async, DB-backed kill switch for Anthropic calls. Combines the env-key check
-// with the runtime toggle. Used at every Claude call site.
-export async function isClaudeEnabled(): Promise<boolean> {
-  if (!process.env.ANTHROPIC_API_KEY) return false;
+// Async, DB-backed kill switch for MiniMax calls. Combines the env-key check
+// with the runtime toggle. Used at every MiniMax call site (memory
+// reconciliation, skill judge/propose, agent draft, briefs, extractors, etc.).
+export async function isMinimaxEnabled(): Promise<boolean> {
+  if (!process.env.MINIMAX_API_KEY) return false;
   try {
     const s = await getSiteSettingsCore();
-    return s.claude_enabled;
+    return s.minimax_enabled;
   } catch (e) {
-    console.warn("[site] could not read claude_enabled, defaulting on:", e);
+    console.warn("[site] could not read minimax_enabled, defaulting on:", e);
     return true;
   }
 }

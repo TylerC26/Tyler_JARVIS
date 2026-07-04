@@ -12,7 +12,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
-import { isClaudeEnabled } from "@/lib/db/core/site-settings";
+import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 import {
   createMemoryCore,
   listMemoriesCore,
@@ -94,7 +94,7 @@ export async function reconcileMemoriesFromTurn(
 ): Promise<ReconcileResult> {
   const empty: ReconcileResult = { created: 0, updated: 0, superseded: 0 };
   if (!userMsg || userMsg.trim().length < MIN_USER_TEXT) return empty;
-  if (!(await isClaudeEnabled())) return empty;
+  if (!(await isMinimaxEnabled())) return empty;
 
   const existing = (
     await listMemoriesCore({ scope: "global", statuses: ["active"] })

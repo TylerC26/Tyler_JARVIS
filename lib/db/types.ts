@@ -470,7 +470,10 @@ export type RepoTask = {
 
 export type SiteSettings = {
   owner_id: string;
+  // Deprecated — superseded by minimax_enabled after the Claude->MiniMax
+  // migration. Left in the schema/type, unused by app code.
   claude_enabled: boolean;
+  minimax_enabled: boolean;
   created_at: string;
   updated_at: string | null;
 };
@@ -1164,6 +1167,7 @@ export type Database = {
         Insert: {
           owner_id: string;
           claude_enabled?: boolean;
+          minimax_enabled?: boolean;
           created_at?: string;
           updated_at?: string | null;
         };

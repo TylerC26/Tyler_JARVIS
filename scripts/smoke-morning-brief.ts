@@ -1,6 +1,6 @@
 // One-shot smoke test for the morning-brief engine. Runs the actual pipeline:
 //   gatherContext() → getEngine() → engine.generateMorning(ctx)
-// against the real LLM (Claude), with no persistence. Prints the brief
+// against the real LLM (MiniMax), with no persistence. Prints the brief
 // JSON the dashboard would render so we can eyeball that the new default prompt
 // is firing and the Zod schema accepts the response.
 //
@@ -34,14 +34,14 @@ function loadEnv(path: string): void {
 loadEnv(".env.local");
 
 async function main() {
-  const { claudeEngine, DEFAULT_MORNING_BRIEF_PROMPT } = await import(
+  const { minimaxEngine, DEFAULT_MORNING_BRIEF_PROMPT } = await import(
     "../lib/ai/engine/claude"
   );
   const { hasLLM } = await import("../lib/ai/providers");
 
   if (!hasLLM()) {
     console.error(
-      "ERROR: ANTHROPIC_API_KEY missing — cannot smoke-test the LLM engine.",
+      "ERROR: MINIMAX_API_KEY/DEEPSEEK_API_KEY missing — cannot smoke-test the LLM engine.",
     );
     process.exit(1);
   }
@@ -129,9 +129,9 @@ async function main() {
     },
   };
 
-  console.log("\nGenerating morning brief via", claudeEngine.name, "…");
+  console.log("\nGenerating morning brief via", minimaxEngine.name, "…");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const draft = await claudeEngine.generateMorning(ctx as any);
+  const draft = await minimaxEngine.generateMorning(ctx as any);
 
   console.log("\nDRAFT:");
   console.log(JSON.stringify(draft, null, 2));
