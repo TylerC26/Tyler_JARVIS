@@ -62,7 +62,7 @@ function backfillEmbedding(id: string, key: string, value: string): void {
   if (!isEmbeddingConfigured()) return;
   void (async () => {
     try {
-      const vec = await embedText(memoryEmbedInput(key, value));
+      const vec = await embedText(memoryEmbedInput(key, value), "db");
       if (!vec) return;
       const supabase = await getSupabaseServer();
       if (!supabase) return;
@@ -270,7 +270,7 @@ async function semanticMatchIds(
   const trimmed = query.trim();
   if (!trimmed) return out;
   try {
-    const vec = await embedText(trimmed);
+    const vec = await embedText(trimmed, "query");
     if (!vec) return out;
     const supabase = await getSupabaseServer();
     if (!supabase) return out;

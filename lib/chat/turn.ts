@@ -127,6 +127,8 @@ export function revalidateChatPaths(): void {
   revalidatePath("/places");
   revalidatePath("/grocery");
   revalidatePath("/kcal");
+  revalidatePath("/gym");
+  revalidatePath("/notes");
 }
 
 // Post-turn memory reconciliation. Reads the existing memory store, compares
