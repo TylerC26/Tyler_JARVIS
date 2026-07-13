@@ -1,17 +1,12 @@
-// Backfill: embed every memory_entries row that has no vector yet (MiniMax
-// embo-01, type "db"), so semantic memory search (the match_memories RPC) can
-// rank it. New and updated memories embed automatically via
-// lib/db/core/memory.ts — this script catches rows whose embedding is NULL.
+// One-off backfill: embed every memory_entries row that has no vector yet, so
+// semantic memory search (the match_memories RPC) can rank it. New and updated
+// memories embed automatically via lib/db/core/memory.ts — this script only
+// catches rows that predate the redesign (migration 0033).
 //
 // Idempotent: rows that already have an embedding are skipped, so it is safe
-// to re-run. Set MINIMAX_API_KEY + MINIMAX_GROUP_ID in .env.local first:
+// to re-run. Run once, after setting OPENAI_API_KEY in .env.local:
 //
 //   npx tsx scripts/backfill-memory-embeddings.ts
-//
-// Switching embedding providers? Existing vectors live in the OLD model's
-// space and can't be compared against new ones. Re-embed every ACTIVE row in
-// place (overwrites its vector, never nulls it) with:
-//   REEMBED_ALL=1 npx tsx scripts/backfill-memory-embeddings.ts
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
@@ -41,29 +36,7 @@ try {
 
 import { embedTexts, isEmbeddingConfigured } from "@/lib/ai/embeddings";
 
-// Conservative per-request batch for the MiniMax embeddings endpoint.
-const BATCH = 32;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// MiniMax embeddings are RPM-limited; embedTexts returns null on a rate-limit
-// (1002) or transient failure. Retry the batch with escalating backoff before
-// giving up, so a tight rate limit slows the backfill instead of dropping rows.
-async function embedBatchWithRetry(
-  texts: string[],
-): Promise<(number[] | null)[] | null> {
-  const backoffsMs = [15000, 30000, 45000, 60000, 60000];
-  for (let attempt = 0; ; attempt++) {
-    const vectors = await embedTexts(texts, "db");
-    if (vectors) return vectors;
-    if (attempt >= backoffsMs.length) return null;
-    const wait = backoffsMs[attempt];
-    console.warn(
-      `  rate-limited/failed — retry ${attempt + 1}/${backoffsMs.length} in ${wait / 1000}s…`,
-    );
-    await sleep(wait);
-  }
-}
+const BATCH = 96;
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -74,20 +47,17 @@ async function main() {
   }
   if (!isEmbeddingConfigured()) {
     console.error(
-      "MINIMAX_API_KEY / MINIMAX_GROUP_ID are not both set in .env.local — add them before running the backfill.",
+      "OPENAI_API_KEY is not set in .env.local — add it before running the backfill.",
     );
     process.exit(1);
   }
 
   const supabase = createClient(url, serviceKey);
 
-  // Default: only rows missing a vector (drift repair). REEMBED_ALL=1: every
-  // active row, overwriting its vector in place — used when switching the
-  // embedding provider, since old-model vectors aren't comparable to new ones.
-  const reembedAll = process.env.REEMBED_ALL === "1";
-  let query = supabase.from("memory_entries").select("id,key,value");
-  query = reembedAll ? query.eq("status", "active") : query.is("embedding", null);
-  const { data, error } = await query;
+  const { data, error } = await supabase
+    .from("memory_entries")
+    .select("id,key,value")
+    .is("embedding", null);
   if (error) {
     console.error("Query failed:", error.message);
     process.exit(1);
@@ -98,19 +68,17 @@ async function main() {
     console.log("Nothing to backfill — every memory already has an embedding.");
     return;
   }
-  console.log(
-    `Embedding ${rows.length} memories${reembedAll ? " (REEMBED_ALL: overwriting all active vectors)" : ""}…`,
-  );
+  console.log(`Embedding ${rows.length} memories…`);
 
   let done = 0;
   let failed = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
-    const vectors = await embedBatchWithRetry(
+    const vectors = await embedTexts(
       chunk.map((r) => `${r.key}: ${r.value}`),
     );
     if (!vectors) {
-      console.warn(`  batch ${i / BATCH + 1}: giving up after retries`);
+      console.warn(`  batch ${i / BATCH + 1}: embedding request failed, skipping`);
       failed += chunk.length;
       continue;
     }
@@ -132,8 +100,6 @@ async function main() {
       }
     }
     console.log(`  …${done}/${rows.length}`);
-    // Baseline pace between batches to stay under the embeddings RPM limit.
-    if (i + BATCH < rows.length) await sleep(3000);
   }
 
   console.log(`Done. Embedded ${done}, failed ${failed}.`);
