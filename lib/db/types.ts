@@ -1387,6 +1387,16 @@ export type Database = {
         Args: { ids: string[] };
         Returns: undefined;
       };
+      // Top-k semantic neighbours per active/embedded memory — the edge set
+      // behind the Memory Map graph (see lib/db/queries/memory-graph.ts).
+      memory_graph_edges: {
+        Args: { owner: string; k?: number; min_sim?: number };
+        Returns: Array<{
+          source_id: string;
+          target_id: string;
+          similarity: number;
+        }>;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

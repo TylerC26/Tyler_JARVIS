@@ -1,11 +1,13 @@
-import { MemoryView } from "@/components/modules/memory/MemoryView";
-import { listMemories } from "@/lib/db/queries/memory";
+import { MemoryMapView } from "@/components/modules/memory/MemoryMapView";
+import { getMemoryGraph } from "@/lib/db/queries/memory-graph";
 
 export const dynamic = "force-dynamic";
 
 export default async function MemoryPage() {
-  // Active + archived; the view filters between them. Superseded entries are
-  // history and stay out of the UI.
-  const memories = await listMemories({ statuses: ["active", "archived"] });
-  return <MemoryView initialMemories={memories} />;
+  // /memory is the Memory Map — a force-directed graph of the memory store.
+  // Nodes are active + superseded memories (coloured by kind); edges are
+  // semantic k-NN similarity plus superseded-by correction chains. The old
+  // list/table view (MemoryView) is retained in components for reference.
+  const graph = await getMemoryGraph();
+  return <MemoryMapView graph={graph} />;
 }
