@@ -152,7 +152,7 @@ Steps:
 2. Call search_past_conversations with query='prefer' (limit 10) and again with query='remember' (limit 10) to surface recent disclosures and preferences.
 3. Inspect existing memory_entries (visible in your context prefix). Find the one with key='user_profile' if any.
 4. If an existing 'user_profile' entry exists, call forget with its id first.
-5. Call remember with kind='context', key='user_profile', pinned=true, confidence='high', and a value that is a single markdown body with these sections, ~250-400 words total:
+5. Call remember with kind='context', topic='assistant', subtopic='profile', key='user_profile', pinned=true, confidence='high', and a value that is a single markdown body with these sections, ~250-400 words total:
    - **Work**: current role/projects/focus
    - **Family**: wife's shift cadence, family routines
    - **Preferences**: working hours, communication style, food, exercise

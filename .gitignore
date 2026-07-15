@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local Claude Code settings
 .claude/
+
+# local DB backup snapshots (contain personal data — keep out of git)
+/backups/

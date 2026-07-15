@@ -17,7 +17,7 @@ import {
   isDeepseekConfigured,
   recordModelUsage,
 } from "@/lib/chat/router";
-import { buildContextPrefix } from "@/lib/chat/system-prompts";
+import { buildContextPrefix, buildMemoryBlock } from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
 import { getTelegramContext } from "@/lib/chat/request-context";
 import {
@@ -44,6 +44,20 @@ const AGENT_STEP_BUDGET = 4;
 // Direct agent chats are interactive and may chain a few read→write tool
 // calls, so they get a wider budget than the delegate-from-orchestrator path.
 const AGENT_CHAT_STEP_BUDGET = 8;
+
+// Tools that read or write Tyler's long-term memory. An agent holding any of
+// these must see the topic-grouped REMEMBERED store so its writes reuse
+// existing topics instead of spawning duplicates (parity with the direct
+// agent-chat path, which gets the block via buildContextPrefix).
+const MEMORY_TOOL_NAMES = new Set([
+  "remember",
+  "update_memory",
+  "search_memory",
+  "forget",
+]);
+function usesMemoryTools(allowlist: string[]): boolean {
+  return allowlist.some((t) => MEMORY_TOOL_NAMES.has(t));
+}
 
 export type PickedModel = { model: LanguageModel; modelId: ChatModelId };
 
@@ -341,11 +355,17 @@ export async function runAgent(
     const delegationSnapshot = agentWantsBodySnapshot(agent.slug)
       ? await buildBodySnapshot()
       : null;
+    // Give memory-capable agents the same topic-grouped store the orchestrator
+    // sees, so a delegated `remember`/`update_memory` files under an existing
+    // topic rather than duplicating (the task text ranks what's shown).
+    const memoryBlock = usesMemoryTools(agent.tool_allowlist)
+      ? await buildMemoryBlock(task)
+      : "";
     const result = await generateText({
       model,
-      system: delegationSnapshot
-        ? `${agent.system_prompt}\n\n${delegationSnapshot}`
-        : agent.system_prompt,
+      system: [agent.system_prompt, delegationSnapshot, memoryBlock]
+        .filter(Boolean)
+        .join("\n\n"),
       messages: [{ role: "user", content: userBlock }],
       ...(hasTools && {
         tools,

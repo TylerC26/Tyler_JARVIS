@@ -325,6 +325,31 @@ export const MEMORY_KINDS = [
 ] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
+// The TOPIC -> SUBTOPIC hierarchy that groups memories into life-areas. Like
+// MEMORY_KINDS this is app-governed — the DB does not constrain `topic`, so a
+// new life-area is added here with no migration. `topic` is the grouping the
+// assistant appends under; `kind` remains an orthogonal fact-type facet.
+// Introduced with migration 0064 (all pre-existing rows were backfilled).
+export const MEMORY_TOPICS = {
+  gym: ["lifting", "sessions", "plan", "injuries"],
+  work: ["dc-commissioning", "travel", "india-project", "admin"],
+  projects: ["jarvis", "dailypod", "bookeasy", "misc"],
+  assistant: ["style", "rules", "skills", "briefing", "profile"],
+  travel: ["india", "honeymoon", "kul", "general"],
+  housing: ["search", "budget", "logistics"],
+  people: ["michelle", "family", "contacts"],
+  dining: ["restaurants", "cafes", "logged-meals"],
+  health: ["medical", "gambling", "fitness"],
+  general: ["calendar", "tasks", "misc"],
+} as const;
+export type MemoryTopic = keyof typeof MEMORY_TOPICS;
+
+// One-line rendering of the topic map for injection into memory prompts, e.g.
+// "gym (lifting|sessions|plan|injuries); work (dc-commissioning|…); …".
+export const MEMORY_TOPICS_HINT = Object.entries(MEMORY_TOPICS)
+  .map(([t, subs]) => `${t} (${subs.join("|")})`)
+  .join("; ");
+
 export type MemorySource = "user" | "extracted" | "agent";
 export type MemoryConfidence = "high" | "medium" | "low";
 // Lifecycle: 'active' is live; 'archived' is a soft-delete (recoverable);
@@ -340,6 +365,11 @@ export type MemoryEntry = {
   kind: MemoryKind;
   key: string;
   value: string;
+  // Topic hierarchy (see MEMORY_TOPICS). `topic` is the top-level life-area,
+  // `subtopic` an optional second level. Nullable only for legacy safety —
+  // migration 0064 backfilled every row and new writes always set `topic`.
+  topic: string | null;
+  subtopic: string | null;
   source: MemorySource;
   confidence: MemoryConfidence;
   pinned: boolean;
@@ -912,6 +942,8 @@ export type Database = {
           kind: MemoryKind;
           key: string;
           value: string;
+          topic?: string | null;
+          subtopic?: string | null;
           source: MemorySource;
           confidence?: MemoryConfidence;
           pinned?: boolean;

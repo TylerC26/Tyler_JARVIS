@@ -107,9 +107,9 @@ Always close out a delegation with an explicit completion report to Tyler — yo
 
 Web search: you have a \`web_search\` tool. Use it when the user asks about something you can't answer from their data or your own knowledge — current events, prices, weather, sports scores, "look up…", anything time-sensitive or past your training cutoff. Don't use it for the user's own tasks/calendar/projects (that's their database) or for general knowledge you already have. Cite what you found briefly; don't dump raw results.
 
-Memory: the prefix has a REMEMBERED block — Tyler's long-term memory (who he is, the people in his life, health, preferences, routines, standing goals). Read it before answering and treat it as ground truth. Four tools manage it:
-- \`remember\` — a NEW durable fact ("I'm allergic to peanuts", "my wife's name is X"). Pass a short key, a concrete value, and the right kind (identity/preference/relationship/health/work/routine/goal/knowledge/context). Pin core or safety-critical entries (allergies, family).
-- \`update_memory\` — when Tyler corrects or expands a fact already in the block ("actually it's filter coffee now"). Pass its id; don't create a duplicate.
+Memory: the prefix has a REMEMBERED block — Tyler's long-term memory (who he is, the people in his life, health, preferences, routines, standing goals), grouped under TOPICS and subtopics. Read it before answering and treat it as ground truth. Four tools manage it:
+- \`remember\` — a NEW durable fact ("I'm allergic to peanuts", "my wife's name is X"). Pass a short key, a concrete value, the \`topic\` it belongs under (REUSE a topic already in the block whenever it fits — the block is grouped so you can see them — and only coin a new one if none fits), an optional subtopic, and the right kind. Pin core or safety-critical entries (allergies, family).
+- \`update_memory\` — when Tyler corrects or expands a fact already in the block ("actually it's filter coffee now"), or to re-file it under a better topic. Pass its id. Never create a second entry for a subject the block already covers under a topic — update that one.
 - \`forget\` — when a fact no longer holds or he says "forget that". Pass the id; the entry is archived, not destroyed.
 - \`search_memory\` — when you need an older fact that isn't shown in the block.
 Don't over-collect — only durable facts, never transient state. A background pass also reconciles memory after every turn, so you needn't capture everything yourself; act inline only on what Tyler clearly wants kept or changed now.
@@ -371,13 +371,45 @@ function renderAgentsBlock(agents: Agent[]): string {
 
 function renderMemoryBlock(memories: MemoryEntry[]): string {
   if (memories.length === 0) return "";
-  const lines = memories
-    .map((m) => {
-      const pin = m.pinned ? "📌 " : "";
-      return `  • ${pin}[${m.kind}] ${m.key}: ${m.value}  (id=${m.id})`;
+  // Group by topic so the assistant sees the hierarchy it must maintain — new
+  // facts should append under an existing topic, not spawn a duplicate.
+  const byTopic = new Map<string, MemoryEntry[]>();
+  for (const m of memories) {
+    const t = m.topic ?? "ungrouped";
+    const arr = byTopic.get(t);
+    if (arr) arr.push(m);
+    else byTopic.set(t, [m]);
+  }
+  const sections = [...byTopic.entries()]
+    .map(([topic, entries]) => {
+      const lines = entries
+        .map((m) => {
+          const pin = m.pinned ? "📌 " : "";
+          const sub = m.subtopic ? `${m.subtopic} · ` : "";
+          return `    • ${pin}${sub}[${m.kind}] ${m.key}: ${m.value}  (id=${m.id})`;
+        })
+        .join("\n");
+      return `  ${topic}:\n${lines}`;
     })
     .join("\n");
-  return `\n\nREMEMBERED — Tyler's long-term memory (${memories.length} entries, pinned 📌 first):\n${lines}\nTreat these as ground truth about Tyler. New durable fact → call remember. An entry here is now wrong or incomplete → call update_memory (refine) or forget (drop) with its id. Need an older fact not shown here → call search_memory.`;
+  return `\n\nREMEMBERED — Tyler's long-term memory (${memories.length} entries, grouped by topic; 📌 = pinned):\n${sections}\nTreat these as ground truth about Tyler. New durable fact → call remember, filing it under an existing topic when one fits (coin a new topic only if none does). An entry here is now wrong or incomplete → call update_memory (refine / re-file) or forget (drop) with its id. Need an older fact not shown here → call search_memory.`;
+}
+
+// The grouped REMEMBERED block on its own, ranked for `userText`. Exported so a
+// delegated sub-agent that can touch memory (see lib/ai/agents/run.ts) sees the
+// same topic-grouped store the main orchestrator does — so its writes reuse
+// existing topics instead of duplicating. Never throws.
+export async function buildMemoryBlock(userText: string): Promise<string> {
+  try {
+    const memories = await getRecentRelevantMemories(
+      userText ?? "",
+      MAX_MEMORIES_IN_PREFIX,
+    );
+    return renderMemoryBlock(memories);
+  } catch (e) {
+    console.warn("[chat] could not build standalone memory block:", e);
+    return "";
+  }
 }
 
 export type ContextPrefixOptions = {

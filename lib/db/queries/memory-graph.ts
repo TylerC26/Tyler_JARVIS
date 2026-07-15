@@ -13,6 +13,8 @@ import type {
 export type MemoryGraphNode = {
   id: string;
   kind: MemoryKind;
+  topic: string | null;
+  subtopic: string | null;
   key: string;
   value: string;
   source: MemorySource;
@@ -64,12 +66,14 @@ const EMPTY: MemoryGraph = {
 // Columns the graph needs — deliberately omits `embedding` (large, and edges
 // are derived server-side by the memory_graph_edges RPC, not on the client).
 const NODE_COLUMNS =
-  "id,kind,key,value,source,confidence,pinned,status,superseded_by," +
-  "used_count,last_used_at,created_at";
+  "id,kind,topic,subtopic,key,value,source,confidence,pinned,status," +
+  "superseded_by,used_count,last_used_at,created_at";
 
 type NodeRow = {
   id: string;
   kind: MemoryKind;
+  topic: string | null;
+  subtopic: string | null;
   key: string;
   value: string;
   source: MemorySource;
@@ -129,6 +133,8 @@ export async function getMemoryGraph(
   const nodes: MemoryGraphNode[] = rows.map((r) => ({
     id: r.id,
     kind: r.kind,
+    topic: r.topic,
+    subtopic: r.subtopic,
     key: r.key,
     value: r.value,
     source: r.source,

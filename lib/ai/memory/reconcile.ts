@@ -19,7 +19,7 @@ import {
   supersedeMemoryCore,
   updateMemoryCore,
 } from "@/lib/db/core/memory";
-import { MEMORY_KINDS } from "@/lib/db/types";
+import { MEMORY_KINDS, MEMORY_TOPICS_HINT } from "@/lib/db/types";
 
 // Turns shorter than this carry nothing worth reconciling.
 const MIN_USER_TEXT = 12;
@@ -35,6 +35,8 @@ const OperationSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create"),
     kind: KindEnum,
+    topic: z.string().min(2).max(40),
+    subtopic: z.string().min(2).max(40).optional(),
     key: z.string().min(2).max(60),
     value: z.string().min(2).max(280),
     confidence: ConfidenceEnum,
@@ -44,6 +46,8 @@ const OperationSchema = z.discriminatedUnion("action", [
     id: z.string(),
     key: z.string().min(2).max(60).optional(),
     value: z.string().min(2).max(280).optional(),
+    topic: z.string().min(2).max(40).optional(),
+    subtopic: z.string().min(2).max(40).optional(),
     kind: KindEnum.optional(),
     confidence: ConfidenceEnum.optional(),
   }),
@@ -51,6 +55,8 @@ const OperationSchema = z.discriminatedUnion("action", [
     action: z.literal("supersede"),
     id: z.string(),
     kind: KindEnum,
+    topic: z.string().min(2).max(40),
+    subtopic: z.string().min(2).max(40).optional(),
     key: z.string().min(2).max(60),
     value: z.string().min(2).max(280),
     confidence: ConfidenceEnum,
@@ -72,11 +78,15 @@ Operations:
 - update — an existing entry is incomplete or slightly off; refine it (pass its id). Use this to ENRICH, not to contradict.
 - supersede — an existing entry is now WRONG and the turn gives the correct version (pass the OLD id). The old entry is retired and replaced by the values you give.
 
+Every entry is filed under a TOPIC and optional SUBTOPIC (shown as [topic/subtopic] in the store). This is the grouping that keeps memory tidy.
+Known topics (subtopics): ${MEMORY_TOPICS_HINT}.
+
 Rules:
 - Before you create, scan the store. If the fact is already there, do nothing — never duplicate.
-- Prefer update / supersede over create whenever the turn touches an existing entry.
+- Prefer update / supersede over create whenever the turn touches an existing entry. If a fact extends a subject already covered by an entry under some topic, UPDATE that entry — do not add a second top-level entry for the same subject.
+- topic: choose the grouping this fact belongs under. ALWAYS reuse an existing topic/subtopic when the fact fits one (check the list above and the topics already present in the store); only coin a new topic when it genuinely fits none. Keep topics/subtopics as short lowercase slugs.
 - key: 2-6 words, lowercase, dictionary-style label. value: one concrete declarative sentence.
-- kind: identity (who he is), preference (how he likes things), relationship (a person in his life), health, work, routine (recurring habit/schedule), goal (a standing objective), knowledge (other durable fact), context (situational background).
+- kind (orthogonal fact-type facet): identity (who he is), preference (how he likes things), relationship (a person in his life), health, work, routine (recurring habit/schedule), goal (a standing objective), knowledge (other durable fact), context (situational background).
 - confidence: high when Tyler stated it plainly, medium when reasonably inferred, low when uncertain.
 - Be conservative. Quality over volume.`;
 
@@ -104,7 +114,12 @@ export async function reconcileMemoriesFromTurn(
     existing.length === 0
       ? "(empty — no memories stored yet)"
       : existing
-          .map((m) => `[id:${m.id}] (${m.kind}) ${m.key}: ${m.value}`)
+          .map((m) => {
+            const grp = m.topic
+              ? `[${m.topic}${m.subtopic ? `/${m.subtopic}` : ""}] `
+              : "";
+            return `[id:${m.id}] ${grp}(${m.kind}) ${m.key}: ${m.value}`;
+          })
           .join("\n");
 
   try {
@@ -129,6 +144,8 @@ export async function reconcileMemoriesFromTurn(
           scope: "global",
           source: "extracted",
           kind: op.kind,
+          topic: op.topic,
+          subtopic: op.subtopic ?? null,
           key: op.key,
           value: op.value,
           confidence: op.confidence,
@@ -139,6 +156,8 @@ export async function reconcileMemoriesFromTurn(
         const r = await updateMemoryCore(op.id, {
           ...(op.key !== undefined ? { key: op.key } : {}),
           ...(op.value !== undefined ? { value: op.value } : {}),
+          ...(op.topic !== undefined ? { topic: op.topic } : {}),
+          ...(op.subtopic !== undefined ? { subtopic: op.subtopic } : {}),
           ...(op.kind !== undefined ? { kind: op.kind } : {}),
           ...(op.confidence !== undefined
             ? { confidence: op.confidence }
@@ -151,6 +170,8 @@ export async function reconcileMemoriesFromTurn(
           scope: "global",
           source: "extracted",
           kind: op.kind,
+          topic: op.topic,
+          subtopic: op.subtopic ?? null,
           key: op.key,
           value: op.value,
           confidence: op.confidence,

@@ -15,6 +15,7 @@ import {
 import {
   GROCERY_CATEGORIES,
   MEMORY_KINDS,
+  MEMORY_TOPICS_HINT,
   PLACE_CATEGORIES,
 } from "@/lib/db/types";
 import {
@@ -1081,7 +1082,7 @@ export const delegateToAgentTool = tool({
 
 export const rememberTool = tool({
   description:
-    "Persist a NEW durable fact about Tyler so you recall it in future conversations. Use this when he reveals something stable and worth keeping — a preference, a person in his life, a health detail, how he works, a standing goal ('remember that…', 'just so you know…', 'I prefer…'). The fact is injected into your system prefix on future turns. Keep `key` short (2-6 words) and `value` a single concrete sentence. To CHANGE a fact already in the REMEMBERED block, use update_memory instead — do not create a near-duplicate. Never store transient state (today's tasks, current mood). A background pass also reconciles memory after each turn, so reserve this for facts Tyler clearly wants kept.",
+    "Persist a NEW durable fact about Tyler so you recall it in future conversations. Use this when he reveals something stable and worth keeping — a preference, a person in his life, a health detail, how he works, a standing goal ('remember that…', 'just so you know…', 'I prefer…'). The fact is injected into your system prefix on future turns. Keep `key` short (2-6 words) and `value` a single concrete sentence. Every memory is filed under a `topic` (and optional `subtopic`) — ALWAYS reuse an existing topic that fits (the REMEMBERED block groups them so you can see what already exists); only coin a new topic when the fact fits none. To CHANGE or extend a fact already in the REMEMBERED block, use update_memory instead — never create a second entry for a subject an existing entry already covers. Never store transient state (today's tasks, current mood). A background pass also reconciles memory after each turn, so reserve this for facts Tyler clearly wants kept.",
   inputSchema: z.object({
     key: z
       .string()
@@ -1091,10 +1092,21 @@ export const rememberTool = tool({
     value: z
       .string()
       .describe("The fact itself, written as a clear declarative sentence."),
+    topic: z
+      .string()
+      .describe(
+        `Top-level life-area this fact belongs under. REUSE an existing topic whenever it fits; coin a new one only if none does. Known topics (subtopics): ${MEMORY_TOPICS_HINT}.`,
+      ),
+    subtopic: z
+      .string()
+      .optional()
+      .describe(
+        "Optional second-level grouping under the topic (e.g. topic 'gym' → subtopic 'lifting'). Reuse an existing subtopic when one fits.",
+      ),
     kind: z
       .enum(MEMORY_KINDS)
       .describe(
-        "identity = who he is; preference = how he likes things; relationship = a person in his life; health; work; routine = recurring habit/schedule; goal = a standing objective; knowledge = other durable fact; context = situational background.",
+        "Orthogonal fact-type facet: identity = who he is; preference = how he likes things; relationship = a person in his life; health; work; routine = recurring habit/schedule; goal = a standing objective; knowledge = other durable fact; context = situational background.",
       ),
     confidence: z
       .enum(["high", "medium", "low"])
@@ -1112,6 +1124,8 @@ export const rememberTool = tool({
       kind: input.kind,
       key: input.key,
       value: input.value,
+      topic: input.topic,
+      subtopic: input.subtopic ?? null,
       source: "user",
       confidence: input.confidence ?? "high",
       pinned: input.pinned ?? false,
@@ -1138,6 +1152,14 @@ export const updateMemoryTool = tool({
       .optional()
       .describe("Replacement value — a full declarative sentence."),
     key: z.string().optional().describe("Replacement short label."),
+    topic: z
+      .string()
+      .optional()
+      .describe("Re-file this memory under a different top-level topic."),
+    subtopic: z
+      .string()
+      .optional()
+      .describe("Set or change the subtopic under the topic."),
     kind: z.enum(MEMORY_KINDS).optional(),
     confidence: z.enum(["high", "medium", "low"]).optional(),
     pinned: z
@@ -1185,6 +1207,8 @@ export const searchMemoryTool = tool({
       memories: hits.map((m) => ({
         id: m.id,
         kind: m.kind,
+        topic: m.topic,
+        subtopic: m.subtopic,
         key: m.key,
         value: m.value,
         pinned: m.pinned,

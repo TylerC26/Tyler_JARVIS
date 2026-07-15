@@ -17,10 +17,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   MEMORY_KINDS,
+  MEMORY_TOPICS,
   type MemoryConfidence,
   type MemoryEntry,
   type MemoryKind,
 } from "@/lib/db/types";
+
+const MEMORY_TOPIC_KEYS = Object.keys(MEMORY_TOPICS);
 
 type Editing =
   | { kind: "closed" }
@@ -30,6 +33,8 @@ type Editing =
 type FormState = {
   key: string;
   value: string;
+  topic: string;
+  subtopic: string;
   kind: MemoryKind;
   confidence: MemoryConfidence;
   pinned: boolean;
@@ -38,6 +43,8 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   key: "",
   value: "",
+  topic: "",
+  subtopic: "",
   kind: "knowledge",
   confidence: "high",
   pinned: false,
@@ -125,6 +132,8 @@ export function MemoryView({
     setForm({
       key: memory.key,
       value: memory.value,
+      topic: memory.topic ?? "",
+      subtopic: memory.subtopic ?? "",
       kind: memory.kind,
       confidence: memory.confidence,
       pinned: memory.pinned,
@@ -146,6 +155,8 @@ export function MemoryView({
         const res = await createMemoryAction({
           key: form.key,
           value: form.value,
+          topic: form.topic.trim() || null,
+          subtopic: form.subtopic.trim() || null,
           kind: form.kind,
           confidence: form.confidence,
           pinned: form.pinned,
@@ -162,6 +173,8 @@ export function MemoryView({
         const res = await updateMemoryAction(editing.memory.id, {
           key: form.key,
           value: form.value,
+          topic: form.topic.trim() || null,
+          subtopic: form.subtopic.trim() || null,
           kind: form.kind,
           confidence: form.confidence,
           pinned: form.pinned,
@@ -455,6 +468,39 @@ export function MemoryView({
               }
             />
           </Field>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="topic" hint="Reuse an existing life-area.">
+              <Select
+                value={form.topic}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, topic: e.target.value }))
+                }
+              >
+                <option value="">— none —</option>
+                {MEMORY_TOPIC_KEYS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="subtopic" hint="Optional second level.">
+              <Input
+                value={form.subtopic}
+                placeholder={
+                  form.topic
+                    ? (MEMORY_TOPICS[form.topic as keyof typeof MEMORY_TOPICS] ?? [])
+                        .slice(0, 3)
+                        .join(" / ")
+                    : "lifting"
+                }
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subtopic: e.target.value }))
+                }
+              />
+            </Field>
+          </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="kind">

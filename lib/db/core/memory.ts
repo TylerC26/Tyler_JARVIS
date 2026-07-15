@@ -18,14 +18,18 @@ import type { CoreResult } from "./tasks";
 // vector, which is large and never rendered. Write paths (.select() after
 // insert/update) still pull the full row, but only one at a time.
 const READ_COLUMNS =
-  "id,owner_id,scope,kind,key,value,source,confidence,pinned,status," +
-  "superseded_by,details,used_count,last_used_at,created_at,updated_at";
+  "id,owner_id,scope,kind,key,value,topic,subtopic,source,confidence,pinned," +
+  "status,superseded_by,details,used_count,last_used_at,created_at,updated_at";
 
 export type CreateMemoryInput = {
   scope?: MemoryScope;
   kind: MemoryKind;
   key: string;
   value: string;
+  // Topic hierarchy (see MEMORY_TOPICS). Reuse an existing topic/subtopic
+  // whenever the fact fits one; only coin a new topic when none applies.
+  topic?: string | null;
+  subtopic?: string | null;
   source: MemorySource;
   confidence?: MemoryConfidence;
   pinned?: boolean;
@@ -35,9 +39,26 @@ export type CreateMemoryInput = {
 export type UpdateMemoryInput = Partial<
   Pick<
     MemoryEntry,
-    "scope" | "kind" | "key" | "value" | "confidence" | "pinned" | "details"
+    | "scope"
+    | "kind"
+    | "key"
+    | "value"
+    | "topic"
+    | "subtopic"
+    | "confidence"
+    | "pinned"
+    | "details"
   >
 >;
+
+// Normalize a topic/subtopic into a stable slug (lowercase, trimmed, spaces →
+// hyphens). Keeps grouping greppable and prevents "DC Commissioning" vs
+// "dc-commissioning" drift. Returns null for empty/absent input.
+function normalizeSlug(s: string | null | undefined): string | null {
+  if (s == null) return null;
+  const v = s.trim().toLowerCase().replace(/\s+/g, "-");
+  return v || null;
+}
 
 export type ListMemoriesOptions = {
   scope?: MemoryScope;
@@ -116,6 +137,8 @@ export async function createMemoryCore(
       kind: input.kind,
       key,
       value,
+      topic: normalizeSlug(input.topic),
+      subtopic: normalizeSlug(input.subtopic),
       source: input.source,
       confidence: input.confidence ?? "medium",
       pinned: input.pinned ?? false,
@@ -152,6 +175,9 @@ export async function updateMemoryCore(
     if (!v) return { ok: false, error: "Value cannot be empty." };
     updates.value = v;
   }
+  if (patch.topic !== undefined) updates.topic = normalizeSlug(patch.topic);
+  if (patch.subtopic !== undefined)
+    updates.subtopic = normalizeSlug(patch.subtopic);
   if (patch.confidence !== undefined) updates.confidence = patch.confidence;
   if (patch.pinned !== undefined) updates.pinned = patch.pinned;
   if (patch.details !== undefined) updates.details = patch.details;

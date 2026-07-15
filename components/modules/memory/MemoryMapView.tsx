@@ -277,7 +277,9 @@ export function MemoryMapView({ graph }: { graph: MemoryGraph }) {
           if (
             n.key.toLowerCase().includes(q) ||
             n.value.toLowerCase().includes(q) ||
-            n.kind.toLowerCase().includes(q)
+            n.kind.toLowerCase().includes(q) ||
+            (n.topic?.toLowerCase().includes(q) ?? false) ||
+            (n.subtopic?.toLowerCase().includes(q) ?? false)
           )
             s.add(n.id);
         }
@@ -672,6 +674,12 @@ export function MemoryMapView({ graph }: { graph: MemoryGraph }) {
                   >
                     {selNode.kind}
                   </span>
+                  {selNode.topic ? (
+                    <span className="rounded-sm border border-edge px-2 py-0.5 font-mono text-[9px] tracking-wider text-fg-muted">
+                      {selNode.topic}
+                      {selNode.subtopic ? ` / ${selNode.subtopic}` : ""}
+                    </span>
+                  ) : null}
                   <span className="font-mono text-[9px] tracking-wider text-fg-dim">
                     #{selNode.id.slice(0, 8)}
                   </span>
