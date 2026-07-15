@@ -31,9 +31,11 @@ export function ChatLauncher({
   configured: { anthropic: boolean; deepseek: boolean; minimax: boolean };
   agents?: LauncherAgent[];
 }) {
-  // `open` only governs the slide-over below lg. At lg+ the bar is docked
-  // permanently (CSS forces it visible) and this state is inert.
+  // `open` governs the slide-over below lg. At lg+ the bar is docked and
+  // `collapsed` governs whether that docked rail is expanded or tucked away
+  // to the right edge (persisted, so it survives navigation and reloads).
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   // Manual pick from the strip dropdown, scoped to the page default it was
   // made under — navigating to a page with a DIFFERENT default re-arms that
@@ -50,11 +52,40 @@ export function ChatLauncher({
     getServerPageAgentHint,
   );
 
+  // Restore the docked-rail collapse preference after mount (client-only, so
+  // SSR renders the expanded default and we sync once localStorage is read).
+  useEffect(() => {
+    try {
+      setCollapsed(
+        window.localStorage.getItem("jarvis:chat-collapsed") === "1",
+      );
+    } catch {
+      /* private mode / storage disabled — keep the default */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "jarvis:chat-collapsed",
+        collapsed ? "1" : "0",
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        setOpen((o) => !o);
+        // lg+ toggles the docked rail's collapse; below lg toggles the
+        // slide-over. Matches whichever chat surface is actually on screen.
+        if (window.matchMedia("(min-width: 1024px)").matches) {
+          setCollapsed((c) => !c);
+        } else {
+          setOpen((o) => !o);
+        }
       }
     }
     window.addEventListener("keydown", onKey);
@@ -109,6 +140,34 @@ export function ChatLauncher({
         </button>
       )}
 
+      {/* Re-open tab pinned to the right edge — lg+ only, shown when the
+          docked rail is collapsed. Slides the rail back into view. */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="Open Jarvis chat"
+          title="Open Jarvis chat (⌘J)"
+          className={[
+            "fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 lg:flex",
+            "flex-col items-center gap-1.5 rounded-l-md border border-r-0 bg-surface/95 backdrop-blur-md px-1.5 py-3",
+            "shadow-xl transition-all hover:px-2",
+            live
+              ? "border-accent/40 text-accent hover:border-accent hover:bg-accent/10"
+              : "border-edge text-fg-muted",
+          ].join(" ")}
+        >
+          <span
+            className={[
+              "size-2 rounded-full",
+              live ? "bg-accent pulse-dot" : "bg-fg-dim",
+            ].join(" ")}
+            aria-hidden
+          />
+          <span className="font-mono text-sm leading-none">◢◤</span>
+        </button>
+      )}
+
       {/* Tap-scrim to dismiss the slide-over — below lg only. */}
       {open && (
         <button
@@ -127,10 +186,10 @@ export function ChatLauncher({
       <div
         className={[
           "fixed inset-y-0 right-0 z-50 flex w-full flex-col sm:w-[420px] shadow-2xl shadow-black/40",
-          "transition-transform duration-200 ease-out",
+          "transition-[transform,width] duration-200 ease-out",
           open ? "translate-x-0" : "translate-x-full",
-          "lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-[360px] xl:w-[420px]",
-          "lg:shrink-0 lg:translate-x-0 lg:shadow-none",
+          "lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none",
+          collapsed ? "lg:w-0 lg:overflow-hidden" : "lg:w-[360px] xl:w-[420px]",
         ].join(" ")}
         style={{
           paddingTop: "env(safe-area-inset-top)",
@@ -167,6 +226,17 @@ export function ChatLauncher({
               </option>
             ))}
           </select>
+          {/* Collapse the docked rail to the right — lg+ only, since below lg
+              the close (×) button in ChatPanel already dismisses the panel. */}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse chat panel"
+            title="Collapse chat (⌘J)"
+            className="hidden size-7 shrink-0 items-center justify-center rounded-sm border border-edge bg-surface-2 font-mono text-fg-muted hover:border-edge-strong hover:text-fg lg:inline-flex"
+          >
+            <span aria-hidden>»</span>
+          </button>
         </div>
         <div className="min-h-0 flex-1">
           {/* Keyed by thread so switching the page agent (or toggling back to
