@@ -1,19 +1,36 @@
-import { addDays, startOfDay } from "date-fns";
-import { getOwnerId } from "@/lib/auth/currentUser";
+import { addDays } from "date-fns";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { getOwnerId, getOwnerTz } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { Event } from "@/lib/db/types";
 import type { CoreResult } from "./tasks";
 
+// Snap an all-day event to whole-day boundaries in the OWNER'S timezone. The
+// calendar renders days in the viewer's local zone (eventCoversDay uses local
+// startOfDay), so snapping to the SERVER's UTC day — as this used to — pushes
+// each boundary ~offset hours off and bleeds the event into the adjacent day
+// (e.g. a HK "22 Jul" pick landed as 21–23 Jul). Anchoring to the owner's zone
+// keeps start/end on real local midnights. End is exclusive (the next midnight).
 function normalizeAllDayBoundaries(start: Date, end: Date): { start: Date; end: Date } {
-  const newStart = startOfDay(start);
-  // If end is exactly midnight already, treat as exclusive end and keep.
-  // Otherwise round up: end-of-the-day-of-end → next midnight.
-  const endStartOfDay = startOfDay(end);
-  const isExactMidnight = end.getTime() === endStartOfDay.getTime();
-  const newEnd = isExactMidnight ? endStartOfDay : addDays(endStartOfDay, 1);
-  // Guarantee at least 1 day span
+  const tz = getOwnerTz();
+  const dayOf = (d: Date) => formatInTimeZone(d, tz, "yyyy-MM-dd");
+  const tzMidnight = (dayStr: string) => fromZonedTime(`${dayStr}T00:00:00`, tz);
+  // The tz-midnight of the day AFTER the given one (DST-safe: reformat +24h).
+  const nextMidnight = (dayStr: string) =>
+    tzMidnight(dayOf(addDays(tzMidnight(dayStr), 1)));
+
+  const newStart = tzMidnight(dayOf(start));
+
+  const endDay = dayOf(end);
+  const endMidnight = tzMidnight(endDay);
+  // End already exactly on a tz-midnight → exclusive end, keep it. Otherwise
+  // `end` falls inside endDay (which should be covered) → next tz-midnight.
+  const isExactMidnight = end.getTime() === endMidnight.getTime();
+  const newEnd = isExactMidnight ? endMidnight : nextMidnight(endDay);
+
+  // Guarantee at least a one-day span.
   if (newEnd.getTime() <= newStart.getTime()) {
-    return { start: newStart, end: addDays(newStart, 1) };
+    return { start: newStart, end: nextMidnight(dayOf(newStart)) };
   }
   return { start: newStart, end: newEnd };
 }
