@@ -29,6 +29,18 @@ type Props = {
   onChange?: (values: EventFormValues) => void;
 };
 
+// Local YYYY-MM-DD for a Date (calendar day in the viewer's zone).
+function fmtDay(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// The all-day END is stored exclusively (the following midnight), so the last
+// day the event actually covers is the instant just before it.
+function inclusiveEndDay(endLocal: string): string {
+  return fmtDay(new Date(new Date(endLocal).getTime() - 1));
+}
+
 function toForm(initial: Props["initial"]): EventFormValues {
   return {
     title: initial.title ?? "",
@@ -65,15 +77,34 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
     onChange?.(next);
   }
 
+  // Update several fields atomically — a single update() per event, so two
+  // fields set in one handler don't clobber each other via the stale closure.
+  function updateMany(patch: Partial<EventFormValues>) {
+    const next = { ...values, ...patch };
+    setValues(next);
+    onChange?.(next);
+  }
+
   return (
     <form
       id={formId}
       className="grid gap-4 md:grid-cols-2 md:gap-5"
       onSubmit={async (e) => {
         e.preventDefault();
-        // Ensure ISO output
-        const isoStart = fromLocalInput(values.starts_at).toISOString();
-        const isoEnd = fromLocalInput(values.ends_at).toISOString();
+        let isoStart: string;
+        let isoEnd: string;
+        if (values.all_day) {
+          // Just-a-day events: ignore any leftover time, anchor to the picked
+          // day(s). End at noon so the core snaps it up to cover that whole day.
+          const startDay = values.starts_at.slice(0, 10);
+          const endRaw = inclusiveEndDay(values.ends_at);
+          const endDay = endRaw < startDay ? startDay : endRaw;
+          isoStart = new Date(`${startDay}T00:00`).toISOString();
+          isoEnd = new Date(`${endDay}T12:00`).toISOString();
+        } else {
+          isoStart = fromLocalInput(values.starts_at).toISOString();
+          isoEnd = fromLocalInput(values.ends_at).toISOString();
+        }
         await onSubmit({ ...values, starts_at: isoStart, ends_at: isoEnd });
       }}
     >
@@ -87,26 +118,75 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
             autoFocus
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Starts">
-            <Input
-              name="starts_at"
-              type="datetime-local"
-              value={values.starts_at}
-              onChange={(e) => update("starts_at", e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Ends">
-            <Input
-              name="ends_at"
-              type="datetime-local"
-              value={values.ends_at}
-              onChange={(e) => update("ends_at", e.target.value)}
-              required
-            />
-          </Field>
-        </div>
+        <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+          <input
+            type="checkbox"
+            checked={values.all_day}
+            onChange={(e) => update("all_day", e.target.checked)}
+            className="size-4 accent-accent"
+          />
+          all-day event
+        </label>
+        {values.all_day ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Day">
+              <Input
+                name="starts_day"
+                type="date"
+                value={values.starts_at.slice(0, 10)}
+                onChange={(e) => {
+                  const day = e.target.value;
+                  if (!day) return;
+                  const patch: Partial<EventFormValues> = {
+                    starts_at: `${day}T00:00`,
+                  };
+                  // Keep the end on or after the start day.
+                  if (inclusiveEndDay(values.ends_at) < day) {
+                    patch.ends_at = `${day}T12:00`;
+                  }
+                  updateMany(patch);
+                }}
+                required
+              />
+            </Field>
+            <Field label="End day">
+              <Input
+                name="ends_day"
+                type="date"
+                min={values.starts_at.slice(0, 10)}
+                value={inclusiveEndDay(values.ends_at)}
+                onChange={(e) => {
+                  const day = e.target.value;
+                  if (!day) return;
+                  const start = values.starts_at.slice(0, 10);
+                  update("ends_at", `${day < start ? start : day}T12:00`);
+                }}
+                required
+              />
+            </Field>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Starts">
+              <Input
+                name="starts_at"
+                type="datetime-local"
+                value={values.starts_at}
+                onChange={(e) => update("starts_at", e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Ends">
+              <Input
+                name="ends_at"
+                type="datetime-local"
+                value={values.ends_at}
+                onChange={(e) => update("ends_at", e.target.value)}
+                required
+              />
+            </Field>
+          </div>
+        )}
         <Field label="Category">
           <CategoryPicker
             value={values.category}
@@ -137,15 +217,6 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
             placeholder="optional"
           />
         </Field>
-        <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-          <input
-            type="checkbox"
-            checked={values.all_day}
-            onChange={(e) => update("all_day", e.target.checked)}
-            className="size-4 accent-accent"
-          />
-          all day
-        </label>
       </div>
       <Field label="Description" className="min-h-[240px] md:h-full">
         <Textarea
