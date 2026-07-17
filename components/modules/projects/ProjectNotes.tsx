@@ -5,6 +5,7 @@ import {
   addProjectNoteAction,
   attachNoteAction,
   claudiaNoteAssistAction,
+  commitScannedProjectNoteAction,
   deleteProjectNoteAction,
   detachNoteAction,
   extractTasksFromNoteAction,
@@ -13,6 +14,7 @@ import {
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
+import { NoteScanUploader } from "../notes/NoteScanUploader";
 import { ProjectMeetings } from "./ProjectMeetings";
 import { noteCardTitle } from "./noteCardTitle";
 import type { MeetingListRow } from "@/lib/db/queries/meetings";
@@ -40,6 +42,7 @@ function autoSize(el: HTMLTextAreaElement | null) {
 export function ProjectNotes({
   projectId,
   projectSlug,
+  projectName,
   notes: initialNotes,
   attachable: initialAttachable,
   meetings,
@@ -48,6 +51,7 @@ export function ProjectNotes({
 }: {
   projectId: string;
   projectSlug: string;
+  projectName: string;
   notes: Note[];
   attachable: Note[];
   meetings: MeetingListRow[];
@@ -72,6 +76,7 @@ export function ProjectNotes({
   const [notePicking, setNotePicking] = useState(false);
   const [meetingPicking, setMeetingPicking] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showScan, setShowScan] = useState(false);
 
   // Keep the textarea sized to its content whenever the body changes —
   // whether typed, loaded for edit, rewritten by Claudia, or reset.
@@ -254,11 +259,31 @@ export function ProjectNotes({
           <Button variant="ghost" onClick={() => setNotePicking(true)}>
             + ATTACH NOTE
           </Button>
+          <Button variant="outline" onClick={() => setShowScan(true)}>
+            ⬆ SCAN NOTE
+          </Button>
           <Button variant="primary" onClick={startNew}>
             + ADD NOTE
           </Button>
         </div>
       </div>
+
+      <NoteScanUploader
+        open={showScan}
+        onClose={() => setShowScan(false)}
+        projects={[]}
+        fixedProject={{ id: projectId, name: projectName }}
+        onCommit={async (payload) => {
+          const res = await commitScannedProjectNoteAction(
+            payload,
+            projectId,
+            projectSlug,
+          );
+          if (res.ok && res.tasks.length > 0) onTasksCreated(res.tasks);
+          return res;
+        }}
+        onCommitted={(note) => setNotes((prev) => [note, ...prev])}
+      />
 
       {/* composer */}
       <div className="border-b border-edge p-4">

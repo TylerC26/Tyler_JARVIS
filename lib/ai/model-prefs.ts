@@ -30,7 +30,8 @@ export type FeatureKey =
   | "agent_draft"
   | "note_assist"
   | "vision_analyze"
-  | "ocr_extract";
+  | "ocr_extract"
+  | "note_ocr";
 
 export type Tier = "opus" | "sonnet" | "haiku";
 export type ConcreteModelId =
@@ -176,6 +177,16 @@ export const FEATURES: FeatureDef[] = [
     key: "wife_shifts_extract",
     label: "Wife-shifts extraction",
     description: "Extracts shift times from a roster image.",
+    group: "Extractors",
+    defaultTier: "sonnet",
+    visionRequired: true,
+    routed: false,
+  },
+  {
+    key: "note_ocr",
+    label: "Handwritten note OCR",
+    description:
+      "Reads a photo/screenshot of a handwritten note into a clean transcript, summary, tasks, and memory facts.",
     group: "Extractors",
     defaultTier: "sonnet",
     visionRequired: true,

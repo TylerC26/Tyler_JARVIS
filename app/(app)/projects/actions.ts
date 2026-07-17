@@ -27,6 +27,10 @@ import {
   extractTaskTitles,
   type NoteAssistMode,
 } from "@/lib/ai/notes/assist";
+import {
+  commitScannedNote,
+  type CommitScannedNoteInput,
+} from "@/lib/notes/commit-scan";
 import type { Task } from "@/lib/db/types";
 
 function bump(slug?: string) {
@@ -203,6 +207,23 @@ export async function addProjectTaskAction(
   return result.ok
     ? { ok: true as const, task: result.data }
     : { ok: false as const, error: result.error };
+}
+
+// Commit a scanned handwritten note straight onto a project. project_id is
+// forced to this project regardless of what the scan preview suggested.
+export async function commitScannedProjectNoteAction(
+  input: Omit<CommitScannedNoteInput, "project_id">,
+  projectId: string,
+  slug: string,
+) {
+  const result = await commitScannedNote({ ...input, project_id: projectId });
+  if (result.ok) {
+    bump(slug);
+    revalidatePath("/notes");
+    revalidatePath("/tasks");
+    revalidatePath("/memory");
+  }
+  return result;
 }
 
 // Claudia composer helpers. tidy/summarize return cleaned text for the textarea;

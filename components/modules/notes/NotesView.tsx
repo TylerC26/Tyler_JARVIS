@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  commitScannedNoteAction,
   createNoteAction,
   deleteNoteAction,
   togglePinNoteAction,
@@ -12,12 +13,18 @@ import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Note } from "@/lib/db/types";
+import {
+  NoteScanUploader,
+  type ProjectOption,
+} from "./NoteScanUploader";
+import { splitScanImage } from "./scanBody";
 
 type CategorySummary = { category: string; count: number };
 
 type Props = {
   initialNotes: Note[];
   initialCategories: CategorySummary[];
+  projects: ProjectOption[];
 };
 
 function fmtAge(iso: string): string {
@@ -41,11 +48,12 @@ function sortNotes(list: Note[]): Note[] {
   });
 }
 
-export function NotesView({ initialNotes, initialCategories }: Props) {
+export function NotesView({ initialNotes, initialCategories, projects }: Props) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [showScan, setShowScan] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -175,14 +183,31 @@ export function NotesView({ initialNotes, initialCategories }: Props) {
         title="Notes"
         subtitle={`${notes.length} entries · ${categories.length} categories · ${pinnedCount} pinned`}
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowForm((v) => !v)}
-          >
-            {showForm ? "cancel" : "+ new"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowScan(true)}
+            >
+              ⬆ scan note
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowForm((v) => !v)}
+            >
+              {showForm ? "cancel" : "+ new"}
+            </Button>
+          </div>
         }
+      />
+
+      <NoteScanUploader
+        open={showScan}
+        onClose={() => setShowScan(false)}
+        projects={projects}
+        onCommit={(payload) => commitScannedNoteAction(payload)}
+        onCommitted={(note) => setNotes((prev) => sortNotes([note, ...prev]))}
       />
 
       <div className="px-6 py-2 flex flex-col gap-2 border-b border-edge/40">
@@ -384,6 +409,10 @@ function NoteCard({ note, onTogglePin, onDelete, onSavePatch }: CardProps) {
     if (ok) setEditingCat(false);
   }
 
+  // A scanned note carries its source image as a leading markdown marker; pull
+  // it out so we can show a real thumbnail and render the rest as text.
+  const scan = splitScanImage(note.body);
+
   return (
     <div
       className={[
@@ -471,13 +500,32 @@ function NoteCard({ note, onTogglePin, onDelete, onSavePatch }: CardProps) {
               className="mt-1 w-full bg-transparent font-mono text-[11px] text-fg-muted border border-accent/30 rounded-sm p-2 focus:outline-none focus:border-accent/60 resize-none"
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setEditingBody(true)}
-              className="block w-full text-left mt-1 font-mono text-[11px] text-fg-muted hover:text-fg transition-colors whitespace-pre-wrap break-words cursor-text"
-            >
-              {note.body}
-            </button>
+            <div className="mt-1">
+              {scan.imageUrl && (
+                <a
+                  href={scan.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mb-2 block w-fit"
+                  title="open original scan"
+                >
+                  <img
+                    src={scan.imageUrl}
+                    alt="original scan"
+                    className="max-h-40 rounded-sm border border-edge hover:border-accent/50 transition-colors"
+                  />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setEditingBody(true)}
+                className="block w-full text-left font-mono text-[11px] text-fg-muted hover:text-fg transition-colors whitespace-pre-wrap break-words cursor-text"
+              >
+                {scan.text || (
+                  <span className="text-fg-dim italic">empty</span>
+                )}
+              </button>
+            </div>
           )}
           <p className="font-mono text-[10px] text-fg-dim mt-1">
             {note.updated_at

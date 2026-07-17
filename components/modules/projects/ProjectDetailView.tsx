@@ -304,6 +304,7 @@ export function ProjectDetailView({
           <ProjectNotes
             projectId={proj.id}
             projectSlug={proj.slug}
+            projectName={proj.name}
             notes={notes}
             attachable={attachableNotes}
             meetings={meetings}
