@@ -23,6 +23,7 @@ import {
   buildTimeContext,
 } from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
+import { normalizeToolInput, sanitizeToolInputs } from "@/lib/chat/tool-input";
 import { getTelegramContext } from "@/lib/chat/request-context";
 import {
   finishAgentRunCore,
@@ -139,7 +140,7 @@ export async function streamAgentResponse(
   const result = streamText({
     model: picked.model,
     system: `${agent.system_prompt}\n\n---\n${prefix}${bodySnapshot ? `\n\n${bodySnapshot}` : ""}`,
-    messages,
+    messages: sanitizeToolInputs(messages),
     ...(hasTools && {
       tools,
       stopWhen: stepCountIs(AGENT_CHAT_STEP_BUDGET),
@@ -268,7 +269,7 @@ async function logDelegationTurn(opts: {
         toolCalls.push({
           id: tc.toolCallId,
           name: tc.toolName,
-          arguments: (tc.input ?? {}) as Record<string, unknown>,
+          arguments: normalizeToolInput(tc.input),
         });
       }
       for (const tr of step.toolResults ?? []) {

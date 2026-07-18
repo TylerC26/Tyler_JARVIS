@@ -13,6 +13,7 @@ import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
 import { runSkillProposer } from "@/lib/ai/skills/propose";
 import type { Agent, ChatToolCall } from "@/lib/db/types";
 import { appendMessage } from "./persist";
+import { normalizeToolInput } from "./tool-input";
 import {
   requestContext,
   type MealPhotoContext,
@@ -77,7 +78,7 @@ export async function persistAssistantSteps(
       toolCalls.push({
         id: tc.toolCallId,
         name: tc.toolName,
-        arguments: (tc.input ?? {}) as Record<string, unknown>,
+        arguments: normalizeToolInput(tc.input),
       });
     }
     for (const tr of step.toolResults ?? []) {

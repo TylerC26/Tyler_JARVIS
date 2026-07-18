@@ -16,6 +16,7 @@ import {
   getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
+import { sanitizeToolInputs } from "./tool-input";
 
 // Pull out the cache/raw token split the SDK exposes. Fields are number|undefined;
 // fall back to 0 so the ledger row is always well-formed.
@@ -193,7 +194,7 @@ export async function streamDeepseekResponse(
   const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
-    messages: [ctxPrefix, ...messages],
+    messages: [ctxPrefix, ...sanitizeToolInputs(messages)],
     ...(minimaxOn
       ? {}
       : {
@@ -248,7 +249,7 @@ export async function streamMinimaxResponse(
   const result = streamText({
     model: minimax("MiniMax-M3"),
     system,
-    messages: [ctxPrefix, ...messages],
+    messages: [ctxPrefix, ...sanitizeToolInputs(messages)],
     tools: ALL_TOOLS,
     stopWhen: stepCountIs(8),
     toolChoice: forceTool ? "required" : "auto",
