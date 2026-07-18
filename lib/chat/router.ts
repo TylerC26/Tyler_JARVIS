@@ -11,6 +11,7 @@ import { recordUsageCore } from "@/lib/db/core/usage";
 import type { UsageSource } from "@/lib/db/types";
 import {
   buildContextPrefix,
+  buildTimeReminder,
   DEEPSEEK_ORCHESTRATOR_PREAMBLE,
   getActiveOrchestratorPrompt,
   getActiveResponderPrompt,
@@ -194,7 +195,13 @@ export async function streamDeepseekResponse(
   const result = streamText({
     model: deepseek("deepseek-chat"),
     system,
-    messages: [ctxPrefix, ...sanitizeToolInputs(messages)],
+    messages: [
+      ctxPrefix,
+      ...sanitizeToolInputs(messages),
+      // Re-assert "now" after the history so it wins the recency slot over any
+      // stale time answer sitting in the thread (see buildTimeReminder).
+      { role: "system", content: buildTimeReminder() },
+    ],
     ...(minimaxOn
       ? {}
       : {
@@ -249,7 +256,13 @@ export async function streamMinimaxResponse(
   const result = streamText({
     model: minimax("MiniMax-M3"),
     system,
-    messages: [ctxPrefix, ...sanitizeToolInputs(messages)],
+    messages: [
+      ctxPrefix,
+      ...sanitizeToolInputs(messages),
+      // Re-assert "now" after the history so it wins the recency slot over any
+      // stale time answer sitting in the thread (see buildTimeReminder).
+      { role: "system", content: buildTimeReminder() },
+    ],
     tools: ALL_TOOLS,
     stopWhen: stepCountIs(8),
     toolChoice: forceTool ? "required" : "auto",

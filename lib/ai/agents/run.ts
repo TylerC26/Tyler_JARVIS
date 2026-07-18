@@ -21,6 +21,7 @@ import {
   buildContextPrefix,
   buildMemoryBlock,
   buildTimeContext,
+  buildTimeReminder,
 } from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
 import { normalizeToolInput, sanitizeToolInputs } from "@/lib/chat/tool-input";
@@ -140,7 +141,13 @@ export async function streamAgentResponse(
   const result = streamText({
     model: picked.model,
     system: `${agent.system_prompt}\n\n---\n${prefix}${bodySnapshot ? `\n\n${bodySnapshot}` : ""}`,
-    messages: sanitizeToolInputs(messages),
+    // Re-assert "now" AFTER the conversation history so the current time sits in
+    // the recency window — the top-of-prompt prefix alone lost to stale time
+    // answers parroted out of the thread (see buildTimeReminder).
+    messages: [
+      ...sanitizeToolInputs(messages),
+      { role: "system", content: buildTimeReminder() },
+    ],
     ...(hasTools && {
       tools,
       stopWhen: stepCountIs(AGENT_CHAT_STEP_BUDGET),

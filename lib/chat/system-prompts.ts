@@ -446,6 +446,28 @@ TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_ev
 - For day-scoped reads (list_events_in_range to answer "what's on Friday"), set the bounds to the user's LOCAL midnight-to-midnight with the offset — start ${`2026-06-12T00:00:00${offset}`}, end ${`2026-06-13T00:00:00${offset}`} covers all of that Friday. A trailing "Z" shifts the window by ${offset} and silently drops or mis-attributes events near the day's edges.`;
 }
 
+// A short, forceful "now" line injected as the LAST message before generation,
+// so the current time lands in the model's recency window instead of only at
+// the top of the system prompt. Why this exists: the buildTimeContext block sits
+// far above a long conversation history, and weaker orchestrators (MiniMax-M3)
+// were answering "what time is it" by PARROTING their own prior time answer out
+// of the persisted thread rather than reading the fresh prefix — a self-
+// reinforcing loop, since each wrong answer gets persisted and re-fed as history
+// (a single stale "11:30 AM" reply propagated across days). The explicit
+// "ignore earlier timestamps" directive plus recency placement breaks the loop.
+export function buildTimeReminder(at: Date = new Date()): string {
+  const userTz = getOwnerTz();
+  const offset = formatOffset(userTz, at);
+  const humanLocal = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTz,
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(at);
+  return `CURRENT DATE & TIME — AUTHORITATIVE. This overrides everything above and any date or time mentioned earlier in this conversation.
+It is now ${humanLocal} (${userTz}, UTC${offset}).
+Any date or time in EARLIER messages (yours or the user's) is a stale snapshot from a past turn — never repeat it as "now". When asked what time or date it is, answer ONLY with the value on this line.`;
+}
+
 export type ContextPrefixOptions = {
   // Direct sub-agent threads suppress the delegation block — the agent can't
   // delegate, and telling it to call delegate_to_agent would just mislead it.

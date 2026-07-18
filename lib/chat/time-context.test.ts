@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeContext } from "./system-prompts";
+import { buildTimeContext, buildTimeReminder } from "./system-prompts";
 
 // buildTimeContext is what a delegated sub-agent now receives (lib/ai/agents/
 // run.ts). Before the fix that path had NO date context at all, so the model
@@ -51,5 +51,25 @@ describe("buildTimeContext", () => {
     // The offset must be interpolated live, not hardcoded.
     expect(out).toContain("ALWAYS include the user's local offset (+08:00)");
     expect(out).toContain('NEVER use a trailing "Z"');
+  });
+});
+
+describe("buildTimeReminder", () => {
+  // Appended AFTER the conversation history so the current time wins the recency
+  // slot — the top-of-prompt buildTimeContext was losing to stale "11:30 AM"
+  // answers weaker models parroted out of the persisted thread.
+  it("states the owner-local now with zone and offset", () => {
+    const out = buildTimeReminder(AT);
+    expect(out).toContain("It is now Friday, July 17, 2026 at 10:00 AM");
+    expect(out).toContain("Asia/Hong_Kong");
+    expect(out).toContain("UTC+08:00");
+  });
+
+  it("explicitly overrides stale timestamps from earlier in the thread", () => {
+    const out = buildTimeReminder(AT);
+    expect(out).toContain("AUTHORITATIVE");
+    // The whole point: tell the model to ignore times it said earlier.
+    expect(out.toLowerCase()).toContain("stale");
+    expect(out.toLowerCase()).toContain("earlier");
   });
 });
