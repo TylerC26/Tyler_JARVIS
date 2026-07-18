@@ -212,10 +212,11 @@ export default async function DashboardPage() {
 
   // --- projects → lanes ---
   const briefTime = brief ? fmtDate(brief.created_at, "HH:mm") : null;
+  // Which projects surface as lanes is now owner-curated via the per-project
+  // `show_on_dashboard` toggle (set on each card in /projects). Archived
+  // projects are always excluded; the rest are risk-sorted + capped below.
   const active = projects.filter(
-    (p) =>
-      p.status !== "archived" &&
-      (p.open_task_count > 0 || p.status === "active"),
+    (p) => p.status !== "archived" && p.show_on_dashboard,
   );
   const lanes = active
     .map((p) =>

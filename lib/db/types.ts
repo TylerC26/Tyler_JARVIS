@@ -61,6 +61,9 @@ export type Project = {
   github_repo_url: string | null;
   github_default_branch: string | null;
   links: ProjectLink[];
+  // Owner-curated toggle for whether this project surfaces as a lane on the
+  // Command Center dashboard (migration 0067). Defaults true.
+  show_on_dashboard: boolean;
   created_at: string;
   updated_at: string | null;
 };
@@ -993,6 +996,7 @@ export type Database = {
           github_repo_url?: string | null;
           github_default_branch?: string | null;
           links?: ProjectLink[];
+          show_on_dashboard?: boolean;
           created_at?: string;
           updated_at?: string | null;
         };

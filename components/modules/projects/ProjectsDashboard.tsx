@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { createProjectAction } from "@/app/(app)/projects/actions";
+import { useEffect, useState, useTransition } from "react";
+import {
+  createProjectAction,
+  updateProjectAction,
+} from "@/app/(app)/projects/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
@@ -296,10 +299,15 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   const totalTasks = project.open_task_count + project.done_task_count;
   const since = daysSince(project.started_at);
   return (
-    <Link
-      href={`/projects/${project.slug}`}
-      className="group relative flex flex-col gap-3 overflow-hidden rounded-md border border-edge bg-surface/60 p-4 transition-colors hover:border-accent/60"
-    >
+    // Whole-card navigation via a "stretched link" overlay rather than an outer
+    // <a>, so the dashboard toggle can be a real interactive control without
+    // nesting a <button> inside an anchor.
+    <div className="group relative flex flex-col gap-3 overflow-hidden rounded-md border border-edge bg-surface/60 p-4 transition-colors hover:border-accent/60">
+      <Link
+        href={`/projects/${project.slug}`}
+        aria-label={`Open ${project.name}`}
+        className="absolute inset-0 z-0 rounded-md"
+      />
       <span
         className="absolute left-0 top-0 bottom-0 w-1"
         style={{ backgroundColor: project.color ?? undefined }}
@@ -368,10 +376,78 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
         )}
       </div>
 
-      <div className="mt-auto pl-2 font-mono text-[10px] text-accent group-hover:underline">
-        → open
+      <div className="mt-auto flex items-center justify-between gap-2 pl-2">
+        <span className="font-mono text-[10px] text-accent group-hover:underline">
+          → open
+        </span>
+        <DashboardToggle
+          id={project.id}
+          slug={project.slug}
+          initial={project.show_on_dashboard}
+        />
       </div>
-    </Link>
+    </div>
+  );
+}
+
+// Per-project dashboard visibility toggle. Sits above the card's stretched-link
+// overlay (relative z-10), so clicking it toggles without navigating. Optimistic
+// with revert-on-failure; the server action revalidates "/" so the dashboard
+// lanes update on next load.
+function DashboardToggle({
+  id,
+  slug,
+  initial,
+}: {
+  id: string;
+  slug: string;
+  initial: boolean;
+}) {
+  const [on, setOn] = useState(initial);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => setOn(initial), [initial]);
+
+  function toggle() {
+    const next = !on;
+    setOn(next);
+    startTransition(async () => {
+      const res = await updateProjectAction(
+        id,
+        { show_on_dashboard: next },
+        slug,
+      );
+      if (!res.ok) setOn(!next);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      aria-pressed={on}
+      title={on ? "Shown on dashboard — click to hide" : "Hidden from dashboard — click to show"}
+      className={[
+        "relative z-10 flex shrink-0 items-center gap-1.5 rounded-sm border px-1.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-colors disabled:opacity-50",
+        on
+          ? "border-accent/40 text-accent hover:bg-accent/10"
+          : "border-edge text-fg-dim hover:text-fg-muted",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "grid size-3 place-items-center rounded-[2px] border text-[8px] leading-none",
+          on
+            ? "border-accent bg-accent/20 text-accent"
+            : "border-fg-dim text-transparent",
+        ].join(" ")}
+        aria-hidden
+      >
+        ✓
+      </span>
+      Dashboard
+    </button>
   );
 }
 

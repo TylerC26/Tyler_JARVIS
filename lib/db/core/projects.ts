@@ -41,6 +41,7 @@ export type UpdateProjectInput = Partial<
     | "github_repo_url"
     | "github_default_branch"
     | "links"
+    | "show_on_dashboard"
   >
 >;
 
@@ -253,6 +254,8 @@ export async function updateProjectCore(
   if (patch.github_default_branch !== undefined)
     updates.github_default_branch = patch.github_default_branch;
   if (patch.links !== undefined) updates.links = cleanLinks(patch.links);
+  if (patch.show_on_dashboard !== undefined)
+    updates.show_on_dashboard = patch.show_on_dashboard;
 
   const { data, error } = await supabase
     .from("projects")
