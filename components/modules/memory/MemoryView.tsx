@@ -13,6 +13,7 @@ import { AddItemModal } from "@/components/ui/AddItemModal";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
+import { fmtDate } from "@/lib/date";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -82,7 +83,7 @@ function fmtRelative(input: string | null): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString();
+  return fmtDate(input, "M/d/yyyy");
 }
 
 export function MemoryView({

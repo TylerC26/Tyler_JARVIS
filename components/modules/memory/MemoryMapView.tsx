@@ -6,6 +6,7 @@ import type {
   MemoryGraphEdge,
 } from "@/lib/db/queries/memory-graph";
 import { MEMORY_KINDS, type MemoryKind } from "@/lib/db/types";
+import { fmtDate } from "@/lib/date";
 
 // ---------------------------------------------------------------------------
 // Palette — one colour per memory kind, tuned to read on the dark graph field.
@@ -62,7 +63,7 @@ function fmtRel(input: string | null): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(input).toLocaleDateString();
+  return fmtDate(input, "M/d/yyyy");
 }
 
 export function MemoryMapView({ graph }: { graph: MemoryGraph }) {

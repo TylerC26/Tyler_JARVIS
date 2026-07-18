@@ -1,4 +1,5 @@
 import { addDays, format, parseISO } from "date-fns";
+import { todayISO } from "@/lib/date";
 import { getOwnerId } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type {
@@ -126,7 +127,10 @@ export async function listOpenSuggestions(): Promise<AiSuggestion[]> {
   const supabase = await getSupabaseServer();
   if (!supabase) return [];
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  // The owner's today, not the server's. format() here read the runtime zone
+  // (UTC on Vercel), so between 00:00 and 08:00 HKT this asked for yesterday
+  // and expired suggestions lingered on /assistant.
+  const today = todayISO();
 
   const { data } = await supabase
     .from("ai_suggestions")

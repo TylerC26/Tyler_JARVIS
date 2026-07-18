@@ -41,7 +41,7 @@ const SYSTEM = `You configure scheduled automations ("cron jobs") for Jarvis, a 
 
 When a job fires, its \`prompt\` is sent to the Jarvis assistant as if the user typed it — Jarvis can read tasks/calendar/notes, send reminders, generate briefs, add tasks, search the web, etc. Write the prompt as a clear, self-contained imperative the assistant can act on unattended (no greetings, no "please").
 
-The \`schedule\` MUST be a valid standard 5-field cron expression (minute hour day-of-month month day-of-week) interpreted in UTC. The user thinks in their LOCAL timezone, so you MUST convert: subtract/add the given UTC offset before writing the cron fields. Use the supplied current local time and offset to get this right. Prefer specific minutes (e.g. \`0 0 * * *\`), not ranges, unless the user clearly wants a window.
+The \`schedule\` MUST be a valid standard 5-field cron expression (minute hour day-of-month month day-of-week), written in the user's LOCAL time. Do NOT convert to UTC — the scheduler interprets these fields in the user's timezone. "Every morning at 8" is simply \`0 8 * * *\`. Prefer specific minutes (e.g. \`0 8 * * *\`), not ranges, unless the user clearly wants a window.
 
 The \`description\` should restate the timing in the user's LOCAL time so it reads naturally to them.
 

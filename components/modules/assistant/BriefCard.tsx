@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { DashboardCard } from "@/components/ui/DashboardCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { fmtDate } from "@/lib/date";
 import type { AiBrief, AiBriefKind } from "@/lib/db/types";
 
 const TONE_BY_SEVERITY = {
@@ -87,7 +88,7 @@ export function BriefCard({
           )}
           <div className="mt-1 flex items-center justify-between border-t border-edge pt-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-              generated {new Date(brief.created_at).toLocaleTimeString()}
+              generated {fmtDate(brief.created_at, "h:mm:ss a")}
             </span>
             <Button
               size="sm"

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { fmtDayLabel } from "@/lib/date";
 import { platformFor, type PlatformTone } from "@/lib/projects/platforms";
 import type { ProjectSummary } from "@/lib/db/queries/projects";
 import type { ProjectCategory, ProjectStatus } from "@/lib/db/types";
@@ -69,13 +70,10 @@ function daysSince(iso: string | null): number | null {
   return Math.max(0, Math.floor((now - then) / (24 * 60 * 60 * 1000)));
 }
 
+// Pure `date` column (no instant) — render the label as-written, unconverted.
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return fmtDayLabel(iso, "MMM d, yyyy");
 }
 
 export function ProjectsDashboard({

@@ -412,6 +412,40 @@ export async function buildMemoryBlock(userText: string): Promise<string> {
   }
 }
 
+// The date/time header + timezone contract, resolved against the owner's tz.
+// Exported because EVERY LLM call needs it, not just the orchestrator's chat
+// turn: a delegated sub-agent (lib/ai/agents/run.ts) writes timestamps with the
+// same tools and must anchor them to the same zone. It used to live inline in
+// buildContextPrefix, which meant the delegate path — the only caller that
+// skips the prefix — ran with no date context at all and dated its writes from
+// the model's training data. Keep this the single source of the time contract;
+// don't re-derive "now" in a caller.
+export function buildTimeContext(at: Date = new Date()): string {
+  const userTz = getOwnerTz();
+  const localISO = formatLocalISO(userTz, at);
+  const offset = formatOffset(userTz, at);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTz,
+    weekday: "long",
+  }).format(at);
+  const humanLocal = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTz,
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(at);
+
+  return `Current local time: ${humanLocal} (${userTz}, UTC${offset}).
+Current local ISO timestamp: ${localISO}.
+Current UTC timestamp: ${at.toISOString()}.
+Day of week: ${weekday}.
+
+TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_event, update_event, move_event, add_task, list_events_in_range, etc.):
+- The user speaks in their LOCAL time. "7pm tomorrow" means 19:00 in ${userTz}, not UTC.
+- When emitting ANY timestamp (starts_at, ends_at, due_at, range start/end), ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
+- Build the date portion from the local ISO timestamp above, not from the UTC timestamp. Day-of-week math ("which day is Friday") follows the local date and Day of week above, not the UTC timestamp.
+- For day-scoped reads (list_events_in_range to answer "what's on Friday"), set the bounds to the user's LOCAL midnight-to-midnight with the offset — start ${`2026-06-12T00:00:00${offset}`}, end ${`2026-06-13T00:00:00${offset}`} covers all of that Friday. A trailing "Z" shifts the window by ${offset} and silently drops or mis-attributes events near the day's edges.`;
+}
+
 export type ContextPrefixOptions = {
   // Direct sub-agent threads suppress the delegation block — the agent can't
   // delegate, and telling it to call delegate_to_agent would just mislead it.
@@ -436,28 +470,7 @@ export async function buildContextPrefix(
   // turn came from the web UI or the Telegram webhook.
   const now = new Date();
   const userTz = getOwnerTz();
-  const localISO = formatLocalISO(userTz, now);
-  const offset = formatOffset(userTz, now);
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: userTz,
-    weekday: "long",
-  }).format(now);
-  const humanLocal = new Intl.DateTimeFormat("en-US", {
-    timeZone: userTz,
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(now);
-
-  const datePart = `Current local time: ${humanLocal} (${userTz}, UTC${offset}).
-Current local ISO timestamp: ${localISO}.
-Current UTC timestamp: ${now.toISOString()}.
-Day of week: ${weekday}.
-
-TIMEZONE RULES — CRITICAL for any tool that takes a timestamp (add_calendar_event, update_event, move_event, add_task, list_events_in_range, etc.):
-- The user speaks in their LOCAL time. "7pm tomorrow" means 19:00 in ${userTz}, not UTC.
-- When emitting ANY timestamp (starts_at, ends_at, due_at, range start/end), ALWAYS include the user's local offset (${offset}) — e.g. 2026-05-12T19:00:00${offset}. NEVER use a trailing "Z" or a different offset.
-- Build the date portion from the local ISO timestamp above, not from the UTC timestamp. Day-of-week math ("which day is Friday") follows the local date and Day of week above, not the UTC timestamp.
-- For day-scoped reads (list_events_in_range to answer "what's on Friday"), set the bounds to the user's LOCAL midnight-to-midnight with the offset — start ${`2026-06-12T00:00:00${offset}`}, end ${`2026-06-13T00:00:00${offset}`} covers all of that Friday. A trailing "Z" shifts the window by ${offset} and silently drops or mis-attributes events near the day's edges.`;
+  const datePart = buildTimeContext(now);
 
   // Fetch everything that feeds the prefix in parallel — we don't want each
   // chat turn to wait on serial DB roundtrips. Event window starts ~36h ago

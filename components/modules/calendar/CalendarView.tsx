@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, addHours, format } from "date-fns";
+import { addDays, addHours } from "date-fns";
 import { useEffect, useState } from "react";
 import {
   bulkCreateEventsAction,
@@ -14,7 +14,8 @@ import {
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { CategoryKey } from "@/lib/calendar/categories";
-import { monthRange, weekRange } from "@/lib/calendar/grid";
+import { monthRange, nextOwnerHour, weekRange } from "@/lib/calendar/grid";
+import { fmtDate } from "@/lib/date";
 import type {
   Event,
   WfhStatus,
@@ -95,8 +96,8 @@ export function CalendarView({
       } = await listCalendarRangeAction(
         rangeStart.toISOString(),
         rangeEnd.toISOString(),
-        format(rangeStart, "yyyy-MM-dd"),
-        format(rangeEnd, "yyyy-MM-dd"),
+        fmtDate(rangeStart, "yyyy-MM-dd"),
+        fmtDate(rangeEnd, "yyyy-MM-dd"),
       );
       if (cancelled) return;
       setEvents(nextEvents);
@@ -251,10 +252,7 @@ export function CalendarView({
         onViewChange={setView}
         onCursorChange={setCursor}
         onAddEvent={() => {
-          const at = new Date();
-          at.setMinutes(0, 0, 0);
-          at.setHours(at.getHours() + 1);
-          openCreateAt(at);
+          openCreateAt(nextOwnerHour());
         }}
         onUploadScreenshot={() => setUploaderOpen(true)}
         onUploadRoster={() => setRosterOpen(true)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/date";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
@@ -60,7 +60,7 @@ export function EventDrawer({
     const title = initial.title?.trim() || "this event";
     let when = "";
     try {
-      when = format(new Date(initial.starts_at), "EEE MMM d · h:mma");
+      when = fmtDate(initial.starts_at, "EEE MMM d · h:mma");
     } catch {
       when = "";
     }

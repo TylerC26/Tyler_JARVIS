@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
+import { fmtDate } from "@/lib/date";
 import { Message } from "./Message";
 
 type Props = {
@@ -73,7 +74,9 @@ export function ChatThread({ messages, pending, activeModel, agent }: Props) {
   for (const m of messages) {
     const iso = m.metadata?.createdAt;
     const d = iso ? new Date(iso) : new Date();
-    const dayKey = Number.isNaN(d.getTime()) ? null : d.toDateString();
+    // Group by the OWNER's calendar day, not the browser's — otherwise the
+    // separators fall on a midnight the rest of the app doesn't recognize.
+    const dayKey = Number.isNaN(d.getTime()) ? null : fmtDate(d, "yyyy-MM-dd");
     if (dayKey && dayKey !== lastDay) {
       lastDay = dayKey;
       rows.push(
@@ -82,11 +85,7 @@ export function ChatThread({ messages, pending, activeModel, agent }: Props) {
           className="py-1 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim"
         >
           —{" "}
-          {d.toLocaleDateString(undefined, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}{" "}
+          {fmtDate(d, "EEEE, MMMM d")}{" "}
           —
         </div>,
       );

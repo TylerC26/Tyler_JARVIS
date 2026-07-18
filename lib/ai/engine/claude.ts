@@ -5,6 +5,7 @@ import { getOwnerTz } from "@/lib/auth/currentUser";
 import { modelForFeature } from "@/lib/ai/model-prefs";
 import { recordModelUsage } from "@/lib/chat/router";
 import { getPromptSettingsCore } from "@/lib/db/core/prompt-settings";
+import { fmtDayLabel } from "@/lib/date";
 import type { AIContext, BriefDraft, SuggestionDraft } from "@/lib/ai/types";
 import type { AIEngine } from "./types";
 import { placeholderEngine } from "./placeholder";
@@ -106,10 +107,7 @@ function formatWifeShiftsLine(ctx: AIContext): string {
   }
   const compact = shifts
     .map((s) => {
-      const dow = new Date(`${s.shift_date}T12:00:00`).toLocaleDateString(
-        "en-US",
-        { weekday: "short" },
-      );
+      const dow = fmtDayLabel(s.shift_date, "EEE");
       return `${s.shift_date} ${dow}=${s.code}`;
     })
     .join(" · ");

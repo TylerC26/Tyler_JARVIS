@@ -28,3 +28,35 @@ export function getOwnerTz(): string {
     process.env.OWNER_TZ ?? process.env.NEXT_PUBLIC_OWNER_TZ ?? "Asia/Hong_Kong"
   );
 }
+
+// Guard the one way this can go wrong silently.
+//
+// Client components are server-rendered first, where OWNER_TZ is a live runtime
+// read — then hydrated in the browser, where it is always undefined and only
+// the build-time-inlined NEXT_PUBLIC_OWNER_TZ survives. Set OWNER_TZ alone and
+// the two passes resolve different zones: SSR paints one time, hydration paints
+// another, and React reports a generic hydration mismatch that names markup
+// rather than the timezone. Fail loudly at startup instead.
+//
+// Only meaningful on the server (in the browser both reads collapse to the
+// inlined value, so there is nothing left to compare).
+if (
+  typeof window === "undefined" &&
+  process.env.OWNER_TZ &&
+  process.env.NEXT_PUBLIC_OWNER_TZ &&
+  process.env.OWNER_TZ !== process.env.NEXT_PUBLIC_OWNER_TZ
+) {
+  console.warn(
+    `[tz] OWNER_TZ ("${process.env.OWNER_TZ}") != NEXT_PUBLIC_OWNER_TZ ` +
+      `("${process.env.NEXT_PUBLIC_OWNER_TZ}"). The server will render one zone ` +
+      `and the browser another, producing hydration mismatches. Set both to the ` +
+      `same IANA zone. NEXT_PUBLIC_OWNER_TZ is inlined at BUILD time, so it also ` +
+      `needs a rebuild — not just a restart — to take effect.`,
+  );
+} else if (typeof window === "undefined" && process.env.OWNER_TZ && !process.env.NEXT_PUBLIC_OWNER_TZ) {
+  console.warn(
+    `[tz] OWNER_TZ is set ("${process.env.OWNER_TZ}") but NEXT_PUBLIC_OWNER_TZ is ` +
+      `not, so the browser will fall back to "Asia/Hong_Kong" while the server ` +
+      `uses OWNER_TZ. Set both to the same IANA zone.`,
+  );
+}

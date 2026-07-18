@@ -7,18 +7,19 @@ import { Button } from "@/components/ui/Button";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { deleteTask, updateTask } from "@/lib/db/actions/tasks";
+import { fromLocalInput, toLocalInput } from "@/lib/calendar/grid";
 import type { Task, TaskStatus } from "@/lib/db/types";
 
-// Convert an ISO timestamp into the value format <input type="datetime-local">
-// expects (YYYY-MM-DDTHH:mm) in the user's LOCAL timezone.
+// Convert an ISO timestamp into the value <input type="datetime-local"> expects
+// (YYYY-MM-DDTHH:mm), in the OWNER's timezone. This was a private copy that read
+// the instant with the browser's getters, so a due date typed while travelling
+// would land at the wrong hour — and disagree with the same due_at rendered by
+// TaskRow. toLocalInput/fromLocalInput are the shared owner-tz pair.
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
+  return toLocalInput(d);
 }
 
 export function TaskDetailModal({
@@ -45,7 +46,7 @@ export function TaskDetailModal({
         status: (formData.get("status") as TaskStatus) ?? task.status,
         priority: Number(formData.get("priority") ?? task.priority),
         important: formData.get("important") === "on",
-        due_at: dueRaw ? new Date(dueRaw).toISOString() : null,
+        due_at: dueRaw ? fromLocalInput(dueRaw).toISOString() : null,
       });
       if (!result.ok) {
         setError(result.error);

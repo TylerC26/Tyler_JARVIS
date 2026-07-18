@@ -96,20 +96,28 @@ export function ScreenshotUploader({
       }
 
       setDrafts(
-        events.map((e) => ({
-          title: e.title,
-          starts_at: toLocalInput(e.starts_at),
-          ends_at: toLocalInput(
-            e.ends_at ?? new Date(new Date(e.starts_at).getTime() + 60 * 60_000).toISOString(),
-          ),
-          location: e.location ?? null,
-          description: e.description ?? null,
-          category:
-            e.category && CATEGORY_KEYS.includes(e.category)
-              ? e.category
-              : null,
-          selected: true,
-        })),
+        events.map((e) => {
+          // The extractor is told to emit the OWNER's local time with no Z
+          // (see app/api/calendar/extract/route.ts), so these strings must be
+          // parsed as owner wall clock. Plain `new Date(...)` would read them
+          // in the browser's zone and silently relabel the moment.
+          const startsAt = fromLocalInput(e.starts_at);
+          const endsAt = e.ends_at
+            ? fromLocalInput(e.ends_at)
+            : new Date(startsAt.getTime() + 60 * 60_000);
+          return {
+            title: e.title,
+            starts_at: toLocalInput(startsAt),
+            ends_at: toLocalInput(endsAt),
+            location: e.location ?? null,
+            description: e.description ?? null,
+            category:
+              e.category && CATEGORY_KEYS.includes(e.category)
+                ? e.category
+                : null,
+            selected: true,
+          };
+        }),
       );
       setPhase("preview");
     } catch (e) {

@@ -1,5 +1,5 @@
 import { Cron } from "croner";
-import { getOwnerId } from "@/lib/auth/currentUser";
+import { getOwnerId, getOwnerTz } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import type { CronJob, ModelPref } from "@/lib/db/types";
 
@@ -17,11 +17,21 @@ export type UpdateCronJobInput = Partial<
 
 type CoreResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-// Compute the next UTC Date a cron expression will fire after `from`.
-// Returns null if the expression is invalid or has no future occurrence.
+// Compute the next instant a cron expression will fire after `from`.
+//
+// The expression's fields are OWNER-LOCAL wall clock: "0 8 * * *" means 8am in
+// getOwnerTz(), and keeps meaning 8am across a DST transition. This used to be
+// pinned to UTC, which had two costs: the stored expression disagreed with the
+// job's own description ("Every day at 8:00 AM HKT" was stored as `0 0 * * *`),
+// and every "8am local" job would silently drift by an hour twice a year the
+// moment OWNER_TZ named a zone that observes DST — which is exactly what the
+// env var exists for (travel/relocation). Asia/Hong_Kong has no DST, so this
+// was latent rather than broken.
+//
+// Migration 0065 converted the stored rows from UTC to owner-local.
 export function nextRunAfter(schedule: string, from: Date = new Date()): Date | null {
   try {
-    const job = new Cron(schedule, { timezone: "UTC" });
+    const job = new Cron(schedule, { timezone: getOwnerTz() });
     return job.nextRun(from) ?? null;
   } catch {
     return null;
@@ -68,7 +78,12 @@ export async function createCronJobCore(
   if (!prompt) return { ok: false, error: "Prompt is required." };
 
   const next = nextRunAfter(input.schedule);
-  if (!next) return { ok: false, error: `Invalid cron schedule: "${input.schedule}". Use standard 5-field UTC cron syntax.` };
+  if (!next) {
+    return {
+      ok: false,
+      error: `Invalid cron schedule: "${input.schedule}". Use standard 5-field cron syntax, in your local time.`,
+    };
+  }
 
   const { data, error } = await supabase
     .from("cron_jobs")
@@ -104,10 +119,32 @@ export async function updateCronJobCore(
   if (patch.prompt !== undefined) updates.prompt = patch.prompt.trim();
   if (patch.active !== undefined) updates.active = patch.active;
   if (patch.model_pref !== undefined) updates.model_pref = patch.model_pref;
-  if (patch.schedule !== undefined) {
-    const next = nextRunAfter(patch.schedule);
-    if (!next) return { ok: false, error: `Invalid cron schedule: "${patch.schedule}".` };
-    updates.schedule = patch.schedule;
+
+  // Recompute next_run_at whenever it could have gone stale: on a schedule
+  // change (obviously), but ALSO on re-activation. A job sitting inactive keeps
+  // the next_run_at it had when it was switched off, which by now is in the
+  // past — and getDueCronJobsCore selects on `next_run_at <= now()`, so simply
+  // flipping active back on would fire the job instantly instead of at its next
+  // real occurrence.
+  let effectiveSchedule: string | null = patch.schedule ?? null;
+  if (patch.schedule === undefined && patch.active === true) {
+    const { data: row, error: readErr } = await supabase
+      .from("cron_jobs")
+      .select("schedule")
+      .eq("owner_id", getOwnerId())
+      .eq("id", id)
+      .single();
+    // Don't silently skip the recompute — activating with a stale next_run_at
+    // would fire the job immediately, which is exactly what this guards.
+    if (readErr) return { ok: false, error: readErr.message };
+    effectiveSchedule = (row as { schedule: string } | null)?.schedule ?? null;
+  }
+  if (effectiveSchedule !== null) {
+    const next = nextRunAfter(effectiveSchedule);
+    if (!next) {
+      return { ok: false, error: `Invalid cron schedule: "${effectiveSchedule}".` };
+    }
+    if (patch.schedule !== undefined) updates.schedule = patch.schedule;
     updates.next_run_at = next.toISOString();
   }
 
@@ -144,7 +181,9 @@ const SEED_CRON_JOBS: CreateCronJobInput[] = [
   {
     name: "User Profile Synthesis",
     description: "Daily refresh of the pinned user_profile memory entry.",
-    schedule: "0 7 * * *", // 07:00 UTC daily
+    // 15:00 owner-local. Preserves the original firing instant, which was
+    // written as "0 7 * * *" back when schedules were interpreted as UTC.
+    schedule: "0 15 * * *",
     prompt: `Refresh Tyler's user_profile memory entry. This runs unattended; nothing you write here is shown to a human in real time.
 
 Steps:

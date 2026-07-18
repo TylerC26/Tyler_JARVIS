@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { fmtDate } from "@/lib/date";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { RepoTask } from "@/lib/db/types";
 import { StatusPill } from "./StatusPill";
@@ -18,14 +19,7 @@ type Props = { initialTask: RepoTask };
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  return fmtDate(iso, "MMM d, HH:mm:ss");
 }
 
 function fmtDuration(startIso: string | null, endIso: string | null): string {

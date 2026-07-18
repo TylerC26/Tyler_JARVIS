@@ -1,29 +1,35 @@
 import { CalendarView } from "@/components/modules/calendar/CalendarView";
-import { todayISO } from "@/lib/date";
+import { fmtDate, startOfOwnerDay } from "@/lib/date";
 import { listEventsInRangeCore } from "@/lib/db/core/events";
 import { listWifeShiftsInRangeCore } from "@/lib/db/core/wife-shifts";
 import { listWfhStatusInRangeCore } from "@/lib/db/core/wfh-status";
 import { monthRange } from "@/lib/calendar/grid";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-  // Anchor the initial month grid to the owner's calendar date, not the
-  // server's UTC date (they can differ near midnight).
-  const cursor = parseISO(todayISO());
+  // The instant of the owner's midnight today. This used to be
+  // parseISO(todayISO()), which reifies the owner's calendar DAY into an
+  // instant using the SERVER's zone (UTC on Vercel) and then ships it to a
+  // browser that re-reads it with its own getters — three zones in one value.
+  const cursor = startOfOwnerDay();
   const { start } = monthRange(cursor);
   const end = addDays(start, 42); // 6 weeks of buffer covers month + week views
 
   const [events, wifeShifts, wfhStatus] = await Promise.all([
     listEventsInRangeCore(start.toISOString(), end.toISOString()),
+    // shift_date/status_date are pure `date` columns, so these bounds must be
+    // the OWNER's calendar days. date-fns format() would read the instants in
+    // the SERVER's zone and hand back the day before (owner midnight is 16:00Z
+    // the previous day at UTC+8).
     listWifeShiftsInRangeCore(
-      format(start, "yyyy-MM-dd"),
-      format(end, "yyyy-MM-dd"),
+      fmtDate(start, "yyyy-MM-dd"),
+      fmtDate(end, "yyyy-MM-dd"),
     ),
     listWfhStatusInRangeCore(
-      format(start, "yyyy-MM-dd"),
-      format(end, "yyyy-MM-dd"),
+      fmtDate(start, "yyyy-MM-dd"),
+      fmtDate(end, "yyyy-MM-dd"),
     ),
   ]);
 
