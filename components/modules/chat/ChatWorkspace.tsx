@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { AgentModelPref } from "@/lib/db/types";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { ChatPanel } from "./ChatPanel";
+import { ClearAllThreadsButton } from "./ClearAllThreadsButton";
 
 // Rail card shape — the model preference drives its badge.
 export type ThreadAgent = {
@@ -88,6 +89,9 @@ export function ChatWorkspace({
 }: Props) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
+  // Bumped after a "clear all" so the open sub-agent panel empties its own
+  // in-memory messages (useChat state survives a plain router.refresh).
+  const [clearAllSignal, setClearAllSignal] = useState(0);
   const activeSlug = activeAgent?.slug ?? null;
   const preview = lastPreview(initialMessages);
 
@@ -96,6 +100,11 @@ export function ChatWorkspace({
     startNav(() => {
       router.push(slug ? `/chat?agent=${encodeURIComponent(slug)}` : "/chat");
     });
+  }
+
+  function handleClearedAll() {
+    setClearAllSignal((s) => s + 1);
+    router.refresh();
   }
 
   return (
@@ -115,13 +124,21 @@ export function ChatWorkspace({
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-dim">
             // threads
           </span>
-          <button
-            type="button"
-            onClick={() => openThread(null)}
-            className="ml-auto rounded-sm border border-accent/30 bg-accent/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-accent hover:bg-accent/15"
-          >
-            + new
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {agents.length > 0 && (
+              <ClearAllThreadsButton
+                count={agents.length}
+                onCleared={handleClearedAll}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => openThread(null)}
+              className="rounded-sm border border-accent/30 bg-accent/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-accent hover:bg-accent/15"
+            >
+              + new
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-1.5 p-1.5 md:flex-col md:p-3">
@@ -181,6 +198,7 @@ export function ChatWorkspace({
           toolCount={toolCount}
           initialPrompt={initialPrompt}
           imageUploadEnabled={imageUploadEnabled}
+          resetSignal={clearAllSignal}
         />
       </div>
     </div>

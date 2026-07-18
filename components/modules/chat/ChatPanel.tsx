@@ -41,6 +41,10 @@ type Props = {
   // Tools reachable on this thread, surfaced in the conversation head + composer
   // footer. Undefined in the compact drawer (launcher), where it's omitted.
   toolCount?: number;
+  // Bumped by the rail's "clear all agent threads" action. When it changes and
+  // this panel is a sub-agent thread, empty the in-memory transcript — a plain
+  // router.refresh() can't reset useChat's own state.
+  resetSignal?: number;
 };
 
 type ForceRoute = "auto" | "deepseek" | "minimax" | "haiku" | "sonnet" | "opus";
@@ -55,6 +59,7 @@ export function ChatPanel({
   imageUploadEnabled = false,
   pagePath = null,
   toolCount,
+  resetSignal,
 }: Props) {
   const router = useRouter();
   const [forceRoute, setForceRoute] = useState<ForceRoute>("auto");
@@ -147,6 +152,19 @@ export function ChatPanel({
     url.searchParams.delete("prompt");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [initialPrompt, inputDisabled, sendMessage]);
+
+  // The rail's "clear all agent threads" wiped this thread server-side. If it's
+  // a sub-agent thread, drop the in-memory transcript so it reflects the wipe
+  // without a full reload (main Jarvis is never cleared by that action).
+  const prevReset = useRef(resetSignal);
+  useEffect(() => {
+    if (resetSignal === prevReset.current) return;
+    prevReset.current = resetSignal;
+    if (agent) {
+      setMessages([]);
+      setVersion((v) => v + 1);
+    }
+  }, [resetSignal, agent, setMessages]);
 
   // When a chat turn finishes (status transitions out of streaming/submitted),
   // call router.refresh() so any server components on the current route

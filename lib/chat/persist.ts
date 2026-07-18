@@ -112,3 +112,20 @@ export async function clearThread(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+// Wipe every sub-agent thread in one shot (agent_slug IS NOT NULL). The main
+// Jarvis thread (agent_slug IS NULL) is left untouched — it has its own clear.
+export async function clearAllAgentThreads(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return { ok: false, error: "Supabase not configured." };
+  const { error } = await supabase
+    .from("chat_messages")
+    .delete()
+    .eq("owner_id", getOwnerId())
+    .not("agent_slug", "is", null);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
