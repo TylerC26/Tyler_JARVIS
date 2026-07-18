@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listRecentAgentRunsAction } from "@/app/(app)/agents/actions";
+import { fmtDate } from "@/lib/date";
 import type { AgentRun } from "@/lib/db/types";
 
 type OfficeAgent = { slug: string; name: string; color: string | null };
@@ -22,12 +23,8 @@ const CX = 50;
 const CY = 50;
 const RADIUS = 33;
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
 function clockHM(iso: string) {
-  const d = new Date(iso);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return fmtDate(iso, "HH:mm");
 }
 function triggerTag(source: string) {
   if (source === "telegram") return "tg";

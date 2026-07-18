@@ -1,14 +1,15 @@
 "use client";
 
-import { format, isSameMonth, isToday } from "date-fns";
 import { layoutAllDayBand } from "@/lib/calendar/allday";
 import { getCategory } from "@/lib/calendar/categories";
 import {
+  atOwnerHour,
   fmtTimeShort,
   isSameLocalDay,
   monthCells,
   spansMultipleDays,
 } from "@/lib/calendar/grid";
+import { fmtDate, isDateToday } from "@/lib/date";
 import type { Event } from "@/lib/db/types";
 import type { WfhStatusMap, WifeShiftMap } from "./CalendarView";
 import { WfhStatusBadge } from "./WfhStatusBadge";
@@ -89,15 +90,14 @@ export function MonthView({
               {/* Day cells (background) */}
               <div className="absolute inset-0 grid grid-cols-7">
                 {week.map((day, di) => {
-                  const inMonth = isSameMonth(day, cursor);
+                  const inMonth =
+                    fmtDate(day, "yyyy-MM") === fmtDate(cursor, "yyyy-MM");
                   return (
                     <button
                       type="button"
                       key={di}
                       onClick={() => {
-                        const at = new Date(day);
-                        at.setHours(9, 0, 0, 0);
-                        onCreateAt(at);
+                        onCreateAt(atOwnerHour(day, 9));
                       }}
                       className={[
                         "relative flex flex-col items-stretch border-r border-edge/60 last:border-r-0 px-1.5 py-1 text-left",
@@ -110,21 +110,21 @@ export function MonthView({
                           <span
                             className={[
                               "font-mono text-[11px] tabular",
-                              isToday(day)
+                              isDateToday(day)
                                 ? "rounded-sm bg-accent/20 text-accent px-1"
                                 : inMonth
                                   ? "text-fg"
                                   : "text-fg-dim",
                             ].join(" ")}
                           >
-                            {format(day, "d")}
+                            {fmtDate(day, "d")}
                           </span>
                           <WfhStatusBadge
-                            status={wfhStatus[format(day, "yyyy-MM-dd")]}
+                            status={wfhStatus[fmtDate(day, "yyyy-MM-dd")]}
                           />
                         </div>
                         <WifeShiftBadge
-                          code={wifeShifts[format(day, "yyyy-MM-dd")]}
+                          code={wifeShifts[fmtDate(day, "yyyy-MM-dd")]}
                         />
                       </div>
                     </button>

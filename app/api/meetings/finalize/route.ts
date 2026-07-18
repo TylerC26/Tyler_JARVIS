@@ -16,6 +16,7 @@ import { generateObject, generateText } from "ai";
 import { minimax } from "vercel-minimax-ai-provider";
 import { z } from "zod";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
+import { fmtDate } from "@/lib/date";
 import { getEventCore } from "@/lib/db/core/events";
 import {
   getMeetingCore,
@@ -80,7 +81,9 @@ function renderSummary(
   if (event) {
     let when = "";
     try {
-      when = new Date(event.starts_at).toISOString().slice(0, 10);
+      // Owner-local day. toISOString() is always UTC, so every meeting
+      // starting before 08:00 HKT was stamped with the previous day.
+      when = fmtDate(event.starts_at, "yyyy-MM-dd");
     } catch {
       when = "";
     }
@@ -116,7 +119,8 @@ function eventHeader(event: Event | null): string {
   if (!event) return "";
   let when = "";
   try {
-    when = new Date(event.starts_at).toISOString().slice(0, 10);
+    // Owner-local day — see the note in the sibling builder above.
+    when = fmtDate(event.starts_at, "yyyy-MM-dd");
   } catch {
     when = "";
   }

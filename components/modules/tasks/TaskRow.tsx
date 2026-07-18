@@ -1,6 +1,5 @@
 "use client";
 
-import { differenceInCalendarDays } from "date-fns";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
@@ -10,7 +9,7 @@ import {
   setTaskStatus,
 } from "@/lib/db/actions/tasks";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
-import { fmtRelativeDay } from "@/lib/date";
+import { fmtDateTime, fmtRelativeDay, ownerDaysFromToday } from "@/lib/date";
 import type { Task } from "@/lib/db/types";
 import { TaskDetailModal } from "./TaskDetailModal";
 
@@ -22,9 +21,12 @@ const PRIORITY_COLOR: Record<number, string> = {
 };
 
 // Classify due-date urgency for chip coloring. Done tasks are always dimmed.
+// Shares ownerDaysFromToday with the chip's fmtRelativeDay label, so the colour
+// and the text can't disagree — this used to count calendar days in the
+// browser's zone while the label counted them in the owner's.
 function dueClass(due_at: string, done: boolean): string {
   if (done) return "border-edge text-fg-dim";
-  const diff = differenceInCalendarDays(new Date(due_at), new Date());
+  const diff = ownerDaysFromToday(due_at);
   if (diff < 0) return "border-danger/50 bg-danger/10 text-danger";
   if (diff === 0) return "border-warn/60 bg-warn/15 text-warn";
   if (diff <= 2) return "border-warn/40 bg-warn/5 text-warn";
@@ -115,7 +117,7 @@ export function TaskRow({
                     "rounded-sm border px-1.5 py-0.5 tabular-nums",
                     dueClass(task.due_at, task.status === "done"),
                   ].join(" ")}
-                  title={new Date(task.due_at).toLocaleString()}
+                  title={fmtDateTime(task.due_at)}
                 >
                   {fmtRelativeDay(task.due_at)}
                 </span>

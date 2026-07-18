@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 
 type Props = {
   configured: { anthropic: boolean; deepseek: boolean; minimax: boolean };
@@ -21,13 +22,10 @@ export function CommandStatusBar({ configured }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const clock = now
-    ? `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    : "--:--:--";
-  const date = now
-    ? `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`
-    : "";
+  // The status bar reads as the OS clock, so it must agree with every other
+  // time the app shows — i.e. the owner's zone, not the viewer's browser.
+  const clock = now ? fmtDate(now, "HH:mm:ss") : "--:--:--";
+  const date = now ? fmtDate(now, "yyyy.MM.dd") : "";
 
   return (
     <div className="hidden shrink-0 items-center gap-5 overflow-x-auto border-b border-edge bg-surface/70 px-5 py-2 font-mono text-[10px] uppercase tracking-[0.15em] lg:flex">

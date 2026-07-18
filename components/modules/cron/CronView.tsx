@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { fmtDate as fmtOwnerDate } from "@/lib/date";
 import type { CronJob } from "@/lib/db/types";
 
 type Props = { initialJobs: CronJob[] };
@@ -22,11 +23,12 @@ const EXAMPLE_PROMPTS = [
   "Every day at noon, remind me to drink water and take a break",
 ];
 
+// next_run_at/last_run_at are instants. Render them in the owner's zone — the
+// same zone the schedule is interpreted in — so the board doesn't disagree with
+// itself for a viewer whose browser sits elsewhere.
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
-  });
+  return fmtOwnerDate(iso, "MMM d, HH:mm");
 }
 
 export function CronView({ initialJobs }: Props) {

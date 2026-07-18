@@ -17,7 +17,11 @@ import {
   isDeepseekConfigured,
   recordModelUsage,
 } from "@/lib/chat/router";
-import { buildContextPrefix, buildMemoryBlock } from "@/lib/chat/system-prompts";
+import {
+  buildContextPrefix,
+  buildMemoryBlock,
+  buildTimeContext,
+} from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
 import { getTelegramContext } from "@/lib/chat/request-context";
 import {
@@ -361,9 +365,16 @@ export async function runAgent(
     const memoryBlock = usesMemoryTools(agent.tool_allowlist)
       ? await buildMemoryBlock(task)
       : "";
+    // Date + timezone contract. Without this a delegated agent has no notion of
+    // "now" and dates its writes from the model's training data — "book it for
+    // Tuesday" lands in the wrong year. Deliberately the time block alone and
+    // not the full buildContextPrefix: the delegate path keeps a lean prompt
+    // (AGENT_STEP_BUDGET is 4), and the prefix's tasks/events/projects/memory
+    // would both balloon it and double the memoryBlock above.
+    const timeContext = buildTimeContext();
     const result = await generateText({
       model,
-      system: [agent.system_prompt, delegationSnapshot, memoryBlock]
+      system: [agent.system_prompt, timeContext, delegationSnapshot, memoryBlock]
         .filter(Boolean)
         .join("\n\n"),
       messages: [{ role: "user", content: userBlock }],

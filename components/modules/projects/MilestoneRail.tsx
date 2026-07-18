@@ -2,19 +2,22 @@
 
 import { Button } from "@/components/ui/Button";
 import { RailCard } from "./RailCard";
+import { endOfOwnerDay, fmtDate, fmtDayLabel } from "@/lib/date";
 import type { ProjectMilestone } from "@/lib/db/types";
 
+// target_date is a pure `date`, but callers also pass full instants — hence the
+// length check, kept from the original.
 function fmtShort(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(
-    iso + (iso.length === 10 ? "T12:00:00" : ""),
-  ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return iso.length === 10 ? fmtDayLabel(iso, "MMM d") : fmtDate(iso, "MMM d");
 }
 
 function isOverdue(iso: string | null, done: boolean): boolean {
   if (done || !iso) return false;
-  const target = new Date(iso + (iso.length === 10 ? "T23:59:59" : ""));
-  return target.getTime() < Date.now();
+  // A bare date is due at the end of that day in the OWNER's zone (not the
+  // viewer's); an instant is its own deadline.
+  const deadline = iso.length === 10 ? endOfOwnerDay(iso) : new Date(iso);
+  return deadline.getTime() < Date.now();
 }
 
 // Compact milestone list for the v2 right rail. Same toggle/edit/add wiring as

@@ -17,15 +17,13 @@ import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { NoteScanUploader } from "../notes/NoteScanUploader";
 import { ProjectMeetings } from "./ProjectMeetings";
 import { noteCardTitle } from "./noteCardTitle";
+import { fmtDate } from "@/lib/date";
 import type { MeetingListRow } from "@/lib/db/queries/meetings";
 import type { Note, Task } from "@/lib/db/types";
 
 function fmtShortDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  return fmtDate(iso, "MMM d");
 }
 
 const IDLE_STATUS = "Claudia can tidy, summarize, or extract tasks from a braindump";

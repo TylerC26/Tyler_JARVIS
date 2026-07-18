@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import type { ActiveAgent } from "@/components/modules/chat/ChatWorkspace";
 import { splitHtmlSegments } from "@/lib/chat/htmlArtifacts";
+import { fmtDate } from "@/lib/date";
 import type { JarvisUIMessage } from "@/lib/chat/ui";
 import { DelegationCard } from "./DelegationCard";
 import { HtmlArtifact } from "./HtmlArtifact";
@@ -33,7 +34,7 @@ function messageTime(iso?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return fmtDate(d, "HH:mm");
 }
 
 // Resolve who's talking. Historical rows carry this on metadata; live-streamed

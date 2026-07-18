@@ -8,6 +8,7 @@ import {
 import { Field, Input, Textarea } from "@/components/ui/Input";
 import { type CategoryKey } from "@/lib/calendar/categories";
 import { fromLocalInput, toLocalInput } from "@/lib/calendar/grid";
+import { fmtDate } from "@/lib/date";
 import type { Event } from "@/lib/db/types";
 import { CategoryPicker } from "./CategoryPicker";
 
@@ -29,16 +30,16 @@ type Props = {
   onChange?: (values: EventFormValues) => void;
 };
 
-// Local YYYY-MM-DD for a Date (calendar day in the viewer's zone).
+// YYYY-MM-DD for an instant, in the OWNER's zone — the same day the server
+// snaps all-day boundaries to (lib/db/core/events.ts normalizeAllDayBoundaries).
 function fmtDay(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return fmtDate(d, "yyyy-MM-dd");
 }
 
 // The all-day END is stored exclusively (the following midnight), so the last
 // day the event actually covers is the instant just before it.
 function inclusiveEndDay(endLocal: string): string {
-  return fmtDay(new Date(new Date(endLocal).getTime() - 1));
+  return fmtDay(new Date(fromLocalInput(endLocal).getTime() - 1));
 }
 
 function toForm(initial: Props["initial"]): EventFormValues {
@@ -99,8 +100,8 @@ export function EventForm({ initial, formId, onSubmit, onChange }: Props) {
           const startDay = values.starts_at.slice(0, 10);
           const endRaw = inclusiveEndDay(values.ends_at);
           const endDay = endRaw < startDay ? startDay : endRaw;
-          isoStart = new Date(`${startDay}T00:00`).toISOString();
-          isoEnd = new Date(`${endDay}T12:00`).toISOString();
+          isoStart = fromLocalInput(`${startDay}T00:00`).toISOString();
+          isoEnd = fromLocalInput(`${endDay}T12:00`).toISOString();
         } else {
           isoStart = fromLocalInput(values.starts_at).toISOString();
           isoEnd = fromLocalInput(values.ends_at).toISOString();

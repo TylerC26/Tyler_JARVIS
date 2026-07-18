@@ -9,17 +9,12 @@ import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { fmtDate } from "@/lib/date";
 import type { MeetingListRow } from "@/lib/db/queries/meetings";
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return fmtDate(iso, "MMM d, yyyy, h:mm a");
 }
 
 function fmtDuration(ms: number | null): string | null {

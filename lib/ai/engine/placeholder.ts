@@ -21,6 +21,14 @@ import type { AIEngine } from "./types";
 // date-fns calendar ops (isSameDay, differenceInDays, …) compare owner-local
 // days rather than the server's UTC days.
 function z(input: string | Date): Date {
+  // A bare "YYYY-MM-DD" — ai_briefs.for_date is a `date` column — names a
+  // calendar day, not an instant. parseISO already yields a Date whose local
+  // getters read that day at midnight, which IS this frame; shifting it through
+  // toZonedTime as well would move it off the day (for America/Toronto on a UTC
+  // box, "2026-07-17" became Thursday the 16th).
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return parseISO(input);
+  }
   return toZonedTime(
     typeof input === "string" ? parseISO(input) : input,
     getOwnerTz(),

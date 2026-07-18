@@ -1,6 +1,5 @@
 "use client";
 
-import { format, isSameDay, isToday } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import {
   HOUR_END,
@@ -8,12 +7,14 @@ import {
   HOURS_VISIBLE,
   PX_PER_HOUR,
   PX_PER_MINUTE,
-  combineDateAndTime,
   hourSlots,
+  isSameLocalDay,
+  minutesFromMidnight,
   spansMultipleDays,
   timeForY,
   weekDays,
 } from "@/lib/calendar/grid";
+import { fmtDate, isDateToday } from "@/lib/date";
 import { layoutDayEvents, type LaidOutEvent } from "@/lib/calendar/layout";
 import type { Event } from "@/lib/db/types";
 import { AllDayStrip } from "./AllDayStrip";
@@ -55,8 +56,8 @@ export function WeekView({
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
-  const todayIdx = days.findIndex((d) => isToday(d));
-  const nowMinutes = now ? now.getHours() * 60 + now.getMinutes() : 0;
+  const todayIdx = days.findIndex((d) => isDateToday(d));
+  const nowMinutes = now ? minutesFromMidnight(now) : 0;
   const nowVisible =
     now !== null &&
     todayIdx >= 0 &&
@@ -88,7 +89,7 @@ export function WeekView({
 
   function eventsOnDay(day: Date): LaidOutEvent[] {
     const dayEvents = timedEvents.filter((e) =>
-      isSameDay(new Date(e.starts_at), day),
+      isSameLocalDay(e.starts_at, day),
     );
     return layoutDayEvents(dayEvents);
   }
@@ -118,7 +119,7 @@ export function WeekView({
         >
           <div />
           {days.map((day, i) => {
-            const key = format(day, "yyyy-MM-dd");
+            const key = fmtDate(day, "yyyy-MM-dd");
             const shift = wifeShifts[key];
             const wfh = wfhStatus[key];
             return (
@@ -126,12 +127,12 @@ export function WeekView({
                 key={i}
                 className={[
                   "px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wider border-l border-edge min-w-0",
-                  isToday(day) ? "text-accent bg-accent/5" : "text-fg-muted",
+                  isDateToday(day) ? "text-accent bg-accent/5" : "text-fg-muted",
                 ].join(" ")}
               >
-                <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
-                <div className={isToday(day) ? "text-accent text-base" : "text-fg text-base"}>
-                  {day.getDate()}
+                <div>{fmtDate(day, "EEE")}</div>
+                <div className={isDateToday(day) ? "text-accent text-base" : "text-fg text-base"}>
+                  {fmtDate(day, "d")}
                 </div>
                 {/* Always reserve the badge slot so date numbers line up
                     across the week even when a day carries no badges. WFH (my
@@ -185,7 +186,7 @@ export function WeekView({
               style={{ top: `${nowTop}px`, left: "2px" }}
               aria-hidden
             >
-              {format(now, "h:mm")}
+              {fmtDate(now, "h:mm")}
             </div>
           </>
         )}
@@ -218,7 +219,7 @@ export function WeekView({
               data-day={i}
               className={[
                 "relative border-l border-edge",
-                isToday(day) ? "bg-accent/[0.02]" : "",
+                isDateToday(day) ? "bg-accent/[0.02]" : "",
               ].join(" ")}
               onClick={(e) => {
                 // Only fire on background click — not on event blocks
@@ -264,8 +265,6 @@ export function WeekView({
         </div>
       </div>
 
-      {void HOUR_START}
-      {void combineDateAndTime}
     </div>
   );
 }
