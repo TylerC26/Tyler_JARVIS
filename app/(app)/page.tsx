@@ -341,18 +341,25 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* ---- day spine + gym ---- */}
-        <div className="flex min-w-0 flex-col gap-4">
-          <DaySpine events={events} />
-          <GymProgress
-            streak={streak}
-            session={gymSession}
-            sessionDayLabel={
-              gymSession ? fmtRelativeDay(gymSession.performed_at) : null
-            }
-            attendance={attendance}
-            weekCount={weekCount}
-          />
+        {/* ---- day spine + gym ----
+            Stacked on phones and inside the xl right-rail, but laid out 2-up in
+            the lg→xl band (iPad mini landscape, 1133px) so the short viewport
+            doesn't push these two cards far below the fold. */}
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start xl:flex-col">
+          <div className="min-w-0 lg:flex-1 xl:flex-none">
+            <DaySpine events={events} />
+          </div>
+          <div className="min-w-0 lg:flex-1 xl:flex-none">
+            <GymProgress
+              streak={streak}
+              session={gymSession}
+              sessionDayLabel={
+                gymSession ? fmtRelativeDay(gymSession.performed_at) : null
+              }
+              attendance={attendance}
+              weekCount={weekCount}
+            />
+          </div>
         </div>
       </div>
     </div>

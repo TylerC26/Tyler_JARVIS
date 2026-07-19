@@ -106,7 +106,9 @@ export function CommandBrief({
       </div>
 
       {/* ---- metric readouts ---- */}
-      <div className="grid grid-cols-2 border-t border-edge sm:grid-cols-3 xl:flex xl:border-t-0 xl:border-l">
+      {/* One tidy row of 5 from `sm` up (was 3-col, which wrapped 3+2 with a
+          stray divider on iPad mini). Becomes the fixed-width vertical strip at xl. */}
+      <div className="grid grid-cols-2 border-t border-edge sm:grid-cols-5 xl:flex xl:border-t-0 xl:border-l">
         {metrics.map((m, i) => (
           <Link
             key={m.label}
