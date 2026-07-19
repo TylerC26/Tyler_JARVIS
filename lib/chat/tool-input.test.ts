@@ -1,6 +1,10 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, it } from "vitest";
-import { normalizeToolInput, sanitizeToolInputs } from "./tool-input";
+import {
+  appendTimeReminderToLastUser,
+  normalizeToolInput,
+  sanitizeToolInputs,
+} from "./tool-input";
 
 describe("normalizeToolInput", () => {
   it("returns a plain object by reference (unchanged)", () => {
@@ -70,5 +74,69 @@ describe("sanitizeToolInputs", () => {
       },
     ];
     expect(sanitizeToolInputs(messages)[0]).toBe(messages[0]);
+  });
+});
+
+describe("appendTimeReminderToLastUser", () => {
+  const REMINDER = "It is now Sunday. Ignore earlier timestamps.";
+
+  it("folds the reminder into a string-content last user message", () => {
+    const messages: ModelMessage[] = [
+      { role: "user", content: "what time is it" },
+    ];
+    const out = appendTimeReminderToLastUser(messages, REMINDER);
+    expect(out[0].content).toBe(
+      `what time is it\n\n[system reminder]\n${REMINDER}`,
+    );
+  });
+
+  it("appends a text part to array-content (photo) last user message", () => {
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "image", image: "data", mediaType: "image/jpeg" },
+          { type: "text", text: "what's in this" },
+        ],
+      },
+    ];
+    const out = appendTimeReminderToLastUser(messages, REMINDER);
+    const parts = out[0].content as Array<{ type: string; text?: string }>;
+    expect(parts).toHaveLength(3);
+    expect(parts[2]).toEqual({
+      type: "text",
+      text: `\n\n[system reminder]\n${REMINDER}`,
+    });
+  });
+
+  it("targets the LAST user message, leaving earlier turns untouched", () => {
+    const messages: ModelMessage[] = [
+      { role: "user", content: "first" },
+      { role: "assistant", content: "reply" },
+      { role: "user", content: "second" },
+    ];
+    const out = appendTimeReminderToLastUser(messages, REMINDER);
+    expect(out[0].content).toBe("first");
+    expect(out[2].content).toBe(`second\n\n[system reminder]\n${REMINDER}`);
+  });
+
+  it("never introduces a trailing system message (the MiniMax break)", () => {
+    const messages: ModelMessage[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello" },
+      { role: "user", content: "bye" },
+    ];
+    const out = appendTimeReminderToLastUser(messages, REMINDER);
+    // No system-role message may appear after the first user/assistant turn —
+    // that is exactly the shape the MiniMax provider rejects.
+    expect(out.some((m) => m.role === "system")).toBe(false);
+    expect(out).toHaveLength(messages.length);
+  });
+
+  it("returns the list unchanged when there is no user message", () => {
+    const messages: ModelMessage[] = [
+      { role: "assistant", content: "orphan" },
+    ];
+    expect(appendTimeReminderToLastUser(messages, REMINDER)).toBe(messages);
   });
 });

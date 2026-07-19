@@ -17,7 +17,7 @@ import {
   getActiveResponderPrompt,
 } from "./system-prompts";
 import { ALL_TOOLS } from "./tools";
-import { sanitizeToolInputs } from "./tool-input";
+import { appendTimeReminderToLastUser, sanitizeToolInputs } from "./tool-input";
 
 // Pull out the cache/raw token split the SDK exposes. Fields are number|undefined;
 // fall back to 0 so the ledger row is always well-formed.
@@ -197,10 +197,13 @@ export async function streamDeepseekResponse(
     system,
     messages: [
       ctxPrefix,
-      ...sanitizeToolInputs(messages),
-      // Re-assert "now" after the history so it wins the recency slot over any
-      // stale time answer sitting in the thread (see buildTimeReminder).
-      { role: "system", content: buildTimeReminder() },
+      // Re-assert "now" in the recency window (folded into the last user turn,
+      // not a trailing system message — MiniMax rejects a second system block
+      // after the history; see appendTimeReminderToLastUser + buildTimeReminder).
+      ...appendTimeReminderToLastUser(
+        sanitizeToolInputs(messages),
+        buildTimeReminder(),
+      ),
     ],
     ...(minimaxOn
       ? {}
@@ -258,10 +261,13 @@ export async function streamMinimaxResponse(
     system,
     messages: [
       ctxPrefix,
-      ...sanitizeToolInputs(messages),
-      // Re-assert "now" after the history so it wins the recency slot over any
-      // stale time answer sitting in the thread (see buildTimeReminder).
-      { role: "system", content: buildTimeReminder() },
+      // Re-assert "now" in the recency window (folded into the last user turn,
+      // not a trailing system message — MiniMax rejects a second system block
+      // after the history; see appendTimeReminderToLastUser + buildTimeReminder).
+      ...appendTimeReminderToLastUser(
+        sanitizeToolInputs(messages),
+        buildTimeReminder(),
+      ),
     ],
     tools: ALL_TOOLS,
     stopWhen: stepCountIs(8),

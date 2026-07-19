@@ -24,7 +24,11 @@ import {
   buildTimeReminder,
 } from "@/lib/chat/system-prompts";
 import { appendMessage } from "@/lib/chat/persist";
-import { normalizeToolInput, sanitizeToolInputs } from "@/lib/chat/tool-input";
+import {
+  appendTimeReminderToLastUser,
+  normalizeToolInput,
+  sanitizeToolInputs,
+} from "@/lib/chat/tool-input";
 import { getTelegramContext } from "@/lib/chat/request-context";
 import {
   finishAgentRunCore,
@@ -141,13 +145,15 @@ export async function streamAgentResponse(
   const result = streamText({
     model: picked.model,
     system: `${agent.system_prompt}\n\n---\n${prefix}${bodySnapshot ? `\n\n${bodySnapshot}` : ""}`,
-    // Re-assert "now" AFTER the conversation history so the current time sits in
-    // the recency window — the top-of-prompt prefix alone lost to stale time
-    // answers parroted out of the thread (see buildTimeReminder).
-    messages: [
-      ...sanitizeToolInputs(messages),
-      { role: "system", content: buildTimeReminder() },
-    ],
+    // Re-assert "now" in the recency window so the current time sits near the
+    // latest turn — the top-of-prompt prefix alone lost to stale time answers
+    // parroted out of the thread (see buildTimeReminder). Folded into the last
+    // user message rather than a trailing system message: MiniMax-backed agents
+    // (e.g. Matt) reject a second system block after the history.
+    messages: appendTimeReminderToLastUser(
+      sanitizeToolInputs(messages),
+      buildTimeReminder(),
+    ),
     ...(hasTools && {
       tools,
       stopWhen: stepCountIs(AGENT_CHAT_STEP_BUDGET),

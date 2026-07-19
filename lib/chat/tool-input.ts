@@ -57,3 +57,37 @@ export function sanitizeToolInputs(messages: ModelMessage[]): ModelMessage[] {
     return changed ? ({ ...m, content } as ModelMessage) : m;
   });
 }
+
+// Fold the authoritative "now" reminder (buildTimeReminder) into the LAST user
+// message so the current time still lands in the model's recency window.
+//
+// Why not a trailing `{ role: "system", content: ... }` message (the original
+// approach): MiniMax's provider rejects "Multiple system messages that are
+// separated by user/assistant messages" — a second system block placed after
+// the conversation history throws AI_UnsupportedFunctionalityError, the stream
+// produces no output, and the whole Telegram/chat turn fails. Embedding the
+// reminder in the final user turn keeps the recency placement the reminder
+// needs while staying valid on every provider (MiniMax, DeepSeek, Claude).
+//
+// Returns a new list; only the target user message is cloned. If there is no
+// user message to attach to, the list is returned unchanged rather than
+// inventing a trailing system block (which is exactly what breaks MiniMax).
+export function appendTimeReminderToLastUser(
+  messages: ModelMessage[],
+  reminder: string,
+): ModelMessage[] {
+  const block = `\n\n[system reminder]\n${reminder}`;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    const content: ModelMessage["content"] =
+      typeof m.content === "string"
+        ? m.content + block
+        : Array.isArray(m.content)
+          ? [...m.content, { type: "text", text: block }]
+          : m.content;
+    const clone = { ...m, content } as ModelMessage;
+    return [...messages.slice(0, i), clone, ...messages.slice(i + 1)];
+  }
+  return messages;
+}
