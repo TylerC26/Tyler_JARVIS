@@ -1,15 +1,18 @@
-// Claudia's project-note composer helpers. Three one-shot LLM passes over a
-// messy braindump, all routed through the `note_assist` feature pref (so they
-// follow the same Claude/DeepSeek/MiniMax routing as the rest of JARVIS):
-//   * tidy      — rewrite into clean, structured prose, facts preserved.
-//   * summarize — collapse to a 1-2 sentence summary.
-//   * extract   — pull a clean list of actionable task titles.
+// Claudia's project-note composer helpers. One-shot LLM passes over a messy
+// braindump, all routed through the `note_assist` feature pref (so they follow
+// the same Claude/DeepSeek/MiniMax routing as the rest of JARVIS):
+//   * tidy        — rewrite into clean, structured prose, facts preserved.
+//   * summarize   — collapse to a 1-2 sentence summary.
+//   * extract     — pull a clean list of actionable task titles.
+//   * consolidate — fold a chat-style run of snippets into ONE titled note.
 // tidy/summarize return text the composer drops back into the textarea;
+// consolidate returns a title+body pair for the chat composer's draft card;
 // extract returns titles the project actions turn into real board tasks.
 
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { modelForFeature } from "@/lib/ai/model-prefs";
+import { numberSnippets } from "@/lib/ai/notes/snippets";
 import { recordModelUsage } from "@/lib/chat/router";
 import type { CoreResult } from "@/lib/db/core/tasks";
 
@@ -41,6 +44,62 @@ export async function assistNote(
     const out = result.text.trim();
     if (!out) return { ok: false, error: "Claudia came back empty — try again." };
     return { ok: true, data: { text: out } };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Claudia hit an error — check the model is online in /llm.",
+    };
+  }
+}
+
+const ConsolidateSchema = z.object({
+  title: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe("Short note title naming the subject — site, area, or topic."),
+  body: z.string().min(1).describe("The single consolidated note."),
+});
+
+const CONSOLIDATE_SYSTEM = [
+  "You are Claudia, Tyler's engineering work assistant.",
+  "The input is a run of note snippets captured one at a time during a single work session, in chronological order, numbered [1], [2], ...",
+  "Merge them into ONE clean, coherent note:",
+  "- Preserve every fact, name, number, date, and reference. Invent nothing.",
+  "- Deduplicate repeats, and fold a follow-up into the point it amends. Where a later snippet corrects an earlier one, the later one wins and the superseded version is dropped.",
+  "- Group related points together and order them logically, not by capture order.",
+  "- Use short '- ' bullets for lists of findings or actions; use prose where it reads better.",
+  "- Keep Tyler's shorthand and site/equipment tags (e.g. TPE11 ELEC L4 2B) exactly as written.",
+  "- Never mention the snippets, their numbers, or the fact that this was assembled.",
+  "The title names the subject, it is not a summary sentence. Return no preamble and no sign-off.",
+].join("\n");
+
+// The chat composer's TIDY UP. Distinct from `assistNote("tidy")`: that pass
+// rewrites one blob of prose, this one has to reconcile a sequence of separate
+// captures against each other, and it names the result.
+export async function consolidateSnippets(
+  snippets: string[],
+): Promise<CoreResult<{ title: string; body: string }>> {
+  const numbered = numberSnippets(snippets);
+  if (!numbered) {
+    return { ok: false, error: "Nothing to consolidate — send a snippet first." };
+  }
+  try {
+    const { model, modelId } = await modelForFeature("note_assist");
+    const result = await generateObject({
+      model,
+      schema: ConsolidateSchema,
+      system: CONSOLIDATE_SYSTEM,
+      prompt: `SNIPPETS:\n${numbered}`,
+      maxOutputTokens: 2000,
+    });
+    recordModelUsage(modelId, "classifier", result.usage);
+    const body = result.object.body.trim();
+    if (!body) return { ok: false, error: "Claudia came back empty — try again." };
+    return { ok: true, data: { title: result.object.title.trim(), body } };
   } catch (e) {
     return {
       ok: false,

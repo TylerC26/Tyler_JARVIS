@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  addProjectNoteAction,
   attachNoteAction,
   claudiaNoteAssistAction,
   commitScannedProjectNoteAction,
@@ -15,6 +14,7 @@ import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { NoteScanUploader } from "../notes/NoteScanUploader";
+import { AI_BTN, NoteChatComposer } from "./NoteChatComposer";
 import { ProjectMeetings } from "./ProjectMeetings";
 import { noteCardTitle } from "./noteCardTitle";
 import { fmtDate } from "@/lib/date";
@@ -26,9 +26,9 @@ function fmtShortDate(iso: string | null): string {
   return fmtDate(iso, "MMM d");
 }
 
-const IDLE_STATUS = "Claudia can tidy, summarize, or extract tasks from a braindump";
+const IDLE_STATUS = "Claudia can tidy, summarize, or extract tasks from this note";
 
-// Grow the composer textarea to fit its content so notes never scroll inside
+// Grow the editor textarea to fit its content so notes never scroll inside
 // the box. CSS min-height still floors it, so short notes keep a comfortable
 // height.
 function autoSize(el: HTMLTextAreaElement | null) {
@@ -59,12 +59,15 @@ export function ProjectNotes({
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [attachable, setAttachable] = useState<Note[]>(initialAttachable);
 
-  // Composer state — doubles as the editor for an existing note (editingId).
+  // New notes are captured in the chat composer; this classic editor only ever
+  // opens on an existing note (editingId), so the two can't fight over focus.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [pinned, setPinned] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // Bumped to hand focus back to the chat composer's input.
+  const [captureFocus, setCaptureFocus] = useState(0);
 
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -82,7 +85,7 @@ export function ProjectNotes({
     autoSize(taRef.current);
   }, [body]);
 
-  function resetComposer() {
+  function closeEditor() {
     setEditingId(null);
     setTitle("");
     setBody("");
@@ -91,13 +94,10 @@ export function ProjectNotes({
     setError(null);
   }
 
-  function focusComposer() {
-    requestAnimationFrame(() => taRef.current?.focus());
-  }
-
+  // Leave the editor and put the cursor back in the chat composer.
   function startNew() {
-    resetComposer();
-    focusComposer();
+    closeEditor();
+    setCaptureFocus((n) => n + 1);
   }
 
   function loadForEdit(n: Note) {
@@ -107,7 +107,7 @@ export function ProjectNotes({
     setPinned(n.pinned);
     setStatus(IDLE_STATUS);
     setError(null);
-    focusComposer();
+    requestAnimationFrame(() => taRef.current?.focus());
   }
 
   async function runAssist(mode: "tidy" | "summarize") {
@@ -149,6 +149,7 @@ export function ProjectNotes({
   }
 
   async function onSave() {
+    if (!editingId) return;
     const b = body.trim();
     if (!b) {
       setError("Write something before saving.");
@@ -157,33 +158,19 @@ export function ProjectNotes({
     setError(null);
     setSaving(true);
     try {
-      const t = title.trim();
-      if (editingId) {
-        const result = await updateProjectNoteAction(
-          editingId,
-          { title: t, body: b, pinned },
-          projectSlug,
-        );
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setNotes((prev) =>
-          prev.map((n) => (n.id === result.note.id ? result.note : n)),
-        );
-      } else {
-        const result = await addProjectNoteAction(
-          { project_id: projectId, title: t, body: b, pinned },
-          projectSlug,
-        );
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setNotes((prev) => [result.note, ...prev]);
+      const result = await updateProjectNoteAction(
+        editingId,
+        { title: title.trim(), body: b, pinned },
+        projectSlug,
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
-      resetComposer();
-      setStatus("Saved ✓");
+      setNotes((prev) =>
+        prev.map((n) => (n.id === result.note.id ? result.note : n)),
+      );
+      closeEditor();
     } finally {
       setSaving(false);
     }
@@ -203,7 +190,7 @@ export function ProjectNotes({
       return;
     }
     setNotes((prev) => prev.filter((x) => x.id !== n.id));
-    if (editingId === n.id) resetComposer();
+    if (editingId === n.id) closeEditor();
   }
 
   async function onAttachNote(n: Note) {
@@ -234,11 +221,8 @@ export function ProjectNotes({
     }
     setNotes((prev) => prev.filter((x) => x.id !== n.id));
     setAttachable((prev) => [result.note, ...prev]);
-    if (editingId === n.id) resetComposer();
+    if (editingId === n.id) closeEditor();
   }
-
-  const aiBtn =
-    "rounded-sm border border-[#5a3a1c] bg-[#e8923a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#e8a868] transition-colors hover:bg-[#e8923a]/20 disabled:opacity-40 disabled:cursor-not-allowed";
 
   return (
     <section className="flex flex-col rounded-md border border-edge bg-surface/40">
@@ -283,9 +267,17 @@ export function ProjectNotes({
         onCommitted={(note) => setNotes((prev) => [note, ...prev])}
       />
 
-      {/* composer */}
-      <div className="border-b border-edge p-4">
-        {editingId && (
+      {/* composer — chat capture for new notes, classic editor for an existing one */}
+      {!editingId ? (
+        <NoteChatComposer
+          projectId={projectId}
+          projectSlug={projectSlug}
+          focusSignal={captureFocus}
+          onSaved={(note) => setNotes((prev) => [note, ...prev])}
+          onTasksCreated={onTasksCreated}
+        />
+      ) : (
+        <div className="border-b border-edge p-4">
           <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-warn">
             ✎ editing note
             <button
@@ -293,106 +285,107 @@ export function ProjectNotes({
               onClick={startNew}
               className="rounded-sm border border-edge px-2 py-0.5 text-fg-dim hover:border-edge-strong hover:text-fg"
             >
-              ✕ new note instead
+              ✕ back to capture
             </button>
           </div>
-        )}
-        <div className="rounded-sm border border-edge bg-surface-2/40">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Note title…"
-            className="w-full border-b border-edge bg-transparent px-4 py-3 font-mono text-[15px] font-semibold text-fg placeholder:text-fg-dim focus:outline-none"
-          />
-          <textarea
-            ref={taRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                void onSave();
-              }
-            }}
-            placeholder="› dump your messy notes here… Claudia will clean them up"
-            rows={1}
-            className="min-h-[150px] w-full resize-none overflow-hidden bg-transparent px-4 py-3.5 font-mono text-[13px] leading-relaxed text-fg placeholder:text-fg-dim focus:outline-none"
-          />
-          {/* Claudia assist bar */}
-          <div className="flex flex-wrap items-center gap-2.5 border-t border-edge bg-[#e8923a]/[0.04] px-3.5 py-2.5">
-            <span
-              aria-hidden
-              className="inline-block h-[11px] w-4 shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #e8923a, #f0b95e)",
-                clipPath: "polygon(0 100%, 50% 0, 100% 100%)",
-              }}
+          <div className="rounded-sm border border-edge bg-surface-2/40">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Note title…"
+              className="w-full border-b border-edge bg-transparent px-4 py-3 font-mono text-[15px] font-semibold text-fg placeholder:text-fg-dim focus:outline-none"
             />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#d8a878]">
-              {status}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void runAssist("tidy")}
-                disabled={aiBusy || !body.trim()}
-                className={aiBtn}
-              >
-                ✦ Tidy up
-              </button>
-              <button
-                type="button"
-                onClick={() => void runAssist("summarize")}
-                disabled={aiBusy || !body.trim()}
-                className={aiBtn}
-              >
-                ✦ Summarize
-              </button>
-              <button
-                type="button"
-                onClick={() => void runExtract()}
-                disabled={aiBusy || !body.trim()}
-                className={aiBtn}
-              >
-                ✦ Extract tasks
-              </button>
+            <textarea
+              ref={taRef}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void onSave();
+                }
+              }}
+              placeholder="› note body…"
+              rows={1}
+              className="min-h-[150px] w-full resize-none overflow-hidden bg-transparent px-4 py-3.5 font-mono text-[13px] leading-relaxed text-fg placeholder:text-fg-dim focus:outline-none"
+            />
+            {/* Claudia assist bar */}
+            <div className="flex flex-wrap items-center gap-2.5 border-t border-edge bg-[#e8923a]/[0.04] px-3.5 py-2.5">
+              <span
+                aria-hidden
+                className="inline-block h-[11px] w-4 shrink-0"
+                style={{
+                  background: "linear-gradient(135deg, #e8923a, #f0b95e)",
+                  clipPath: "polygon(0 100%, 50% 0, 100% 100%)",
+                }}
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#d8a878]">
+                {status}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runAssist("tidy")}
+                  disabled={aiBusy || !body.trim()}
+                  className={AI_BTN}
+                >
+                  ✦ Tidy up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runAssist("summarize")}
+                  disabled={aiBusy || !body.trim()}
+                  className={AI_BTN}
+                >
+                  ✦ Summarize
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runExtract()}
+                  disabled={aiBusy || !body.trim()}
+                  className={AI_BTN}
+                >
+                  ✦ Extract tasks
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-2.5 flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setPinned((v) => !v)}
-            aria-pressed={pinned}
-            className={[
-              "rounded-sm border px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors",
-              pinned
-                ? "border-accent/50 bg-accent/10 text-accent"
-                : "border-edge text-fg-dim hover:text-fg",
-            ].join(" ")}
-          >
-            ◷ {pinned ? "pinned" : "pin"}
-          </button>
-          {error && (
-            <span className="font-mono text-[11px] text-danger">! {error}</span>
-          )}
-          <Button
-            variant="primary"
-            className="ml-auto"
-            onClick={() => void onSave()}
-            disabled={saving || !body.trim()}
-          >
-            {saving ? "SAVING…" : editingId ? "UPDATE NOTE ↵" : "SAVE NOTE ↵"}
-          </Button>
+          <div className="mt-2.5 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setPinned((v) => !v)}
+              aria-pressed={pinned}
+              className={[
+                "rounded-sm border px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors",
+                pinned
+                  ? "border-accent/50 bg-accent/10 text-accent"
+                  : "border-edge text-fg-dim hover:text-fg",
+              ].join(" ")}
+            >
+              ◷ {pinned ? "pinned" : "pin"}
+            </button>
+            {error && (
+              <span className="font-mono text-[11px] text-danger">! {error}</span>
+            )}
+            <Button
+              variant="primary"
+              className="ml-auto"
+              onClick={() => void onSave()}
+              disabled={saving || !body.trim()}
+            >
+              {saving ? "SAVING…" : "UPDATE NOTE ↵"}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* notes list — titles only */}
       <div>
         {notes.length === 0 ? (
           <div className="px-4 py-8 text-center font-mono text-[11px] text-fg-dim">
-            no notes yet — dump a braindump above, or ask Claudia to save one
+            no notes yet — send snippets above and tidy them into one, or ask
+            Claudia to save one
           </div>
         ) : (
           notes.map((n) => (

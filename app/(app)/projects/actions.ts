@@ -24,6 +24,7 @@ import {
 import { createTaskCore } from "@/lib/db/core/tasks";
 import {
   assistNote,
+  consolidateSnippets,
   extractTaskTitles,
   type NoteAssistMode,
 } from "@/lib/ai/notes/assist";
@@ -235,6 +236,17 @@ export async function claudiaNoteAssistAction(
   const result = await assistNote(mode, text);
   return result.ok
     ? { ok: true as const, text: result.data.text }
+    : { ok: false as const, error: result.error };
+}
+
+// TIDY UP for the chat-style note composer: fold the whole run of captured
+// snippets into a single titled note. Returns the draft only — the composer
+// lets Tyler edit it before anything is written, so there's nothing to
+// revalidate here either.
+export async function consolidateNoteSnippetsAction(snippets: string[]) {
+  const result = await consolidateSnippets(snippets);
+  return result.ok
+    ? { ok: true as const, title: result.data.title, body: result.data.body }
     : { ok: false as const, error: result.error };
 }
 
