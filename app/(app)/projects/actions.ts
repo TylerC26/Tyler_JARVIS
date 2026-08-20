@@ -240,11 +240,15 @@ export async function claudiaNoteAssistAction(
 }
 
 // TIDY UP for the chat-style note composer: fold the whole run of captured
-// snippets into a single titled note. Returns the draft only — the composer
-// lets Tyler edit it before anything is written, so there's nothing to
-// revalidate here either.
-export async function consolidateNoteSnippetsAction(snippets: string[]) {
-  const result = await consolidateSnippets(snippets);
+// snippets into a single titled note. `existing` is passed when amending a
+// saved note, so the snippets get merged into it rather than replacing it.
+// Returns the draft only — the composer lets Tyler edit it before anything is
+// written, so there's nothing to revalidate here either.
+export async function consolidateNoteSnippetsAction(
+  snippets: string[],
+  existing?: { title: string; body: string },
+) {
+  const result = await consolidateSnippets(snippets, existing);
   return result.ok
     ? { ok: true as const, title: result.data.title, body: result.data.body }
     : { ok: false as const, error: result.error };

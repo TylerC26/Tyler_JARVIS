@@ -74,26 +74,47 @@ const CONSOLIDATE_SYSTEM = [
   "- Use short '- ' bullets for lists of findings or actions; use prose where it reads better.",
   "- Keep Tyler's shorthand and site/equipment tags (e.g. TPE11 ELEC L4 2B) exactly as written.",
   "- Never mention the snippets, their numbers, or the fact that this was assembled.",
+  "",
+  "An EXISTING NOTE section means you are amending a note Tyler already saved, not writing a fresh one:",
+  "- Everything in it is kept. Weave each new snippet into the place it belongs, do not bolt them on as an 'Updates' section at the end.",
+  "- Drop something from the existing note only where a snippet explicitly corrects or supersedes it.",
+  "- Keep the existing title as-is unless the new snippets clearly move the subject on.",
+  "- If there are no new snippets, just tidy what is already there.",
+  "",
   "The title names the subject, it is not a summary sentence. Return no preamble and no sign-off.",
 ].join("\n");
 
 // The chat composer's TIDY UP. Distinct from `assistNote("tidy")`: that pass
 // rewrites one blob of prose, this one has to reconcile a sequence of separate
 // captures against each other, and it names the result.
+//
+// `existing` is set when the composer is amending a saved note: the snippets
+// are then additions to fold into it rather than the whole note.
 export async function consolidateSnippets(
   snippets: string[],
+  existing?: { title: string; body: string },
 ): Promise<CoreResult<{ title: string; body: string }>> {
   const numbered = numberSnippets(snippets);
-  if (!numbered) {
+  const base = (existing?.body ?? "").trim();
+  if (!numbered && !base) {
     return { ok: false, error: "Nothing to consolidate — send a snippet first." };
   }
+  const prompt = base
+    ? [
+        "EXISTING NOTE",
+        `Title: ${existing?.title.trim() || "(untitled)"}`,
+        `Body:\n${base}`,
+        "",
+        `NEW SNIPPETS:\n${numbered || "(none — just tidy the existing note)"}`,
+      ].join("\n")
+    : `SNIPPETS:\n${numbered}`;
   try {
     const { model, modelId } = await modelForFeature("note_assist");
     const result = await generateObject({
       model,
       schema: ConsolidateSchema,
       system: CONSOLIDATE_SYSTEM,
-      prompt: `SNIPPETS:\n${numbered}`,
+      prompt,
       maxOutputTokens: 2000,
     });
     recordModelUsage(modelId, "classifier", result.usage);

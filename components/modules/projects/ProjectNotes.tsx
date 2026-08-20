@@ -1,20 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   attachNoteAction,
-  claudiaNoteAssistAction,
   commitScannedProjectNoteAction,
   deleteProjectNoteAction,
   detachNoteAction,
-  extractTasksFromNoteAction,
-  updateProjectNoteAction,
 } from "@/app/(app)/projects/actions";
 import { AddItemModal } from "@/components/ui/AddItemModal";
 import { Button } from "@/components/ui/Button";
 import { alertDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { NoteScanUploader } from "../notes/NoteScanUploader";
-import { AI_BTN, NoteChatComposer } from "./NoteChatComposer";
+import { NoteChatComposer } from "./NoteChatComposer";
 import { ProjectMeetings } from "./ProjectMeetings";
 import { noteCardTitle } from "./noteCardTitle";
 import { fmtDate } from "@/lib/date";
@@ -24,17 +21,6 @@ import type { Note, Task } from "@/lib/db/types";
 function fmtShortDate(iso: string | null): string {
   if (!iso) return "—";
   return fmtDate(iso, "MMM d");
-}
-
-const IDLE_STATUS = "Claudia can tidy, summarize, or extract tasks from this note";
-
-// Grow the editor textarea to fit its content so notes never scroll inside
-// the box. CSS min-height still floors it, so short notes keep a comfortable
-// height.
-function autoSize(el: HTMLTextAreaElement | null) {
-  if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${el.scrollHeight}px`;
 }
 
 export function ProjectNotes({
@@ -59,121 +45,24 @@ export function ProjectNotes({
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [attachable, setAttachable] = useState<Note[]>(initialAttachable);
 
-  // New notes are captured in the chat composer; this classic editor only ever
-  // opens on an existing note (editingId), so the two can't fight over focus.
+  // Writing a new note and editing a saved one both happen in the chat
+  // composer; this only says which note it's pointed at.
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [pinned, setPinned] = useState(false);
-  const taRef = useRef<HTMLTextAreaElement | null>(null);
-  // Bumped to hand focus back to the chat composer's input.
+  // Bumped to hand focus back to the composer's input.
   const [captureFocus, setCaptureFocus] = useState(0);
-
-  const [saving, setSaving] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [status, setStatus] = useState(IDLE_STATUS);
-  const [error, setError] = useState<string | null>(null);
 
   const [notePicking, setNotePicking] = useState(false);
   const [meetingPicking, setMeetingPicking] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showScan, setShowScan] = useState(false);
 
-  // Keep the textarea sized to its content whenever the body changes —
-  // whether typed, loaded for edit, rewritten by Claudia, or reset.
-  useEffect(() => {
-    autoSize(taRef.current);
-  }, [body]);
+  const editing = editingId
+    ? (notes.find((n) => n.id === editingId) ?? null)
+    : null;
 
-  function closeEditor() {
-    setEditingId(null);
-    setTitle("");
-    setBody("");
-    setPinned(false);
-    setStatus(IDLE_STATUS);
-    setError(null);
-  }
-
-  // Leave the editor and put the cursor back in the chat composer.
   function startNew() {
-    closeEditor();
+    setEditingId(null);
     setCaptureFocus((n) => n + 1);
-  }
-
-  function loadForEdit(n: Note) {
-    setEditingId(n.id);
-    setTitle(n.title);
-    setBody(n.body);
-    setPinned(n.pinned);
-    setStatus(IDLE_STATUS);
-    setError(null);
-    requestAnimationFrame(() => taRef.current?.focus());
-  }
-
-  async function runAssist(mode: "tidy" | "summarize") {
-    const text = body.trim();
-    if (!text || aiBusy) return;
-    setAiBusy(true);
-    setError(null);
-    setStatus(mode === "tidy" ? "Claudia is tidying…" : "Claudia is summarizing…");
-    const result = await claudiaNoteAssistAction(mode, text);
-    setAiBusy(false);
-    if (!result.ok) {
-      setStatus(result.error);
-      return;
-    }
-    setBody(result.text);
-    setStatus("Claudia cleaned it up — edit or save");
-  }
-
-  async function runExtract() {
-    const text = body.trim();
-    if (!text || aiBusy) return;
-    setAiBusy(true);
-    setError(null);
-    setStatus("Claudia is extracting tasks…");
-    const result = await extractTasksFromNoteAction(text, projectId, projectSlug);
-    setAiBusy(false);
-    if (!result.ok) {
-      setStatus(result.error);
-      return;
-    }
-    if (result.tasks.length === 0) {
-      setStatus("Claudia didn't find any action items");
-      return;
-    }
-    onTasksCreated(result.tasks);
-    setStatus(
-      `Claudia added ${result.tasks.length} task${result.tasks.length === 1 ? "" : "s"} to the board ✓`,
-    );
-  }
-
-  async function onSave() {
-    if (!editingId) return;
-    const b = body.trim();
-    if (!b) {
-      setError("Write something before saving.");
-      return;
-    }
-    setError(null);
-    setSaving(true);
-    try {
-      const result = await updateProjectNoteAction(
-        editingId,
-        { title: title.trim(), body: b, pinned },
-        projectSlug,
-      );
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setNotes((prev) =>
-        prev.map((n) => (n.id === result.note.id ? result.note : n)),
-      );
-      closeEditor();
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function onDelete(n: Note) {
@@ -190,7 +79,7 @@ export function ProjectNotes({
       return;
     }
     setNotes((prev) => prev.filter((x) => x.id !== n.id));
-    if (editingId === n.id) closeEditor();
+    if (editingId === n.id) setEditingId(null);
   }
 
   async function onAttachNote(n: Note) {
@@ -221,7 +110,7 @@ export function ProjectNotes({
     }
     setNotes((prev) => prev.filter((x) => x.id !== n.id));
     setAttachable((prev) => [result.note, ...prev]);
-    if (editingId === n.id) closeEditor();
+    if (editingId === n.id) setEditingId(null);
   }
 
   return (
@@ -267,118 +156,26 @@ export function ProjectNotes({
         onCommitted={(note) => setNotes((prev) => [note, ...prev])}
       />
 
-      {/* composer — chat capture for new notes, classic editor for an existing one */}
-      {!editingId ? (
-        <NoteChatComposer
-          projectId={projectId}
-          projectSlug={projectSlug}
-          focusSignal={captureFocus}
-          onSaved={(note) => setNotes((prev) => [note, ...prev])}
-          onTasksCreated={onTasksCreated}
-        />
-      ) : (
-        <div className="border-b border-edge p-4">
-          <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-warn">
-            ✎ editing note
-            <button
-              type="button"
-              onClick={startNew}
-              className="rounded-sm border border-edge px-2 py-0.5 text-fg-dim hover:border-edge-strong hover:text-fg"
-            >
-              ✕ back to capture
-            </button>
-          </div>
-          <div className="rounded-sm border border-edge bg-surface-2/40">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Note title…"
-              className="w-full border-b border-edge bg-transparent px-4 py-3 font-mono text-[15px] font-semibold text-fg placeholder:text-fg-dim focus:outline-none"
-            />
-            <textarea
-              ref={taRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  void onSave();
-                }
-              }}
-              placeholder="› note body…"
-              rows={1}
-              className="min-h-[150px] w-full resize-none overflow-hidden bg-transparent px-4 py-3.5 font-mono text-[13px] leading-relaxed text-fg placeholder:text-fg-dim focus:outline-none"
-            />
-            {/* Claudia assist bar */}
-            <div className="flex flex-wrap items-center gap-2.5 border-t border-edge bg-[#e8923a]/[0.04] px-3.5 py-2.5">
-              <span
-                aria-hidden
-                className="inline-block h-[11px] w-4 shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, #e8923a, #f0b95e)",
-                  clipPath: "polygon(0 100%, 50% 0, 100% 100%)",
-                }}
-              />
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#d8a878]">
-                {status}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void runAssist("tidy")}
-                  disabled={aiBusy || !body.trim()}
-                  className={AI_BTN}
-                >
-                  ✦ Tidy up
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runAssist("summarize")}
-                  disabled={aiBusy || !body.trim()}
-                  className={AI_BTN}
-                >
-                  ✦ Summarize
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runExtract()}
-                  disabled={aiBusy || !body.trim()}
-                  className={AI_BTN}
-                >
-                  ✦ Extract tasks
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2.5 flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setPinned((v) => !v)}
-              aria-pressed={pinned}
-              className={[
-                "rounded-sm border px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors",
-                pinned
-                  ? "border-accent/50 bg-accent/10 text-accent"
-                  : "border-edge text-fg-dim hover:text-fg",
-              ].join(" ")}
-            >
-              ◷ {pinned ? "pinned" : "pin"}
-            </button>
-            {error && (
-              <span className="font-mono text-[11px] text-danger">! {error}</span>
-            )}
-            <Button
-              variant="primary"
-              className="ml-auto"
-              onClick={() => void onSave()}
-              disabled={saving || !body.trim()}
-            >
-              {saving ? "SAVING…" : "UPDATE NOTE ↵"}
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* composer — chat capture, seeded with the saved note when editing.
+          Keyed so switching notes remounts it and one note's in-progress
+          capture can never bleed into another. */}
+      <NoteChatComposer
+        key={editingId ?? "new"}
+        projectId={projectId}
+        projectSlug={projectSlug}
+        editing={editing}
+        focusSignal={captureFocus}
+        onExitEdit={startNew}
+        onSaved={(note) => {
+          setNotes((prev) =>
+            prev.some((n) => n.id === note.id)
+              ? prev.map((n) => (n.id === note.id ? note : n))
+              : [note, ...prev],
+          );
+          setEditingId(null);
+        }}
+        onTasksCreated={onTasksCreated}
+      />
 
       {/* notes list — titles only */}
       <div>
@@ -391,7 +188,10 @@ export function ProjectNotes({
           notes.map((n) => (
             <div
               key={n.id}
-              className="flex items-center gap-3 border-b border-edge px-4 py-3 transition-colors hover:bg-surface-2/40"
+              className={[
+                "flex items-center gap-3 border-b border-edge px-4 py-3 transition-colors hover:bg-surface-2/40",
+                editingId === n.id ? "bg-surface-2/60" : "",
+              ].join(" ")}
             >
               <span
                 aria-hidden
@@ -402,7 +202,7 @@ export function ProjectNotes({
               />
               <button
                 type="button"
-                onClick={() => loadForEdit(n)}
+                onClick={() => setEditingId(n.id)}
                 className="min-w-0 flex-1 truncate text-left font-mono text-[14px] text-fg hover:text-accent"
                 title={noteCardTitle(n)}
               >
@@ -413,8 +213,8 @@ export function ProjectNotes({
               </span>
               <button
                 type="button"
-                onClick={() => loadForEdit(n)}
-                title="Edit note"
+                onClick={() => setEditingId(n.id)}
+                title="Open in the composer — add snippets or edit"
                 className="shrink-0 rounded-sm border border-edge px-2 py-1 font-mono text-[11px] text-fg-dim hover:border-accent hover:text-accent"
               >
                 ✎
