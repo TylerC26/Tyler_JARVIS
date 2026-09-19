@@ -460,8 +460,27 @@ export type CronJob = {
   model_pref: ModelPref;
   last_run_at: string | null;
   next_run_at: string | null;
+  // Held while an invocation is running this job; a 10-minute lease, cleared by
+  // markCronJobRanCore. See migration 0069.
+  claimed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CronRunStatus = "running" | "succeeded" | "failed";
+
+// One row per attempt (migration 0069). Before this, the only execution record
+// was last_run_at, overwritten each time — a failed job left no trace at all.
+export type CronRun = {
+  id: string;
+  owner_id: string;
+  job_id: string;
+  status: CronRunStatus;
+  attempt: number;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  output: string | null;
 };
 
 export type RepoTaskStatus =
@@ -1282,6 +1301,27 @@ export type Database = {
         Update: Partial<SkillUsage>;
         Relationships: [];
       };
+      cron_runs: {
+        Row: CronRun;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          job_id: string;
+          status?: CronRunStatus;
+          attempt?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          error?: string | null;
+          output?: string | null;
+        };
+        Update: Partial<{
+          status: CronRunStatus;
+          finished_at: string | null;
+          error: string | null;
+          output: string | null;
+        }>;
+        Relationships: [];
+      };
       inbox: {
         Row: InboxItem;
         Insert: {
@@ -1484,6 +1524,16 @@ export type Database = {
           match_count: number;
         };
         Returns: Array<{ id: string; similarity: number }>;
+      };
+      // Exclusive claim on one due cron occurrence — compare-and-swap on
+      // next_run_at plus a claimed_at lease. See migration 0069.
+      claim_cron_job: {
+        Args: {
+          p_job_id: string;
+          p_owner: string;
+          p_expected_next: string | null;
+        };
+        Returns: boolean;
       };
       // Atomic used_count increment + last_used_at stamp for the given ids.
       bump_memory_usage: {

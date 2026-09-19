@@ -1,7 +1,7 @@
 import { Cron } from "croner";
 import { getOwnerId, getOwnerTz } from "@/lib/auth/currentUser";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import type { CronJob, ModelPref } from "@/lib/db/types";
+import type { CronJob, CronRun, ModelPref } from "@/lib/db/types";
 
 export type CreateCronJobInput = {
   name: string;
@@ -235,17 +235,121 @@ export async function seedDefaultCronJobsCore(): Promise<
   return { ok: true, data: { inserted: rows.length } };
 }
 
-// Called after a job fires: record last_run_at and advance next_run_at.
+// Exclusively claim one due occurrence. Only the caller that gets `true` may
+// run the job.
+//
+// Compare-and-swap on next_run_at (so a job another invocation already advanced
+// is refused) plus a claimed_at lease (so two simultaneous invocations can't
+// both proceed). The lease expires after 10 minutes — longer than the 300s
+// function ceiling — so a crashed run releases the job instead of parking it.
+export async function claimCronJobCore(job: CronJob): Promise<boolean> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return false;
+  const { data, error } = await supabase.rpc("claim_cron_job", {
+    p_job_id: job.id,
+    p_owner: getOwnerId(),
+    p_expected_next: job.next_run_at,
+  });
+  if (error) {
+    console.warn(`[cron] claim failed for ${job.id}:`, error.message);
+    return false;
+  }
+  return data === true;
+}
+
+// Called after an attempt finishes — success OR failure. Advances next_run_at
+// and releases the claim.
+//
+// Two deliberate choices:
+//
+//   - This runs AFTER the work, never before. The old ordering meant a job that
+//     threw had already been marked as run and was simply lost.
+//
+//   - The next occurrence is computed from now(), not from the missed one, so a
+//     job whose schedule lapsed during an outage resumes at its next natural
+//     time instead of replaying a backlog. Twelve stale morning briefs arriving
+//     at once is worse than one that never came.
+//
+// A schedule that no longer parses yields next_run_at = null, which
+// getDueCronJobsCore filters out. That used to park the job silently; the
+// caller now records it as a failed run so it is visible in cron_runs.
 export async function markCronJobRanCore(job: CronJob): Promise<void> {
   const supabase = await getSupabaseServer();
   if (!supabase) return;
   const next = nextRunAfter(job.schedule);
-  await supabase
+  const now = new Date().toISOString();
+  const { error } = await supabase
     .from("cron_jobs")
     .update({
-      last_run_at: new Date().toISOString(),
+      last_run_at: now,
       next_run_at: next ? next.toISOString() : null,
-      updated_at: new Date().toISOString(),
+      claimed_at: null,
+      updated_at: now,
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    // Restored: every other function in this file scopes by owner.
+    .eq("owner_id", getOwnerId());
+  if (error) console.warn(`[cron] advance failed for ${job.id}:`, error.message);
+}
+
+/** True when the schedule no longer parses — the job cannot be rescheduled. */
+export function scheduleIsUnrunnable(job: CronJob): boolean {
+  return nextRunAfter(job.schedule) === null;
+}
+
+// --- run log -----------------------------------------------------------------
+
+export async function startCronRunCore(
+  job: CronJob,
+  attempt = 1,
+): Promise<string | null> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("cron_runs")
+    .insert({ owner_id: getOwnerId(), job_id: job.id, attempt })
+    .select("id")
+    .single();
+  if (error) {
+    console.warn(`[cron] could not open run row for ${job.id}:`, error.message);
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
+export async function finishCronRunCore(
+  runId: string | null,
+  status: "succeeded" | "failed",
+  detail: { output?: string | null; error?: string | null } = {},
+): Promise<void> {
+  if (!runId) return;
+  const supabase = await getSupabaseServer();
+  if (!supabase) return;
+  await supabase
+    .from("cron_runs")
+    .update({
+      status,
+      finished_at: new Date().toISOString(),
+      output: detail.output ?? null,
+      error: detail.error ?? null,
+    })
+    .eq("id", runId)
+    .eq("owner_id", getOwnerId());
+}
+
+export async function listCronRunsCore(
+  jobId?: string,
+  limit = 50,
+): Promise<CronRun[]> {
+  const supabase = await getSupabaseServer();
+  if (!supabase) return [];
+  let q = supabase
+    .from("cron_runs")
+    .select("*")
+    .eq("owner_id", getOwnerId())
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (jobId) q = q.eq("job_id", jobId);
+  const { data } = await q;
+  return (data as CronRun[] | null) ?? [];
 }
