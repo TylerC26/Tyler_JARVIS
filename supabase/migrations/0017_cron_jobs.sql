@@ -3,7 +3,10 @@ create table if not exists public.cron_jobs (
   owner_id    text not null,
   name        text not null,
   description text,
-  schedule    text not null,     -- standard 5-field cron expression (UTC)
+  schedule    text not null,     -- standard 5-field cron expression
+                                 -- NOTE: owner-local wall clock, NOT UTC.
+                                 -- Migration 0065 converted these rows; this
+                                 -- comment said (UTC) until then.
   prompt      text not null,     -- sent to the Jarvis orchestrator when job fires
   active      boolean not null default true,
   last_run_at timestamptz,

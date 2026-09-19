@@ -11,11 +11,16 @@ import { isMinimaxEnabled } from "@/lib/db/core/site-settings";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// Opus turns a natural-language request ("every morning at 8 send my brief")
-// into the structured fields the cron_jobs table needs. The schedule is the
-// hard part: the table stores 5-field cron in UTC, but the user speaks in
-// their local timezone, so the prompt hands Opus the live local time + offset
-// and tells it to convert.
+// Turns a natural-language request ("every morning at 8 send my brief") into
+// the structured fields cron_jobs needs.
+//
+// The schedule field is OWNER-LOCAL wall clock — migration 0065 converted the
+// stored rows from UTC and nextRunAfter() evaluates them in getOwnerTz(). This
+// file used to contradict itself inside a single generateObject call: the Zod
+// .describe() said "in UTC ... convert any local time to UTC first" while the
+// SYSTEM prompt below said "written in the user's LOCAL time. Do NOT convert".
+// Both were handed to the same model. Local is correct; the local time and
+// offset are still passed so relative phrasing ("in an hour") resolves.
 const DraftSchema = z.object({
   name: z
     .string()
@@ -23,7 +28,7 @@ const DraftSchema = z.object({
   schedule: z
     .string()
     .describe(
-      "A standard 5-field cron expression in UTC (minute hour day month weekday). Convert any local time the user mentions to UTC first.",
+      "A standard 5-field cron expression (minute hour day month weekday) in the USER'S LOCAL time. Do NOT convert to UTC — the scheduler evaluates these fields in the user's timezone.",
     ),
   prompt: z
     .string()

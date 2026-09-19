@@ -1489,14 +1489,14 @@ import {
 
 export const createCronJobTool = tool({
   description:
-    "Schedule a recurring automation that runs a Jarvis prompt on a cron schedule. Use when the user says 'every morning…', 'remind me every…', 'run X daily at…', etc. Schedule is a standard 5-field UTC cron expression (e.g. '0 8 * * *' = 8am UTC daily). The prompt is sent to Jarvis as a chat turn when the job fires — results go to Telegram and the chat thread.",
+    "Schedule a recurring automation that runs a Jarvis prompt on a cron schedule. Use when the user says 'every morning…', 'remind me every…', 'run X daily at…', etc. Schedule is a standard 5-field cron expression in the USER'S LOCAL TIME (e.g. '0 8 * * *' = 8am daily in their timezone). Do NOT convert to UTC — the scheduler interprets these fields in the owner's timezone. The prompt is sent to Jarvis as a chat turn when the job fires — results go to Telegram and the chat thread.",
   inputSchema: z.object({
     name: z.string().describe("Short display name for the automation (e.g. 'Morning Brief')."),
     description: z.string().optional().describe("One-line description of what it does."),
     schedule: z
       .string()
       .describe(
-        "5-field UTC cron expression. Examples: '0 8 * * *' = 8am daily, '0 9 * * 1' = Monday 9am, '*/30 * * * *' = every 30 min.",
+        "5-field cron expression in the user's LOCAL time, never UTC. Examples: '0 8 * * *' = 8am daily, '0 9 * * 1' = Monday 9am, '*/30 * * * *' = every 30 min.",
       ),
     prompt: z
       .string()
@@ -1506,7 +1506,7 @@ export const createCronJobTool = tool({
   }),
   execute: async (input) => {
     if (!validateSchedule(input.schedule)) {
-      return { ok: false, error: `Invalid cron expression: "${input.schedule}". Use 5-field UTC syntax.` };
+      return { ok: false, error: `Invalid cron expression: "${input.schedule}". Use 5-field syntax in local time.` };
     }
     const result = await createCronJobCore({
       name: input.name,
