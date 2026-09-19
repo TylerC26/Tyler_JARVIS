@@ -11,7 +11,8 @@ import { streamAgentResponse } from "@/lib/ai/agents/run";
 import { reconcileMemoriesFromTurn } from "@/lib/ai/memory/reconcile";
 import { runSkillJudgeForTurn } from "@/lib/ai/skills/judge";
 import { runSkillProposer } from "@/lib/ai/skills/propose";
-import type { Agent, ChatToolCall } from "@/lib/db/types";
+import { captureIfUnfiled } from "@/lib/chat/inbox-fallback";
+import type { Agent, ChatToolCall, InboxSource } from "@/lib/db/types";
 import { appendMessage } from "./persist";
 import { normalizeToolInput } from "./tool-input";
 import {
@@ -175,6 +176,18 @@ export async function runSkillJudge(
   }
 }
 
+// The net under the orchestrator: if this turn filed nothing but the user's
+// message carried content, park it in the inbox rather than letting it exist
+// only as a chat row on no list. Fire-and-forget; never throws.
+export async function runInboxFallback(
+  source: InboxSource,
+  userText: string,
+  toolCalls: ChatToolCall[],
+  mediaUrl?: string | null,
+): Promise<void> {
+  await captureIfUnfiled({ source, userText, toolCalls, mediaUrl });
+}
+
 export type RunChatTurnInput = {
   // Full conversation history INCLUDING the new user turn.
   modelMessages: ModelMessage[];
@@ -243,6 +256,12 @@ async function runChatTurnInner(
   void runMemoryReconciliation(latestUserText, assistantText);
   void runSkillDrafter(latestUserText, assistantText, toolCalls);
   void runSkillJudge(latestUserText, assistantText);
+  void runInboxFallback(
+    input.telegramContext ? "telegram" : "chat",
+    latestUserText,
+    toolCalls,
+    input.mealPhotoContext?.publicUrl ?? null,
+  );
 
   return { assistantText, route: model };
 }

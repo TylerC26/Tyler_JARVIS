@@ -528,6 +528,45 @@ export type UsageEvent = {
   created_at: string;
 };
 
+// ---------------------------------------------------------------------------
+// Inbox (migration 0068) — items a turn failed to file. See
+// lib/chat/inbox-fallback.ts for when a row is created.
+// ---------------------------------------------------------------------------
+
+export const INBOX_SOURCES = ["telegram", "chat", "discord", "email"] as const;
+export type InboxSource = (typeof INBOX_SOURCES)[number];
+
+export const INBOX_STATUSES = ["pending", "filed", "discarded"] as const;
+export type InboxStatus = (typeof INBOX_STATUSES)[number];
+
+// Ordered deliberately: /triage binds these to number keys 1-6.
+export const INBOX_SUGGESTED_TYPES = [
+  "task",
+  "note",
+  "idea",
+  "event",
+  "place",
+  "grocery",
+] as const;
+export type InboxSuggestedType = (typeof INBOX_SUGGESTED_TYPES)[number];
+
+export type InboxItem = {
+  id: string;
+  owner_id: string;
+  source: InboxSource;
+  chat_message_id: string | null;
+  body: string | null;
+  media_url: string | null;
+  received_at: string;
+  status: InboxStatus;
+  suggested_type: InboxSuggestedType | null;
+  suggested_json: Record<string, unknown> | null;
+  filed_type: string | null;
+  filed_id: string | null;
+  filed_at: string | null;
+  created_at: string;
+};
+
 export type Idea = {
   id: string;
   owner_id: string;
@@ -1241,6 +1280,34 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<SkillUsage>;
+        Relationships: [];
+      };
+      inbox: {
+        Row: InboxItem;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          source: InboxSource;
+          chat_message_id?: string | null;
+          body?: string | null;
+          media_url?: string | null;
+          received_at?: string;
+          status?: InboxStatus;
+          suggested_type?: InboxSuggestedType | null;
+          suggested_json?: Record<string, unknown> | null;
+          filed_type?: string | null;
+          filed_id?: string | null;
+          filed_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<{
+          status: InboxStatus;
+          suggested_type: InboxSuggestedType | null;
+          suggested_json: Record<string, unknown> | null;
+          filed_type: string | null;
+          filed_id: string | null;
+          filed_at: string | null;
+        }>;
         Relationships: [];
       };
       ideas: {
