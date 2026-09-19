@@ -5,6 +5,7 @@
 import { convertToModelMessages, type UIMessage } from "ai";
 import { NextResponse } from "next/server";
 import { forceRouteForPref } from "@/lib/ai/model-prefs";
+import { bearerMatches } from "@/lib/auth/secrets";
 import { listMessages } from "@/lib/chat/persist";
 import { runChatTurn } from "@/lib/chat/turn";
 import { dbToUIMessages } from "@/lib/chat/ui";
@@ -23,8 +24,21 @@ export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // Vercel signs cron requests with the CRON_SECRET env var.
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  //
+  // This MUST fail closed. The previous check compared against the template
+  // literal `Bearer ${process.env.CRON_SECRET}`, which evaluates to the literal
+  // string "Bearer undefined" when the var is unset — and CRON_SECRET was not
+  // in .env.example, so a correct local setup left the dispatcher wide open to
+  // anyone sending that exact header. See lib/auth/secrets.ts.
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error(
+      "[cron] CRON_SECRET is unset — refusing every request. Set it in the " +
+        "Vercel project settings and in .env.local, or the dispatcher cannot run.",
+    );
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!bearerMatches(req.headers.get("authorization"), cronSecret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

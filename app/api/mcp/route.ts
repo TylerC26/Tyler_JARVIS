@@ -9,6 +9,7 @@
 // unset so the surface is opt-in.
 
 import { NextResponse } from "next/server";
+import { bearerMatches } from "@/lib/auth/secrets";
 import { z } from "zod";
 import { ALL_TOOLS, type ToolName } from "@/lib/chat/tools";
 
@@ -49,12 +50,10 @@ function err(
 }
 
 function isAuthorized(req: Request): boolean {
-  const expected = process.env.MCP_TOKEN;
-  if (!expected) return false;
-  const header = req.headers.get("authorization") ?? "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
-  return match[1].trim() === expected;
+  // Fails closed when MCP_TOKEN is unset (this endpoint dispatches straight
+  // into ALL_TOOLS, so an open token check is the whole write surface), and
+  // compares in constant time. See lib/auth/secrets.ts.
+  return bearerMatches(req.headers.get("authorization"), process.env.MCP_TOKEN);
 }
 
 type ToolDef = (typeof ALL_TOOLS)[ToolName];

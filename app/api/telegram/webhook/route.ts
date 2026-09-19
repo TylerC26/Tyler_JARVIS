@@ -29,6 +29,7 @@ import {
   TELEGRAM_PHYSIQUE_HINT,
 } from "@/lib/chat/physique-detect";
 import { runAgentChatTurn, runChatTurn } from "@/lib/chat/turn";
+import { secretsMatch } from "@/lib/auth/secrets";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import {
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
   if (!incomingSecret) return new Response("unauthorized", { status: 401 });
 
   let agent: Agent | null = null;
-  if (jarvisSecret && incomingSecret === jarvisSecret) {
+  if (secretsMatch(incomingSecret, jarvisSecret)) {
     agent = null; // Jarvis path.
   } else {
     agent = await getAgentByWebhookSecretCore(incomingSecret);
