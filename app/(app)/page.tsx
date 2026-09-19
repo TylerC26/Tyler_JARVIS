@@ -1,4 +1,5 @@
 import { pendingInboxCountCore } from "@/lib/db/core/inbox";
+import { progressBarValue } from "@/lib/db/queries/project-progress";
 import {
   CommandBrief,
   type BriefAction,
@@ -115,7 +116,9 @@ function buildLane(
   );
 
   const totalTasks = p.open_task_count + p.done_task_count;
-  const progressPct = totalTasks > 0 ? p.task_pct : p.milestone_pct;
+  // Was: tasks first, milestones as fallback — the exact inverse of the
+  // project detail page, so one project showed two different numbers.
+  const progressPct = progressBarValue(p.progress);
 
   const countParts = [`${p.open_task_count} open`];
   if (overdue > 0) countParts.push(`${overdue} overdue`);

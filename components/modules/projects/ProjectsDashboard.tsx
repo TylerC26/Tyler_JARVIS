@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { projectProgress, progressBarValue } from "@/lib/db/queries/project-progress";
 import { useEffect, useState, useTransition } from "react";
 import {
   createProjectAction,
@@ -137,6 +138,15 @@ export function ProjectsDashboard({
             milestone_total: 0,
             milestone_done: 0,
             milestone_pct: 0,
+            // A brand-new project has nothing tracked — which is not the same
+            // as 0% done, and must not render as an empty progress bar with a
+            // number beside it.
+            progress: projectProgress({
+              milestone_done: 0,
+              milestone_total: 0,
+              done_task_count: 0,
+              open_task_count: 0,
+            }),
             next_milestone: null,
           },
           ...prev,
@@ -342,10 +352,13 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
 
       <PlatformChips project={project} />
 
+      {/* One definition of progress, shared with the dashboard and the detail
+          page. This used to render task_pct only, so a milestone-driven
+          project showed a different number here than on its own page. */}
       <TaskProgressBar
-        done={project.done_task_count}
-        total={totalTasks}
-        pct={project.task_pct}
+        done={project.progress.done}
+        total={project.progress.total}
+        pct={progressBarValue(project.progress)}
       />
 
       <div className="flex items-center justify-between pl-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">

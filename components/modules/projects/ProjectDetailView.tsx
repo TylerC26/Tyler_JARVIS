@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { projectProgress, progressBarValue } from "@/lib/db/queries/project-progress";
 import {
   addMilestoneAction,
   addProjectTaskAction,
@@ -91,12 +92,16 @@ export function ProjectDetailView({
   const milestoneDone = milestones.filter((m) => m.completed_at).length;
   const taskTotal = tasks.length;
   const taskDone = tasks.filter((t) => t.status === "done").length;
-  const progressPct =
-    milestoneTotal > 0
-      ? Math.round((milestoneDone / milestoneTotal) * 100)
-      : taskTotal > 0
-        ? Math.round((taskDone / taskTotal) * 100)
-        : 0;
+  // Recomputed locally (tasks/milestones are live React state here), but
+  // through the SAME function the server uses, so the number can't drift from
+  // what the dashboard shows.
+  const progress = projectProgress({
+    milestone_done: milestoneDone,
+    milestone_total: milestoneTotal,
+    done_task_count: taskDone,
+    open_task_count: taskTotal - taskDone,
+  });
+  const progressPct = progressBarValue(progress);
 
   // ---- tasks ----
   async function onAddTask(title: string) {
