@@ -204,6 +204,9 @@ export type RunChatTurnInput = {
 export type RunChatTurnResult = {
   assistantText: string;
   route: ChatModel;
+  // Surfaced so callers can build a filing receipt from what was ACTUALLY
+  // written (lib/chat/filing-receipt.ts) rather than from the model's prose.
+  toolCalls: ChatToolCall[];
 };
 
 // End-to-end non-streaming turn: persist the user message, route, run the model
@@ -263,7 +266,7 @@ async function runChatTurnInner(
     input.mealPhotoContext?.publicUrl ?? null,
   );
 
-  return { assistantText, route: model };
+  return { assistantText, route: model, toolCalls };
 }
 
 export type RunAgentChatTurnResult = {

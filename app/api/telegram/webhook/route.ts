@@ -30,6 +30,7 @@ import {
 } from "@/lib/chat/physique-detect";
 import { runAgentChatTurn, runChatTurn } from "@/lib/chat/turn";
 import { secretsMatch } from "@/lib/auth/secrets";
+import { withFilingReceipt } from "@/lib/chat/filing-receipt";
 import { getAgentBySlug } from "@/lib/db/queries/agents";
 import { dbToUIMessages } from "@/lib/chat/ui";
 import {
@@ -362,7 +363,14 @@ export async function POST(req: Request) {
           telegramContext: { chat_id: chatId, message_id: message.message_id },
           mealPhotoContext,
         });
-        assistantText = out.assistantText || "(no text response)";
+        assistantText = withFilingReceipt(
+          out.assistantText || "(no text response)",
+          {
+            toolCalls: out.toolCalls,
+            userText: latestUserText,
+            mediaUrl: mealPhotoContext?.publicUrl ?? null,
+          },
+        );
       }
 
       const sent = await sendMessage(chatId, assistantText, {

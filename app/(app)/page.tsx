@@ -1,3 +1,4 @@
+import { pendingInboxCountCore } from "@/lib/db/core/inbox";
 import {
   CommandBrief,
   type BriefAction,
@@ -175,15 +176,23 @@ export default async function DashboardPage() {
   const gymSince = new Date(dayStart.getTime() - 59 * DAY_MS).toISOString();
   const startMs = dayStart.getTime();
 
-  const [brief, events, allTasks, projects, gymSessions, gymDays] =
-    await Promise.all([
-      getLatestBrief("morning", today),
-      listEventsInRangeCore(dayStart.toISOString(), dayEnd.toISOString()),
-      listTasks(),
-      listProjectSummaries(),
-      listSessionsCore({ limit: 1 }),
-      gymAttendanceCore({ since: gymSince }),
-    ]);
+  const [
+    brief,
+    events,
+    allTasks,
+    projects,
+    gymSessions,
+    gymDays,
+    pendingInbox,
+  ] = await Promise.all([
+    getLatestBrief("morning", today),
+    listEventsInRangeCore(dayStart.toISOString(), dayEnd.toISOString()),
+    listTasks(),
+    listProjectSummaries(),
+    listSessionsCore({ limit: 1 }),
+    gymAttendanceCore({ since: gymSince }),
+    pendingInboxCountCore(),
+  ]);
 
   // --- tasks ---
   const open = allTasks.filter((t) => t.status !== "done");
@@ -264,6 +273,19 @@ export default async function DashboardPage() {
       sub: dueTodayProjects > 0 ? `${dueTodayProjects} projects` : "clear",
       href: "/tasks",
     },
+    // Only shown when non-zero: a permanent "0 PENDING" tile trains you to
+    // ignore the one number that means something was nearly lost.
+    ...(pendingInbox > 0
+      ? [
+          {
+            label: "PENDING",
+            value: String(pendingInbox),
+            sub: "unfiled",
+            tone: "accent" as const,
+            href: "/triage",
+          },
+        ]
+      : []),
     {
       label: "PROJECTS",
       value: String(activeProjectCount),
