@@ -467,6 +467,24 @@ export type CronJob = {
   updated_at: string;
 };
 
+export type ReviewKind = "evening" | "weekly" | "monthly";
+
+// Plan versus actual (migration 0070). `planned` is frozen when the morning
+// brief runs; `actual` when the period closes. The diff between them is the
+// only corrective signal the system has.
+export type Review = {
+  id: string;
+  owner_id: string;
+  kind: ReviewKind;
+  period_start: string;
+  period_end: string;
+  planned: Record<string, unknown> | null;
+  actual: Record<string, unknown> | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type CronRunStatus = "running" | "succeeded" | "failed";
 
 // One row per attempt (migration 0069). Before this, the only execution record
@@ -1299,6 +1317,28 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<SkillUsage>;
+        Relationships: [];
+      };
+      reviews: {
+        Row: Review;
+        Insert: {
+          id?: string;
+          owner_id: string;
+          kind: ReviewKind;
+          period_start: string;
+          period_end: string;
+          planned?: Record<string, unknown> | null;
+          actual?: Record<string, unknown> | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: Partial<{
+          planned: Record<string, unknown> | null;
+          actual: Record<string, unknown> | null;
+          notes: string | null;
+          updated_at: string | null;
+        }>;
         Relationships: [];
       };
       cron_runs: {

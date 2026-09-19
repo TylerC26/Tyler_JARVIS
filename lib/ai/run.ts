@@ -1,4 +1,5 @@
 import type { AiBrief, AiBriefKind } from "@/lib/db/types";
+import { snapshotPlanCore } from "@/lib/db/core/reviews";
 import { gatherContext } from "./context";
 import { getEngine } from "./engine";
 import {
@@ -22,6 +23,17 @@ export async function runBrief(kind: AiBriefKind): Promise<RunBriefResult> {
         : await engine.generateEvening(ctx);
 
     const brief = await saveBrief(draft, ctx, kind, engine.name);
+
+    // The morning brief is the only moment a plan for the day exists. Freeze
+    // it so the evening close-out has something to compare against — without
+    // this, "what was closed today" has no denominator and the evening brief
+    // has been inventing its completion stats. Fire-and-forget: a snapshot
+    // failure must not cost the user their brief.
+    if (kind === "morning") {
+      void snapshotPlanCore(ctx.forDate).catch((e) =>
+        console.warn("[ai] plan snapshot failed:", e),
+      );
+    }
     if (!brief) {
       return {
         ok: false,

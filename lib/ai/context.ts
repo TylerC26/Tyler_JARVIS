@@ -37,20 +37,63 @@ export async function gatherContext(forDate?: string): Promise<AIContext> {
   const dayStart = startOfOwnerDay(date).toISOString();
   const dayEnd = endOfOwnerDay(date).toISOString();
 
-  const [allTasks, wifeShiftsNext21, wfhStatusNext21, eventsToday] =
-    await Promise.all([
-      listTasks(),
-      listUpcomingWifeShifts(21),
-      listUpcomingWfhStatus(21),
-      listEventsInRangeCore(dayStart, dayEnd),
-    ]);
+  // Tomorrow, in the owner's timezone — one day past forDate.
+  const tomorrow = new Date(startOfOwnerDay(date).getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowDate = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStart = startOfOwnerDay(tomorrowDate).toISOString();
+  const tomorrowEnd = endOfOwnerDay(tomorrowDate).toISOString();
+
+  const [
+    allTasks,
+    wifeShiftsNext21,
+    wfhStatusNext21,
+    eventsToday,
+    eventsTomorrow,
+  ] = await Promise.all([
+    listTasks(),
+    listUpcomingWifeShifts(21),
+    listUpcomingWfhStatus(21),
+    listEventsInRangeCore(dayStart, dayEnd),
+    listEventsInRangeCore(tomorrowStart, tomorrowEnd),
+  ]);
+
+  const partitioned = partitionTasks(allTasks, date);
 
   return {
     forDate: date,
     generatedAt: new Date().toISOString(),
-    tasks: partitionTasks(allTasks, date),
+    tasks: partitioned,
     wifeShifts: { next21: wifeShiftsNext21 },
     wfhStatus: { next21: wfhStatusNext21 },
     events: { today: eventsToday },
+    closedToday: closedWithin(allTasks, dayStart, dayEnd),
+    tomorrowLoad: {
+      tasks: dueWithin(allTasks, tomorrowStart, tomorrowEnd),
+      events: eventsTomorrow,
+    },
+    // partitionTasks already isolates open tasks whose due date has passed.
+    slipped: partitioned.overdue,
   };
+}
+
+/** Tasks completed inside the window. */
+function closedWithin(all: Task[], startIso: string, endIso: string): Task[] {
+  const start = parseISO(startIso).getTime();
+  const end = parseISO(endIso).getTime();
+  return all.filter((t) => {
+    if (t.status !== "done" || !t.completed_at) return false;
+    const at = parseISO(t.completed_at).getTime();
+    return at >= start && at <= end;
+  });
+}
+
+/** Still-open tasks due inside the window. */
+function dueWithin(all: Task[], startIso: string, endIso: string): Task[] {
+  const start = parseISO(startIso).getTime();
+  const end = parseISO(endIso).getTime();
+  return all.filter((t) => {
+    if (t.status === "done" || !t.due_at) return false;
+    const at = parseISO(t.due_at).getTime();
+    return at >= start && at <= end;
+  });
 }
